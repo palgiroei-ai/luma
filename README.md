@@ -8,6 +8,7 @@ Static HTML/CSS/JS, no build. Local preview: `python3 -m http.server 8642` → h
 ## Tests
     node tests/test-form-logic.js
     node tests/test-backend.js gas/Code.gs
+    open http://localhost:8642/tests/browser-harness.html   # 13 scripted form/UI checks (needs local server)
 
 ## Lead form backend
 Google Sheet "LUMA – פניות" (palgitraining@gmail.com) with bound Apps Script = `gas/Code.gs`.
@@ -18,4 +19,3 @@ edit the existing deployment → New version (keeps the same URL).
 
 ## OG image
 Edit `assets/og.html`, then re-render (see plan Task 6) to `assets/og.png`.
-    open http://localhost:8642/tests/browser-harness.html   # 13 scripted form/UI checks (needs local server)
