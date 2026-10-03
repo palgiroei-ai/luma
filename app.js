@@ -26,6 +26,19 @@
     reveals.forEach(function (el) { io.observe(el); });
   }
 
+  // ---- L/U/M/A letters light up as each pillar reaches mid-screen ----
+  var pillars = document.querySelectorAll('.pillar');
+  if (reduce || !('IntersectionObserver' in window)) {
+    pillars.forEach(function (el) { el.classList.add('is-lit'); });
+  } else {
+    var litIo = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) { entry.target.classList.add('is-lit'); litIo.unobserve(entry.target); }
+      });
+    }, { rootMargin: '-40% 0px -40% 0px' });
+    pillars.forEach(function (el) { litIo.observe(el); });
+  }
+
   // ---- count-up stats ----
   var counters = document.querySelectorAll('[data-count]');
   if (!reduce && 'IntersectionObserver' in window) {

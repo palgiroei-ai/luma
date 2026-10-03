@@ -79,6 +79,8 @@ p { margin: 0; }
 .lead { margin: 16px auto 0; font-size: 18px; color: var(--muted); max-width: 34em; }
 .cta-row { margin-top: 32px; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .hero-visual { display: flex; justify-content: center; }
+/* phones: smaller hero phone so the next section peeks in (scale keeps the screen's text proportions) */
+@media (max-width: 899px) { .hero-visual .phone { transform: scale(.85); transform-origin: top center; margin-bottom: -84px; } }
 
 /* sections */
 .section { padding: 72px 0; }
@@ -93,6 +95,8 @@ p { margin: 0; }
 .pillar { display: grid; grid-template-columns: 72px 1fr; align-items: center; column-gap: 24px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 28px; transition: transform .25s ease, box-shadow .25s ease; }
 .pillar:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
 .pillar-letter { grid-row: span 2; font-family: var(--font-brand); font-size: 60px; font-weight: 500; line-height: 1; color: var(--copper); text-align: center; }
+.js .pillar-letter { color: #E6D6C6; transition: color .6s ease; }
+.js .pillar.is-lit .pillar-letter { color: var(--copper); }
 .pillar p { margin-top: 4px; color: var(--muted); font-size: 16px; }
 @media (max-width: 480px) { .pillar { grid-template-columns: 48px 1fr; column-gap: 16px; padding: 18px 20px; } .pillar-letter { font-size: 44px; } }
 
@@ -104,6 +108,15 @@ p { margin: 0; }
 .feature:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
 .icon { width: 28px; height: 28px; fill: none; stroke: var(--copper); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 16px; }
 .feature p { margin-top: 6px; color: var(--muted); font-size: 15.5px; }
+/* full-row closing card: custom development */
+.feature-wide { grid-column: 1 / -1; background: var(--navy); border-color: var(--navy); color: var(--chalk); padding: 32px; }
+.feature-wide .icon { stroke: #E0A877; }
+.feature-wide > p { color: rgba(245, 241, 234, .8); font-size: 17px; }
+.custom-list { display: grid; gap: 20px; margin-top: 24px; }
+@media (min-width: 900px) { .custom-list { grid-template-columns: repeat(3, 1fr); gap: 32px; } }
+.custom-list div { border-inline-start: 2px solid var(--copper); padding-inline-start: 14px; }
+.custom-list strong { display: block; font-size: 16px; margin-bottom: 4px; }
+.custom-list span { font-size: 15px; color: rgba(245, 241, 234, .72); line-height: 1.6; }
 
 .showcase { margin-top: 64px; display: grid; gap: 32px; align-items: center; justify-items: center; }
 .showcase-copy { max-width: 30em; }
