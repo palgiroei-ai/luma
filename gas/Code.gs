@@ -13,8 +13,18 @@ function doPost(e) {
   if (data.website && String(data.website).trim() !== '') return json_({ ok: true });
   if (!data.name || !data.org || !data.phone) return json_({ ok: false, error: 'missing_fields' });
 
-  appendLeadRow_(data);
-  sendLeadNotification_(data);
+  try {
+    appendLeadRow_(data);
+  } catch (err) {
+    console.error('appendLeadRow_ failed: ' + err);
+    return json_({ ok: false, error: 'server_error' });
+  }
+  try {
+    sendLeadNotification_(data);
+  } catch (err) {
+    // The row is saved; an error response here would make the client resubmit and duplicate it.
+    console.error('sendLeadNotification_ failed: ' + err);
+  }
   return json_({ ok: true });
 }
 
@@ -26,6 +36,14 @@ function json_(obj) {
 function sanitizeCell_(value) {
   var s = String(value === undefined || value === null ? '' : value).slice(0, 1000);
   return /^[=+\-@]/.test(s) ? "'" + s.slice(0, 999) : s;
+}
+
+// appendRow parses values like typed input ("0507…" -> number, "1/2" -> date).
+// A leading apostrophe forces plain text; Sheets hides it.
+function textCell_(value) {
+  var s = sanitizeCell_(value);
+  if (s === '') return '';
+  return s.charAt(0) === "'" ? s : "'" + s;
 }
 
 function getSheet_() {
@@ -44,14 +62,14 @@ function setupSheet() {
 function appendLeadRow_(d) {
   getSheet_().appendRow([
     new Date(),
-    sanitizeCell_(d.name),
-    sanitizeCell_(d.org),
-    sanitizeCell_(d.sport),
-    sanitizeCell_(d.role),
-    sanitizeCell_(d.teamSize),
-    sanitizeCell_(d.phone),
-    sanitizeCell_(d.email),
-    sanitizeCell_(d.notes)
+    textCell_(d.name),
+    textCell_(d.org),
+    textCell_(d.sport),
+    textCell_(d.role),
+    textCell_(d.teamSize),
+    textCell_(d.phone),
+    textCell_(d.email),
+    textCell_(d.notes)
   ]);
 }
 

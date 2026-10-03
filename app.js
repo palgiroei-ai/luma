@@ -57,14 +57,17 @@
     form.hidden = true;
     errorEl.hidden = true;
     successEl.hidden = false;
+    successEl.focus();
   }
 
-  function showFailure() {
+  function showFailure(err) {
+    if (err) console.warn('LUMA lead submit failed:', err);
     sending = false;
     submitBtn.disabled = false;
     submitBtn.textContent = 'שליחה';
-    statusEl.textContent = '';
+    statusEl.textContent = 'השליחה נכשלה.';
     errorEl.hidden = false;
+    errorEl.focus();
   }
 
   form.addEventListener('submit', function (e) {

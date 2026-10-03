@@ -57,9 +57,10 @@ check('valid lead returns ok:true', out.ok === true, JSON.stringify(out));
 check('valid lead appends one row', ctx.rows.length === 1, 'rows=' + ctx.rows.length);
 var row = ctx.rows[0] || [];
 check('row[0] is a Date', row[0] instanceof Date);
-check('row columns in spec order',
-  JSON.stringify(row.slice(1)) === JSON.stringify([lead.name, lead.org, lead.sport, lead.role, lead.teamSize, lead.phone, lead.email, lead.notes]),
+check('row columns in spec order, forced to text with leading apostrophe',
+  JSON.stringify(row.slice(1)) === JSON.stringify([lead.name, lead.org, lead.sport, lead.role, lead.teamSize, lead.phone, lead.email, lead.notes].map(function (v) { return "'" + v; })),
   JSON.stringify(row.slice(1)));
+check('phone keeps leading zero as text', row[6] === "'0501234567", row[6]);
 check('valid lead sends one email', ctx.mails.length === 1);
 var mail = ctx.mails[0] || {};
 check('email goes to Roei', mail.to === 'palgiroei@gmail.com');
@@ -72,7 +73,7 @@ var evil = JSON.parse(JSON.stringify(lead));
 evil.notes = '=HYPERLINK("http://x","y")';
 evil.org = '+קבוצה';
 post(ctx, JSON.stringify(evil));
-check('notes starting with = are prefixed with apostrophe', ctx.rows[0][8] === "'" + evil.notes, ctx.rows[0][8]);
+check('notes starting with = are stored as text (single apostrophe)', ctx.rows[0][8] === "'" + evil.notes, ctx.rows[0][8]);
 check('org starting with + is prefixed', ctx.rows[0][2] === "'+קבוצה", ctx.rows[0][2]);
 check('sanitizeCell_ prefixes - and @', ctx.sb.sanitizeCell_('-1') === "'-1" && ctx.sb.sanitizeCell_('@a') === "'@a");
 check('sanitizeCell_ leaves normal text', ctx.sb.sanitizeCell_('שלום') === 'שלום');
@@ -98,6 +99,28 @@ out = post(ctx, JSON.stringify(bot));
 check('honeypot returns ok:true (silent)', out.ok === true);
 check('honeypot appends nothing', ctx.rows.length === 0);
 check('honeypot sends no email', ctx.mails.length === 0);
+
+// Final review Important 1: empty optional cells stay empty
+ctx = loadGas(file);
+post(ctx, JSON.stringify({ name: 'דנה', org: 'קבוצה', phone: '0501234567' }));
+check('empty optional cells are empty strings, not a bare apostrophe', ctx.rows[0][3] === '' && ctx.rows[0][8] === '', JSON.stringify(ctx.rows[0]));
+
+// Final review Important 2: email failure must not cause an error response (client would resubmit -> duplicate row)
+ctx = loadGas(file);
+ctx.sb.MailApp.sendEmail = function () { throw new Error('quota'); };
+var threw = false;
+try { out = post(ctx, JSON.stringify(lead)); } catch (e) { threw = true; }
+check('email failure does not throw', !threw);
+check('email failure still returns ok:true', !threw && out.ok === true, JSON.stringify(out));
+check('email failure appends exactly one row', ctx.rows.length === 1);
+
+// any other server error -> JSON ok:false, no throw
+ctx = loadGas(file);
+ctx.sb.SpreadsheetApp.getActiveSpreadsheet = function () { throw new Error('boom'); };
+threw = false;
+try { out = post(ctx, JSON.stringify(lead)); } catch (e) { threw = true; }
+check('sheet failure does not throw', !threw);
+check('sheet failure returns ok:false server_error', !threw && out.ok === false && out.error === 'server_error', JSON.stringify(out));
 
 // setupSheet
 ctx = loadGas(file);
