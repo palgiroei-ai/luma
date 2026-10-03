@@ -1,0 +1,46 @@
+<!doctype html><body><iframe id="f" style="width:1200px;height:900px"></iframe><pre id="out"></pre><script>
+var res=[];function ok(n,c){res.push((c?'PASS ':'FAIL ')+n)}
+function load(cb){var f=document.getElementById('f');f.onload=function(){cb(f.contentWindow,f.contentDocument)};f.src='/index.html?'+Math.random()}
+function fill(d,o){for(var k in o){d.getElementById('f-'+k).value=o[k]}}
+function submit(d){d.getElementById('lead-form').dispatchEvent(new Event('submit',{cancelable:true,bubbles:true}))}
+var valid={name:'דנה כהן',org:'קבוצה בדיקה',phone:'+972 50-123-4567'};
+load(function(w,d){
+  var calls=0;w.fetch=function(){calls++;return new Promise(function(){})};
+  submit(d);
+  ok('empty submit shows name/org/phone errors',d.getElementById('err-name').textContent&&d.getElementById('err-org').textContent&&d.getElementById('err-phone').textContent);
+  ok('empty submit sends nothing',calls===0);
+  ok('focus moved to name',d.activeElement&&d.activeElement.id==='f-name');
+  fill(d,valid);w.LEADS_ENDPOINT_URL='';submit(d);
+  ok('no endpoint -> error box visible',!d.getElementById('form-error').hidden);
+  ok('no endpoint -> button enabled',!d.getElementById('lead-submit').disabled);
+  load(function(w,d){
+    var calls=0;w.fetch=function(){calls++;return new Promise(function(){})};
+    fill(d,valid);d.getElementById('f-website').value='x';submit(d);
+    ok('honeypot -> success shown',!d.getElementById('form-success').hidden);
+    ok('honeypot -> no fetch',calls===0);
+    load(function(w,d){
+      var calls=0,body=null;w.fetch=function(u,o){calls++;body=o.body;return new Promise(function(){})};
+      w.LEADS_ENDPOINT_URL='https://example.invalid/exec';
+      fill(d,valid);submit(d);submit(d);
+      ok('double submit -> exactly one fetch',calls===1);
+      ok('button disabled while sending',d.getElementById('lead-submit').disabled);
+      ok('payload phone normalized',body&&JSON.parse(body).phone==='0501234567');
+      load(function(w,d){
+        w.LEADS_ENDPOINT_URL='https://example.invalid/exec';
+        w.fetch=function(){return Promise.resolve({ok:true,json:function(){return Promise.resolve({ok:false,error:'missing_fields'})}})};
+        fill(d,valid);submit(d);
+        setTimeout(function(){
+          ok('server ok:false -> error box',!d.getElementById('form-error').hidden&&d.getElementById('form-success').hidden);
+          w.fetch=function(){return Promise.resolve({ok:true,json:function(){return Promise.resolve({ok:true})}})};
+          submit(d);
+          setTimeout(function(){
+            ok('server ok:true -> success shown, form hidden',!d.getElementById('form-success').hidden&&d.getElementById('lead-form').hidden);
+            ok('html has .js class',d.documentElement.classList.contains('js'));
+            document.getElementById('out').textContent=res.join('\n');document.title='DONE';
+          },300);
+        },300);
+      });
+    });
+  });
+});
+</script></body>
