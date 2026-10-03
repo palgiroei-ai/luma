@@ -109,14 +109,9 @@ p { margin: 0; }
 .icon { width: 28px; height: 28px; fill: none; stroke: var(--copper); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 16px; }
 .feature p { margin-top: 6px; color: var(--muted); font-size: 15.5px; }
 /* full-row closing card: custom development */
-.feature-wide { grid-column: 1 / -1; background: var(--navy); border-color: var(--navy); color: var(--chalk); padding: 32px; }
+.feature-wide { grid-column: 1 / -1; background: var(--navy); border-color: var(--navy); color: var(--chalk); }
 .feature-wide .icon { stroke: #E0A877; }
 .feature-wide > p { color: rgba(245, 241, 234, .8); font-size: 17px; }
-.custom-list { display: grid; gap: 20px; margin-top: 24px; }
-@media (min-width: 900px) { .custom-list { grid-template-columns: repeat(3, 1fr); gap: 32px; } }
-.custom-list div { border-inline-start: 2px solid var(--copper); padding-inline-start: 14px; }
-.custom-list strong { display: block; font-size: 16px; margin-bottom: 4px; }
-.custom-list span { font-size: 15px; color: rgba(245, 241, 234, .72); line-height: 1.6; }
 
 .showcase { margin-top: 64px; display: grid; gap: 32px; align-items: center; justify-items: center; }
 .showcase-copy { max-width: 30em; }
