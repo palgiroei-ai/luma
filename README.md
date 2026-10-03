@@ -12,7 +12,10 @@ Static HTML/CSS/JS, no build. Local preview: `python3 -m http.server 8642` → h
 
 ## Lead form backend
 Google Sheet "LUMA – פניות" (palgitraining@gmail.com) with bound Apps Script = `gas/Code.gs`.
-Web App URL is in `config.js`. Endpoint is anonymous (accepted tradeoff, same as palgi-leads);
+Web App URL is in `config.js`.
+Sheet id `1GSzXOulhVF1qSkETf7hkC1DFsSDkxvm7fPI_GtMW83I`, scriptId `1AvIjpXE9CdzwgY8MhaiHamiv1ufLrYkjAzFleD_s_R4fUiz_5FL9wsfn`,
+deploymentId `AKfycbwEHvcs4hvE2qfsQtm83u28nHxZN04uB-J5DCIApLQWT0GM4hq2EPeqfyYy1g6d9ybl`.
+Programmatic redeploy works (gws script projects updateContent → versions create → deployments update). Endpoint is anonymous (accepted tradeoff, same as palgi-leads);
 honeypot field `website` drops bots; cells are sanitized against formula injection.
 After editing `gas/Code.gs`: paste into the Apps Script editor → Deploy → Manage deployments →
 edit the existing deployment → New version (keeps the same URL).
