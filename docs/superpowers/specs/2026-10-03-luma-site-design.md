@@ -1,7 +1,7 @@
 # LUMA — marketing site design
 
 Date: 2026-10-03
-Status: awaiting Roei's review
+Status: approved by Roei 2026-10-03
 
 ## 1. Purpose
 
@@ -64,8 +64,8 @@ seconds what LUMA does and why it fits them, and submits the demo form.
    federations, associations, academies, clubs. The model: a separate instance
    per organization, adapted to the sport, isolated data, onboarding and
    ongoing support.
-6. **"פועלת היום"** — short case study of the academy (example, not the
-   headline). Named or anonymous per Roei's answer.
+6. **"פועלת היום"** — short case study: "ענף הטיפוס באקדמיה של וינגייט"
+   (example, not the headline).
 7. **Demo form** — see §5.
 8. **Footer** — "LUMA מבית PalgiTraining", link to palgitraining.com, contact
    details, copyright. No product social accounts (PalgiTraining's only if Roei
@@ -143,9 +143,9 @@ seconds what LUMA does and why it fits them, and submits the demo form.
 
 Video, pricing, English version, analytics, multi-page site, final logo.
 
-## 9. Open items needing Roei
+## 9. Resolved items (Roei, 2026-10-03)
 
-1. OK to name the academy / Wingate in the case-study section?
-2. Contact details for the footer (phone / email / WhatsApp number for the
-   fallback).
-3. Include PalgiTraining social links in the footer or not.
+1. Case study: named — **"ענף הטיפוס באקדמיה של וינגייט"**.
+2. Contact: phone **050-7721477**, email **palgiroei@gmail.com**; WhatsApp
+   fallback → `https://wa.me/972507721477`.
+3. Footer social links: **none**.
