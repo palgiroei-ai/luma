@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>לוח שנתי · LUMA</title>
+  <meta name="theme-color" content="#F5F1EA">
+  <link rel="icon" type="image/svg+xml" href="../assets/mark.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&family=Jost:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="cal.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+
+<section id="gate" class="gate" hidden>
+  <form class="gate-card" id="gate-form" autocomplete="off">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg>
+      <span class="wordmark">LUMA</span>
+    </div>
+    <h1>לוח פעילות שנתי</h1>
+    <p class="muted">הדף מיועד לאקדמיה. הזינו את קוד הכניסה.</p>
+    <label class="sr-only" for="code">קוד כניסה</label>
+    <input id="code" name="code" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" placeholder="קוד כניסה" required>
+    <button class="btn btn-primary" type="submit" id="gate-btn">כניסה</button>
+    <p class="gate-error" id="gate-error" role="alert" hidden>הקוד שגוי, נסו שוב.</p>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg>
+        <span class="wordmark">LUMA</span>
+      </div>
+      <div class="title-block">
+        <h1 id="title"></h1>
+        <p class="muted" id="range"></p>
+      </div>
+      <div class="top-actions">
+        <div class="seg" role="group" aria-label="תצוגה">
+          <button type="button" data-view="grid">שנה</button>
+          <button type="button" data-view="list">רשימה</button>
+        </div>
+        <div class="dl">
+          <button type="button" class="btn btn-primary btn-sm" id="dl-btn" aria-expanded="false" aria-controls="dl-menu">הורדה ליומן</button>
+          <div class="dl-menu" id="dl-menu" hidden>
+            <button type="button" id="dl-marked"></button>
+            <button type="button" id="dl-visible"></button>
+            <button type="button" id="dl-print">הדפסה / PDF</button>
+            <p class="muted small">קובץ ‎.ics‎ נפתח ב-Google Calendar וביומן של האייפון.</p>
+            <button type="button" class="link" id="clear-marks">ניקוי כל הסימונים</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <button type="button" class="filters-toggle btn btn-ghost btn-sm" id="filters-toggle" aria-expanded="false" aria-controls="filters">סינון <span id="filters-summary" class="muted"></span></button>
+    <section class="filters" id="filters" aria-label="סינון">
+      <div class="quick">
+        <div class="quick-row">
+          <span class="quick-label">גיל</span>
+          <div class="seg" role="group" aria-label="גיל" id="age-seg">
+            <button type="button" data-age="all">הכל</button>
+            <button type="button" data-age="youth">נוער</button>
+            <button type="button" data-age="senior">בוגרים</button>
+          </div>
+        </div>
+        <div class="quick-row">
+          <span class="quick-label">תחום</span>
+          <div class="chips" id="disc-chips">
+            <button type="button" class="chip" data-disc="boulder" aria-pressed="false">בולדר</button>
+            <button type="button" class="chip" data-disc="lead" aria-pressed="false">הובלה</button>
+            <button type="button" class="chip" data-disc="speed" aria-pressed="false">מהירות</button>
+          </div>
+        </div>
+        <button type="button" class="link" id="reset">איפוס לברירת המחדל</button>
+      </div>
+      <div class="cat-groups" id="cat-groups"></div>
+      <p class="hint muted small">גיל ותחום חלים על תחרויות בלבד. אימונים ומחנות מוצגים לפי הכפתורים שלהם.</p>
+    </section>
+
+    <section id="view" aria-live="polite"></section>
+
+    <footer class="foot muted small">
+      <p id="source"></p>
+      <p>סימונים נשמרים בדפדפן הזה בלבד.</p>
+    </footer>
+  </main>
+</div>
+
+<dialog id="detail" class="detail">
+  <form method="dialog" class="detail-inner">
+    <div class="detail-cat" id="d-cat"></div>
+    <h2 id="d-title"></h2>
+    <p class="detail-sub" id="d-sub"></p>
+    <p class="detail-dates" id="d-dates"></p>
+    <p class="detail-tags" id="d-tags"></p>
+    <p class="detail-note" id="d-note"></p>
+    <div class="detail-actions">
+      <button type="button" class="btn btn-primary btn-sm" id="d-mark"></button>
+      <button type="button" class="btn btn-ghost btn-sm" id="d-ics">הוספה ליומן</button>
+      <button class="btn btn-ghost btn-sm" value="close">סגירה</button>
+    </div>
+  </form>
+</dialog>
+
+</body>
+</html>
