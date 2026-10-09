@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>מדריך המאמן האישי · Climbing Academy</title>
   <meta name="description" content="מדריך מונפש למאמן האישי ב-Climbing Academy: איך עובדים עם האפליקציה, צעד אחר צעד.">
   <meta name="theme-color" content="#F5F1EA">
-  <meta property="og:title" content="מדריך המאמן האישי · Climbing Academy">
+  <meta property="og:title" content="מדריך המאמן האישי · LUMA">
   <meta property="og:description" content="מדריך מונפש למאמן האישי ב-Climbing Academy: איך עובדים עם האפליקציה, צעד אחר צעד.">
   <meta property="og:locale" content="he_IL">
   <link rel="icon" type="image/svg+xml" href="../../assets/mark.svg">
+<title>מדריך המאמן האישי · LUMA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&family=Jost:wght@500&display=swap">
 <style>
   /* Layout: one column — brand header, chapter strip, the phone "screen" playing the steps, the caption
      under it, then the transport. Colors are the app's own (Climbing Academy brand), one light look. */
@@ -34,7 +34,7 @@
   .wrap { max-width: 460px; margin: 0 auto; padding-inline: 16px; padding-block: 10px; display: flex; flex-direction: column; gap: 8px; }
   .top, .bottom { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .wide .wrap { max-width: 1000px; display: grid; grid-template-columns: auto minmax(0, 440px); grid-template-areas: "phone top" "phone bottom";
-    grid-template-rows: auto 1fr; justify-content: center; column-gap: 40px; row-gap: 14px; align-items: start; }
+    grid-template-rows: auto 1fr; justify-content: center; column-gap: 48px; row-gap: 14px; align-items: start; padding-block: 28px; }
   .wide .top { grid-area: top; padding-top: 12px; }
   .wide .bottom { grid-area: bottom; gap: 12px; }
   .wide .phone { grid-area: phone; margin: 0; }
@@ -94,12 +94,26 @@
   .btn.try[aria-pressed="true"] { background: var(--ember-soft); border-color: var(--ember); }
   .btn[disabled] { opacity: .35; cursor: default; }
   :focus-visible { outline: 3px solid var(--ember); outline-offset: 2px; }
+  /* LUMA site bar (same look as the top of luma.palgitraining.com) */
+  .luma-bar { display: block; border-bottom: 1px solid var(--line); background: rgba(245, 241, 234, .96); } /* not the guide's header row */
+  .luma-bar-in { max-width: 1000px; margin: 0 auto; padding-inline: 16px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .luma-brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: #14243B; }
+  .luma-mark { width: 26px; height: 26px; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .luma-mark circle { stroke: #C0743A; opacity: .6; }
+  .luma-mark path { stroke: currentColor; }
+  .luma-word { font-family: 'Jost', 'Heebo', sans-serif; font-weight: 500; letter-spacing: .32em; font-size: 17px; direction: ltr; padding-left: .32em; }
+  .luma-label { font-size: 13px; font-weight: 500; color: #5B6676; }
   @media (prefers-reduced-motion: reduce) {
     .finger { transition: opacity .2s; } .target, .ripple { animation: none; } .screen img { transition: none; }
   }
 </style>
 </head>
 <body>
+
+<header class="luma-bar" id="luma-bar" dir="rtl"><div class="luma-bar-in">
+  <a class="luma-brand" href="https://luma.palgitraining.com/" aria-label="LUMA — לאתר"><svg class="luma-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg><span class="luma-word">LUMA</span></a>
+  <span class="luma-label">מדריכי שימוש</span>
+</div></header>
 <div class="wrap" dir="rtl" lang="he">
   <div class="top">
   <header>
@@ -215,6 +229,8 @@ const STEPS = [{"chapter":0,"title":"קודם כול: התראות","text":"פע
   // The caption keeps the height of the longest step (no jumping), and the phone takes what is left of
   // the screen, so phone + explanation + buttons are all visible without scrolling.
   function fit() {
+    const bar = document.getElementById('luma-bar');
+    const H = window.innerHeight - (bar ? bar.offsetHeight : 0);
     const wide = window.innerWidth >= 720 && window.innerWidth > window.innerHeight * 0.9;
     document.body.classList.toggle('wide', wide);
     const cap = $('caption'), phone = $('phone'), wrap = document.querySelector('.wrap');
@@ -228,10 +244,10 @@ const STEPS = [{"chapter":0,"title":"קודם כול: התראות","text":"פע
     const intro = document.querySelector('.intro');
     if (wide) { // the phone takes the full height beside the text
       intro.hidden = false;
-      phone.style.width = Math.round(Math.max(150, Math.min(430, (window.innerHeight - 22 - pad) * 390 / 844 + pad))) + 'px';
+      phone.style.width = Math.round(Math.max(150, Math.min(290, (H - 22 - pad) * 390 / 844 + pad))) + 'px';
       return;
     }
-    const widthFor = () => (window.innerHeight - 2 - reserve - (wrap.offsetHeight - phone.offsetHeight) - pad) * 390 / 844 + pad;
+    const widthFor = () => (H - 2 - reserve - (wrap.offsetHeight - phone.offsetHeight) - pad) * 390 / 844 + pad;
     intro.hidden = false;
     if (widthFor() < 240) intro.hidden = true; // a short screen: the phone needs that line more
     phone.style.width = Math.round(Math.max(160, Math.min(330, wrap.clientWidth - 32, widthFor()))) + 'px';
