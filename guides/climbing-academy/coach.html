@@ -252,7 +252,7 @@ const STEPS = [{"chapter":0,"title":"ברוכים הבאים","text":"האפלי
     let tallest = 0;
     STEPS.forEach((st, i) => { $('meta').textContent = 'x'; $('stitle').textContent = st.title; $('stext').textContent = st.text; tallest = Math.max(tallest, cap.offsetHeight); });
     [$('meta').textContent, $('stitle').textContent, $('stext').textContent] = keep;
-    const reserve = tallest + 22 - cap.offsetHeight; // the tallest step + a one-line hint, kept as page space (not inside the box)
+    const reserve = tallest - cap.offsetHeight; // room for the tallest step (the try-it hint may add a small scroll; Roei's call)
     const pad = 20; // the frame around the screen
     const intro = document.querySelector('.intro');
     if (wide) { // the phone takes the full height beside the text
