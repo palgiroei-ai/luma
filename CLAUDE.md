@@ -16,3 +16,7 @@ The Climbing Academy case card links to `#try`; the top nav has "נסו בעצמ
   "הדגמה: צד המאמן / הספורטאי" for visitors coming from the site. The guides are generated files: if they are rebuilt
   from the app repo (branch guide-tools), add this script back (or add it to the generator).
 
+- **2026-10-10 polish:** hero proof line (`.hero-proof`, "פועלת היום באקדמיית הטיפוס…"); every `.section-head` is
+  centered (Roei chose centered over all-right); smaller gap under the hero. In `?demo` mode the guides also get a
+  "בקשו הדגמה" button in the top bar (→ `https://luma.palgitraining.com/#demo`) and, where it fits without scrolling
+  (desktop), a line under the last step. Part of the same `?demo` script — keep it if the guides are regenerated.
