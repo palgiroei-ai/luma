@@ -271,5 +271,16 @@ const STEPS = [{"chapter":0,"title":"ברוכים הבאים","text":"האפלי
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
 })();
 </script>
+<script>
+// "?demo" (2026-10-10): opened from the LUMA site as a demo for new customers, not as a guide for academy members.
+(function () {
+  if (!/[?&]demo(=|&|$)/.test(location.search)) return;
+  var q = function (s) { return document.querySelector(s); };
+  q('.luma-label').textContent = 'הדגמה';
+  q('h1').textContent = 'הדגמה: צד הספורטאי';
+  q('.intro').textContent = 'הדגמה של המערכת של אקדמיית הטיפוס בוינגייט, מצד הספורטאי. נתונים לדוגמה.' + ' לחצו "הפעל" וצפו, או "נסו בעצמכם" ולחצו על המסך.';
+  document.title = 'הדגמה: צד הספורטאי' + ' · LUMA';
+})();
+</script>
 </body>
 </html>

@@ -61,35 +61,6 @@
     counters.forEach(function (el) { countIo.observe(el); });
   }
 
-  // ---- live feed in the hero phone ("בזמן אמת") ----
-  var feed = document.getElementById('s-feed');
-  if (feed && !reduce && 'IntersectionObserver' in window) {
-    var updates = [
-      'סיכום פגישה חדש — נועה לוי',
-      'אימון כוח הושלם — עידו שגב',
-      'שינוי שעה — אימון קבוצתי 17:30',
-      'הערת פיזיו — יואב כהן',
-      'תחרות נוספה ללוח — גביע המדינה'
-    ];
-    var next = 0, timer = null;
-    function pushUpdate() {
-      var items = feed.querySelectorAll('.s-item');
-      items.forEach(function (it) { var d = it.querySelector('.dot'); if (d) d.classList.remove('dot-accent'); it.classList.remove('s-new'); });
-      if (items.length >= 3) items[items.length - 1].remove();
-      var item = document.createElement('div');
-      item.className = 's-item s-new';
-      item.innerHTML = '<i class="dot dot-accent"></i>';
-      item.appendChild(document.createTextNode(updates[next]));
-      next = (next + 1) % updates.length;
-      feed.insertBefore(item, feed.querySelector('.s-item'));
-    }
-    new IntersectionObserver(function (entries) {
-      var visible = entries[0].isIntersecting;
-      if (visible && !timer) timer = setInterval(function () { if (!document.hidden) pushUpdate(); }, 4000);
-      if (!visible && timer) { clearInterval(timer); timer = null; }
-    }).observe(feed);
-  }
-
   // ---- floating WhatsApp hides while the demo form is on screen ----
   var wa = document.querySelector('.wa-float');
   var demo = document.getElementById('demo');

@@ -5,3 +5,14 @@ Climbing Academy Hub app — real app screenshots (fictional sample data) inside
 each tap, a Hebrew caption per step, chapters and a "try it yourself" mode. Self-contained (images are
 data: URIs, ~2–2.5MB each). Generated from the app by the capture/build scripts kept with the app
 (palgiroei-ai/wingate-academy-hub); regenerate there when the app's screens change.
+
+## Site: "נסו בעצמכם" instead of drawn phones (2026-10-10)
+Roei: the site was too long and the three drawn demo phones (hero + two showcases) added little. Removed all three
+(their CSS and the hero live-feed script too). Hero = text only. Features 9 → 6 cards (3 columns on desktop) + the wide
+"פיתוח והתאמה אישית" card. New section `#try` "ככה זה נראה באמת": two cards (coach / athlete) with a real screenshot
+(`assets/demo/*.jpg`, taken from the guides, fictional data) linking to `guides/climbing-academy/*.html?demo`.
+The Climbing Academy case card links to `#try`; the top nav has "נסו בעצמכם" instead of "יכולות".
+- **`?demo` in the guides:** a small script at the end of each guide swaps the bar label, `h1`, intro and title to
+  "הדגמה: צד המאמן / הספורטאי" for visitors coming from the site. The guides are generated files: if they are rebuilt
+  from the app repo (branch guide-tools), add this script back (or add it to the generator).
+
