@@ -184,6 +184,8 @@ p { margin: 0; }
 .demo-copy .direct p { margin: 0 0 10px; font-size: 16px; }
 .direct-btns { display: flex; flex-wrap: wrap; gap: 10px; }
 .direct-btns .btn { background: var(--card); }
+.only-desktop { display: none; }
+@media (min-width: 900px) and (hover: hover) { .only-desktop { display: inline; } .only-phone { display: none; } }
 .btn-ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .form-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 24px; box-shadow: var(--shadow); }
 @media (min-width: 640px) { .form-card { padding: 36px; } }
