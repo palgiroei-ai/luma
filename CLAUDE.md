@@ -22,3 +22,9 @@ The Climbing Academy case card links to `#try`; the top nav has "נסו בעצמ
   (desktop), a line under the last step. Part of the same `?demo` script — keep it if the guides are regenerated.
 - **CTA wording (Roei, 2026-10-10):** "בקשו הדגמה" → "קבעו שיחת היכרות" (hero, form heading/text), "שיחת היכרות"
   in the top bar and the guides' demo bar — so "הדגמה" only means the self-serve animated demos ("פתחו הדגמה").
+- **Later the same day:** contact row under the form heading = three buttons (`.direct-btns`: call — "התקשרו" on
+  phones, the number on desktop via `.only-phone/.only-desktop` —, WhatsApp, email); "מתחילים בשיחת היכרות" button
+  (`.btn-light`) at the end of the dark `#model` band; the top-bar heartbeat draws 3 times on load (`mark-draw`,
+  iteration 3); top nav gained "לקוחות" (#case); texts of pillars, features, `#try` ("ראו את LUMA בפעולה",
+  "סביבת המאמן / הספורטאי"), step 03, case cards ("מאז 2025 / בשימוש שוטף") and the form intro rewritten by Roei.
+  Open: an email address on Roei's own domain instead of palgiroei@gmail.com.
