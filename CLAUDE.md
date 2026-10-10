@@ -18,5 +18,7 @@ The Climbing Academy case card links to `#try`; the top nav has "נסו בעצמ
 
 - **2026-10-10 polish:** hero proof line (`.hero-proof`, "פועלת היום באקדמיית הטיפוס…"); every `.section-head` is
   centered (Roei chose centered over all-right); smaller gap under the hero. In `?demo` mode the guides also get a
-  "בקשו הדגמה" button in the top bar (→ `https://luma.palgitraining.com/#demo`) and, where it fits without scrolling
+  "שיחת היכרות" button in the top bar (→ `https://luma.palgitraining.com/#demo`) and, where it fits without scrolling
   (desktop), a line under the last step. Part of the same `?demo` script — keep it if the guides are regenerated.
+- **CTA wording (Roei, 2026-10-10):** "בקשו הדגמה" → "קבעו שיחת היכרות" (hero, form heading/text), "שיחת היכרות"
+  in the top bar and the guides' demo bar — so "הדגמה" only means the self-serve animated demos ("פתחו הדגמה").

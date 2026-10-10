@@ -286,14 +286,14 @@ const STEPS = [{"chapter":0,"title":"ברוכים הבאים","text":"האפלי
   style.textContent = '.luma-bar-in{justify-content:space-between}.luma-cta{margin-inline-start:auto;display:inline-flex;align-items:center;min-height:34px;padding:0 14px;border-radius:9px;background:#14243B;color:#F5F1EA;font-size:14px;font-weight:700;text-decoration:none;white-space:nowrap}.demo-end{display:inline-block;margin-top:4px;font-weight:700;color:#14243B;text-decoration:none;border-bottom:1.5px solid #C0743A}';
   document.head.appendChild(style);
   var cta = document.createElement('a');
-  cta.className = 'luma-cta'; cta.href = formUrl; cta.textContent = 'בקשו הדגמה';
+  cta.className = 'luma-cta'; cta.href = formUrl; cta.textContent = 'שיחת היכרות';
   q('.luma-bar-in').appendChild(cta);
   var meta = q('#meta'), stext = q('#stext');
   function endLine() {
     var m = /(\d+) מתוך (\d+)/.exec(meta.textContent);
     if (!m || m[1] !== m[2] || stext.querySelector('.demo-end') || stext.dataset.noEnd) return;
     var a = document.createElement('a');
-    a.className = 'demo-end'; a.href = formUrl; a.textContent = 'רוצים מערכת כזו לקבוצה שלכם? בקשו הדגמה ←';
+    a.className = 'demo-end'; a.href = formUrl; a.textContent = 'רוצים מערכת כזו לקבוצה שלכם? קבעו שיחת היכרות ←';
     stext.appendChild(document.createElement('br')); stext.appendChild(a);
     // Only where it fits: the guide is built to fit one screen with no scrolling (the bar button is always there).
     if (document.documentElement.scrollHeight > window.innerHeight + 1) { stext.removeChild(a.previousSibling); stext.removeChild(a); stext.dataset.noEnd = '1'; }
