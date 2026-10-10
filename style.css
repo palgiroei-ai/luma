@@ -179,8 +179,12 @@ p { margin: 0; }
 .demo-grid { display: grid; gap: 40px; }
 @media (min-width: 900px) { .demo-grid { grid-template-columns: .9fr 1.1fr; gap: 64px; align-items: start; } }
 .demo-copy p { margin-top: 14px; color: var(--muted); font-size: 18px; }
-.demo-copy .direct { font-size: 16px; }
-.demo-copy .direct a { color: var(--copper-text); font-weight: 600; }
+.demo-copy .eyebrow { margin-top: 0; font-size: 14px; color: var(--copper-text); }
+.demo-copy .direct { margin-top: 22px; }
+.demo-copy .direct p { margin: 0 0 10px; font-size: 16px; }
+.direct-btns { display: flex; flex-wrap: wrap; gap: 10px; }
+.direct-btns .btn { background: var(--card); }
+.btn-ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .form-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 24px; box-shadow: var(--shadow); }
 @media (min-width: 640px) { .form-card { padding: 36px; } }
 .field { display: flex; flex-direction: column; gap: 6px; margin: 0 0 16px; border: 0; padding: 0; min-width: 0; }
