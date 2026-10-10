@@ -172,8 +172,9 @@ p { margin: 0; }
 .stat + .stat { border-inline-start: 1px solid var(--border); }
 .stat-n { font-family: var(--font-brand); font-size: 38px; font-weight: 500; line-height: 1.15; color: var(--copper); }
 .stat-word { font-family: var(--font); font-size: 20px; font-weight: 800; line-height: 2.2; }
+.stat-year { font-family: var(--font-brand); font-size: 30px; font-weight: 500; line-height: 1; vertical-align: -2px; }
 .stat dd { margin: 4px 0 0; font-size: 13.5px; line-height: 1.45; color: var(--muted); }
-@media (max-width: 480px) { .case-card { padding: 22px 18px; } .case-logo { height: 40px; } .stat-n { font-size: 30px; } .stat-word { font-size: 14px; line-height: 2.45; white-space: nowrap; } .stat dd { font-size: 12.5px; } }
+@media (max-width: 480px) { .case-card { padding: 22px 18px; } .case-logo { height: 40px; } .stat-n { font-size: 30px; } .stat-word { font-size: 14px; line-height: 2.45; white-space: nowrap; } .stat-year { font-size: 24px; } .stat dd { font-size: 12.5px; } }
 
 /* demo form */
 .demo-grid { display: grid; gap: 40px; }
