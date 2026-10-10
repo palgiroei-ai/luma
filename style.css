@@ -155,6 +155,9 @@ p { margin: 0; }
 @media (min-width: 640px) { .steps { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 1000px) { .steps { grid-template-columns: repeat(4, 1fr); } }
 .step { background: rgba(245, 241, 234, .05); border: 1px solid rgba(245, 241, 234, .14); border-radius: var(--radius); padding: 24px; }
+.band-cta { margin-top: 36px; text-align: center; }
+.btn-light { background: var(--chalk); color: var(--navy); }
+.btn-light:hover { background: #fff; transform: translateY(-1px); }
 .step-n { display: block; font-family: var(--font-brand); font-size: 32px; font-weight: 500; color: var(--copper); margin-bottom: 12px; }
 .step p { margin-top: 6px; color: rgba(245, 241, 234, .75); font-size: 15.5px; }
 
