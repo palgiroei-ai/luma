@@ -51,7 +51,7 @@
     </a>
   </header>
 
-  <nav class="tabs" id="round-tabs" aria-label="ראונדים"></nav>
+  <nav class="tabs" aria-label="ראונדים"><button type="button" class="home-tab" id="home-btn" aria-pressed="false">⌂ ראשי</button><div class="tabs-scroll" id="round-tabs"></div></nav>
 
   <div class="start-bar" id="start-bar">
     <button class="btn btn-primary" type="button" id="start-btn">התחל מעקב (צליל + מסך דלוק)</button>
@@ -65,7 +65,9 @@
 
   <div class="alert-stack" id="alerts" aria-live="assertive"></div>
 
-  <main class="main">
+  <main class="home" id="home" hidden aria-label="מסך ראשי"></main>
+
+  <main class="main" id="round-screen">
     <section class="board" id="board" aria-label="מסלולים"></section>
 
     <section class="mid">

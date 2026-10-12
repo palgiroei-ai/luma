@@ -28,6 +28,7 @@ let DATA = null;
 let current = null; // round id
 let view = 'mine';
 let lastTabTap = 0;
+let screen = 'round'; // 'home' | 'round'
 
 // ---- gate ----
 // → payload, null (wrong code) or 'nodata' (no network and nothing cached / server error).
@@ -98,7 +99,7 @@ function renderTabs() {
   const t = now();
   patch($('#round-tabs'), DATA.rounds.map(r => {
     const live = r.slots.length && stateAt(r, t, off(r.id)).phase === 'live';
-    return `<button type="button" data-round="${r.id}" aria-pressed="${r.id === current}">
+    return `<button type="button" data-round="${r.id}" aria-pressed="${screen === 'round' && r.id === current}">
       <span class="tab-day">${dayLabel(r.date)}</span> ${esc(r.title)}${live ? ' <span class="live-dot">חי</span>' : ''}${r.slots.length ? '' : ' <span class="tab-wait">ממתין לסדר עלייה</span>'}</button>`;
   }).join(''));
 }
@@ -214,7 +215,44 @@ function renderLog() {
   }).join('') : '<p class="muted">עוד אין הערות או ערעורים.</p>'));
 }
 
+// ---- home: all rounds by event / day, tap to open ----
+function roundEndMs(r) { return roundStart(r) + off(r.id) + windowCount(r) * r.slotSec * 1000; }
+
+function renderHome() {
+  const t = now();
+  const days = [...new Set(DATA.rounds.map(r => r.date))];
+  const card = r => {
+    const ph = r.slots.length ? stateAt(r, t, off(r.id)).phase : 'wait';
+    const badge = { live: '<span class="hb live">חי עכשיו</span>', before: '<span class="hb soon">בקרוב</span>', after: '<span class="hb done">הסתיים</span>', wait: '<span class="hb wait">ממתין לסדר עלייה</span>' }[ph];
+    const mine = mineOf(r.id).map(m => `<li><b>${esc(m.short)}</b> <span>#${r.slots[m.k].order} · ${fmtHM(slotStartMs(r, m.k, off(r.id)))}</span></li>`).join('');
+    const live = ph === 'live' ? (() => { const s = stateAt(r, t, off(r.id)); const b1 = s.boulders[0]; return `<p class="h-live">חלון ${s.n + 1} מתוך ${windowCount(r)} · בולדר 1: ${b1 ? `#${b1.order} ${esc(b1.name)}` : '—'}</p>`; })() : '';
+    return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
+      <div class="h-top"><h3>${esc(r.title)}</h3>${badge}</div>
+      <p class="muted small">${fmtHM(roundStart(r) + off(r.id))}${r.slots.length ? `–${fmtHM(roundEndMs(r))}` : ''} · ${r.boulders} בולדרים · חלון ${fmtDur(r.slotSec * 1000)}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
+      ${live}${mine ? `<ul class="h-mine">${mine}</ul>` : `<p class="muted small">${r.slots.length ? 'אין ספורטאים שלי' : ''}</p>`}
+    </button>`;
+  };
+  patch($('#home'), `<h2 class="h-event">${esc(DATA.event.title)} <span class="muted">· ${esc(DATA.event.place || '')}</span></h2>` +
+    days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${DATA.rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
+}
+
+function showScreen(sc) {
+  screen = sc;
+  $('#home').hidden = sc !== 'home';
+  $('#round-screen').hidden = sc !== 'round';
+  $('#home-btn').setAttribute('aria-pressed', String(sc === 'home'));
+  $('#round-tabs')._html = null;
+  render();
+}
+
 function render() {
+  if (screen === 'home') {
+    $('#clock').textContent = fmtClock(now());
+    $('#event-title').textContent = DATA.event.title;
+    $('#round-sub').textContent = `מסך ראשי${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
+    renderTabs(); renderHome(); checkAlerts();
+    return;
+  }
   if (Date.now() - lastTabTap > 5 * 60000 && stateAt(round(current), now(), off(current)).phase === 'after') {
     const next = pickDefaultRound();
     if (next !== current) { current = next; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; }
@@ -406,10 +444,16 @@ function start() {
   $('#app').hidden = false;
   current = params.get('round') && round(params.get('round')) ? params.get('round') : pickDefaultRound();
   if (SIM_AT != null) { $('#sim-bar').hidden = false; $('#sim-btn').hidden = true; }
+  const liveNow = DATA.rounds.some(r => r.slots.length && stateAt(r, now(), off(r.id)).phase === 'live');
+  screen = params.get('round') || liveNow ? 'round' : 'home';
+  $('#home').hidden = screen !== 'home'; $('#round-screen').hidden = screen !== 'round';
+  $('#home-btn').setAttribute('aria-pressed', String(screen === 'home'));
   document.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
-    if (d.round) { lastTabTap = Date.now(); current = d.round; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); }
+    if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; showScreen('round'); }
+    else if (b.id === 'home-btn') showScreen('home');
+    else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); }
     else if (d.adj) adjust(d.adj);
     else if (d.view) setView(d.view);
     else if (d.sync) syncFromSlot(Number(d.sync));
