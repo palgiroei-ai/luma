@@ -4,7 +4,7 @@
 const KEY = new URLSearchParams(location.search).get('at') ? 'comps.sim.v1' : 'comps.v1';
 const CODE_KEY = 'comps.code';
 export const DEFAULT_SETTINGS = {
-  alerts: { w2: false, w1: true, m2: false, m1: true, transfer: false },
+  alerts: { w2: false, w1: true, m2: false, m1: true, s10: false, s0: false, transfer: false },
   sound: { on: true, vol: 0.6, tone: 'chime' },
   step: 15,          // calibration step, seconds
   lock: true,        // calibration locked by default (Roei 2026-10-12); unlock in settings or the board

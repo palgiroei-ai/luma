@@ -14,6 +14,8 @@
   --ok: #2E6B4E;
   --primary: #14243B;
   --on-primary: #FFFFFF;
+  --added: #2F5DA8;
+  --added-bg: #E2EBF8;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(20, 36, 59, .05), 0 8px 24px rgba(20, 36, 59, .06);
   --font: 'Heebo', system-ui, sans-serif;
@@ -275,16 +277,19 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --chalk: #1A1024; --card: #251838; --navy: #F2ECE3; --navy-2: #D9CCEA; --muted: #B7ABC4; --border: #3A2C4E; --line: #2E2042;
   --copper: #E8834A; --copper-text: #F0955F; --copper-bg: #3D2420; --danger: #F2847D; --danger-bg: #3E1C1F; --ok: #5FD39A;
   --primary: #F2ECE3; --on-primary: #2E1A47;
+  --added: #8FB3F5; --added-bg: #1F2547;
 }
 :root[data-theme="charcoal"] {
   --chalk: #141216; --card: #1E1B22; --navy: #EEE8E0; --navy-2: #D9CCEA; --muted: #ADA5B5; --border: #2F2B35; --line: #2A2531;
   --copper: #E8834A; --copper-text: #F0955F; --copper-bg: #3A2419; --danger: #F2847D; --danger-bg: #3A1A1C; --ok: #5FD39A;
   --primary: #B39BE0; --on-primary: #1A1024;
+  --added: #8FB3F5; --added-bg: #1B2333;
 }
 :root[data-theme="black"] {
   --chalk: #000000; --card: #121014; --navy: #F5F1EA; --navy-2: #D9CCEA; --muted: #A9A2B0; --border: #26222A; --line: #1C1820;
   --copper: #E8834A; --copper-text: #F0955F; --copper-bg: #2E1B12; --danger: #F2847D; --danger-bg: #33161A; --ok: #5FD39A;
   --primary: #E8834A; --on-primary: #1A1024;
+  --added: #8FB3F5; --added-bg: #0E1A2E;
 }
 :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) { --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); color-scheme: dark; }
 :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .btn-primary, :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .cbtn-main, :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .tabs button[aria-pressed="true"],
@@ -339,6 +344,12 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .sw-dot { width: 22px; height: 22px; flex: none; border-radius: 50%; background: linear-gradient(135deg, var(--a) 50%, var(--b) 50%); border: 1px solid var(--border); }
 .ios .mine-list { display: block; max-height: none; padding: 0; border: 1px solid var(--border); }
 .ios .mine-list .ios-row.on { background: var(--copper-bg); font-weight: 600; }
+.ios .mine-list .ios-row.added { background: var(--added-bg); box-shadow: inset -4px 0 0 var(--added); }
+.ios .mine-list .ios-row.on:not(.added) { box-shadow: inset -4px 0 0 var(--copper); }
+.ios .mine-list .ios-row.added .ios-sw:checked { background: var(--added); }
+.tag-hub, .tag-added { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 7px; margin-inline-start: 4px; vertical-align: 2px; }
+.tag-hub { background: var(--copper-bg); color: var(--copper-text); border: 1px solid var(--copper); }
+.tag-added { background: var(--added-bg); color: var(--added); border: 1px solid var(--added); }
 @media (prefers-reduced-motion: reduce) { .ios-sw, .ios-sw::after { transition: none; } }
 @media (max-width: 600px) { .dlg-wide.ios { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; margin: 0; } }
 
@@ -366,3 +377,11 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .push-switch:disabled { opacity: .5; cursor: default; }
 .push-switch-knob { position: absolute; top: 3px; inset-inline-start: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(20, 36, 59, .3); transition: inset-inline-start .2s; }
 .push-switch[aria-checked="true"] .push-switch-knob { inset-inline-start: 23px; }
+
+/* footer — same as the Wingate app: "version · Powered by LUMA · By Roei Palgi" */
+.app-footer { text-align: center; padding: 12px 16px 24px; font-size: 11px; color: var(--muted); }
+.app-footer a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.app-footer .footer-luma { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
+.luma-mark { width: 14px; height: 14px; flex: none; fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.luma-mark circle { stroke: var(--copper); opacity: .6; }
+.luma-mark path { stroke: currentColor; }

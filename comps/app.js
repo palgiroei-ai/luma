@@ -2,7 +2,7 @@ import { decryptJSON } from './decrypt.js';
 import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan } from './engine.js';
 import { store } from './store.js';
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -315,7 +315,7 @@ function showAlert(text, cls) {
 }
 
 // Every alert for my athletes in all rounds (same list drives the in-app banner and the lock-screen push).
-const ALERT_LBL = { w2: '2 חלונות', w1: 'חלון אחד', m2: '2 דקות', m1: 'דקה' };
+const ALERT_LBL = { w2: '2 חלונות', w1: 'חלון אחד', m2: '2 דקות', m1: 'דקה', s10: '10 שניות' };
 function alertEntries() {
   const out = [];
   for (const r of DATA.rounds) {
@@ -329,9 +329,10 @@ function alertEntries() {
         const key = `${r.id}:${m.k}:${a.type}:${Math.round(off(r.id) / (r.slotSec * 1000))}`;
         const text = a.type === 'transfer'
           ? `מעבר לנורמן: ${m.short} (#${s.order}) · עולה ב-${fmtClock(startMs)}`
+          : a.type === 's0' ? `עולה עכשיו: ${m.short} (#${s.order}, גב ${s.bib}) לבולדר 1 · ${fmtClock(startMs)}`
           : `${ALERT_LBL[a.type]}: ${m.short} (#${s.order}, גב ${s.bib}) עולה לבולדר 1 ב-${fmtClock(startMs)}`;
-        out.push({ key, at: a.at, until: a.until, text, cls: a.type === 'm1' || a.type === 'm2' ? 'now' : 'soon',
-          title: a.type === 'transfer' ? `${m.short} · מעבר לנורמן` : `${m.short} · עוד ${ALERT_LBL[a.type]}`,
+        out.push({ key, at: a.at, until: a.until, text, cls: ['m1', 'm2', 's10', 's0'].includes(a.type) ? 'now' : 'soon',
+          title: a.type === 'transfer' ? `${m.short} · מעבר לנורמן` : a.type === 's0' ? `${m.short} · עולה עכשיו` : `${m.short} · עוד ${ALERT_LBL[a.type]}`,
           body: `${text} · ${r.title}` });
       }
     }
@@ -607,7 +608,7 @@ function setPage(pg) {
 }
 function renderSettingsMain() {
   const st = store.settings;
-  const al = [['w2', '2 חלונות'], ['w1', 'חלון'], ['m2', '2 דק׳'], ['m1', 'דקה'], ['transfer', 'נורמן']].filter(([k]) => st.alerts[k]).map(([, l]) => l);
+  const al = [['w2', '2 חלונות'], ['w1', 'חלון'], ['m2', '2 דק׳'], ['m1', 'דקה'], ['s10', '10 ש׳'], ['s0', 'בעלייה'], ['transfer', 'נורמן']].filter(([k]) => st.alerts[k]).map(([, l]) => l);
   $('#v-alerts').textContent = al.length ? al.join(' · ') : 'כבוי';
   $('#v-push').textContent = store.push.on && pushEnv() === 'ready' ? 'פעיל' : 'כבוי';
   $('#v-sound').textContent = st.sound.on ? { chime: 'פעמון', beep: 'ביפים', alarm: 'אזעקה' }[st.sound.tone] : 'כבוי';
@@ -623,8 +624,9 @@ function renderSettingsMain() {
 function renderMineList() {
   const id = $('#mine-round').value; const r = round(id); const mk = mineK(id);
   const base = new Set((DATA.mine[id] || []).map(m => m.k));
-  $('#mine-list').innerHTML = r.slots.length ? r.slots.map((s, k) => s ? `<label class="ios-row${mk.has(k) ? ' on' : ''}">
-    <span class="lbl">#${s.order} ${esc(s.name)}${base.has(k) ? ' <span class="muted small">(Hub)</span>' : ''}</span>
+  // Hub athletes = copper, athletes the coach added by hand = a different (blue) color, so they stand apart.
+  $('#mine-list').innerHTML = r.slots.length ? r.slots.map((s, k) => s ? `<label class="ios-row${mk.has(k) ? (base.has(k) ? ' on' : ' on added') : ''}">
+    <span class="lbl">#${s.order} ${esc(s.name)}${base.has(k) ? ' <span class="tag-hub">Hub</span>' : mk.has(k) ? ' <span class="tag-added">נוסף</span>' : ''}</span>
     <input type="checkbox" class="ios-sw" data-mine-k="${k}" data-base="${base.has(k) ? 1 : ''}" ${mk.has(k) ? 'checked' : ''}></label>` : '').join('')
     : '<p class="ios-row muted small">סדר העלייה עוד לא התקבל.</p>';
 }
@@ -668,6 +670,7 @@ function exportFile() {
 
 function start() {
   $('#app').hidden = false;
+  document.querySelectorAll('.app-ver').forEach(el => { el.textContent = APP_VERSION; });
   current = params.get('round') && round(params.get('round')) ? params.get('round') : pickDefaultRound();
   if (SIM_AT != null) { $('#sim-bar').hidden = false; $('#sim-btn').hidden = true; }
   const liveNow = DATA.rounds.some(r => r.slots.length && stateAt(r, now(), off(r.id)).phase === 'live');

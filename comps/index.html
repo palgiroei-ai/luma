@@ -133,6 +133,7 @@
       <div id="view-log" hidden></div>
     </section>
   </main>
+  <footer class="app-footer" lang="en" dir="ltr"><span class="app-ver"></span> · Powered by <a class="footer-luma" href="https://luma.palgitraining.com" target="_blank" rel="noopener">LUMA<svg class="luma-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg></a> · By Roei Palgi</footer>
 </div>
 
 <dialog id="note-dlg" class="dlg">
@@ -173,6 +174,7 @@
       <div class="ios-group"><div class="ios-box">
         <button type="button" class="ios-row danger center" id="logout-btn">יציאה</button>
       </div><p class="ios-foot">היציאה דורשת קוד בכניסה הבאה. ההערות והכיולים נשארים במכשיר.</p></div>
+      <footer class="app-footer" lang="en" dir="ltr"><span class="app-ver"></span> · Powered by <a class="footer-luma" href="https://luma.palgitraining.com" target="_blank" rel="noopener">LUMA<svg class="luma-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg></a> · By Roei Palgi</footer>
     </div>
 
     <div class="ios-page" data-pg="alerts" hidden>
@@ -181,7 +183,9 @@
         <label class="ios-row"><span class="lbl">חלון לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.w1"></label>
         <label class="ios-row"><span class="lbl">2 דקות לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.m2"></label>
         <label class="ios-row"><span class="lbl">דקה לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.m1"></label>
-      </div></div>
+        <label class="ios-row"><span class="lbl">10 שניות לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.s10"></label>
+        <label class="ios-row"><span class="lbl">בזמן העלייה בפועל</span><input type="checkbox" class="ios-sw" data-set="alerts.s0"></label>
+      </div><p class="ios-foot">"בזמן העלייה בפועל" = לפי השעון כולל הכיול שלך.</p></div>
       <div class="ios-group"><div class="ios-box">
         <label class="ios-row"><span class="lbl">מעבר לנורמן</span><input type="checkbox" class="ios-sw" data-set="alerts.transfer"></label>
       </div><p class="ios-foot">פתחת את האפליקציה באיחור? מופיעה רק ההתראה הרלוונטית ביותר.</p></div>
