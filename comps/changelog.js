@@ -2,6 +2,10 @@
 // Add an entry with every code deploy — tests/changelog.test.mjs keeps the first versioned entry = APP_VERSION.
 // Start-list updates (data only, no code version) are entries with `data: true` instead of `v`.
 export const CHANGELOG = [
+  { v: '1.9.0', date: '2026-10-12', items: [
+    'הלוגו של PalgiTraining גדול יותר (בכותרת ובמסך הכניסה)',
+    'משיכה למטה לרענון באפליקציה ממסך הבית: סנכרון מיידי + בדיקת סדר עלייה/גרסה חדשים (טוען מחדש רק אם יש עדכון)',
+    'מסך ראשי: כשאין אף ספורטאי שלי באירוע לא מופיע "0 שלי"'] },
   { v: '1.8.0', date: '2026-10-12', items: [
     'קוד צפייה להורים ולספורטאים: רואים את הראונדים מעכשיו והלאה, לוח חי ושעון, הספורטאים של רועי מודגשים ("הנבחרת של רועי"); בלי הערות, ערעורים, כיול או התראות, ובלי אפשרות לשנות כלום',
     'הצופים רואים את הכיול שלך (מתעדכן אצלם תוך חצי דקה)',

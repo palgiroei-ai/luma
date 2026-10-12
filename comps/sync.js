@@ -84,6 +84,7 @@ export function startViewSync(onRemote) {
   addEventListener('online', pull);
   document.addEventListener('visibilitychange', pull);
   setInterval(pull, 30000); pull();
+  return pull;
 }
 
 export function startSync(h = {}) {

@@ -4,7 +4,7 @@ import { store } from './store.js';
 import { startSync, startViewSync, syncNow, syncState, authHeaders, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
 
-export const APP_VERSION = '1.8.0';
+export const APP_VERSION = '1.9.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -321,7 +321,7 @@ function renderHomeList(seg) {
     const ovl = ev.rounds.reduce((n, r) => n + (mineOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
     return `<button type="button" class="ev-row card ph-${ph}" data-ev="${i}">
       <span class="ev-main"><b>${esc(ev.event.title)}</b><span class="muted small">${meta}</span></span>
-      <span class="ev-side">${badge}<span class="small">${!ev.rounds.length ? '' : `${people.size} ${VIEWER ? 'מהנבחרת' : 'שלי'}`}${ovl ? ` · <span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>`;
+      <span class="ev-side">${badge}<span class="small">${!ev.rounds.length || !people.size ? '' : `${people.size} ${VIEWER ? 'מהנבחרת' : 'שלי'}`}${ovl ? `${people.size ? ' · ' : ''}<span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>`;
   }).join('');
   patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}</div><div class="ev-list">${rows}</div>`);
 }
@@ -850,8 +850,8 @@ function renderChangelog() {
     <ul>${e.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`).join('');
 }
 
-async function checkUpdate() {
-  $('#update-msg').textContent = 'בודק…';
+// New start list (data builtAt) or new app version on the server → 'update' | 'none' | 'offline'.
+async function findUpdate() {
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
     await reg?.update();
@@ -859,12 +859,51 @@ async function checkUpdate() {
     const fresh = res.ok ? await decryptJSON(await res.json(), store.code) : null;
     const codeRes = await fetch('app.js', { cache: 'no-store' });
     const newVer = codeRes.ok ? ((await codeRes.text()).match(/APP_VERSION = '([^']+)'/) || [])[1] : null;
-    if (!fresh) { $('#update-msg').textContent = 'אין חיבור כרגע. נסה שוב.'; return; }
-    if (fresh.builtAt !== DATA.builtAt || (newVer && newVer !== APP_VERSION)) {
-      $('#update-msg').textContent = 'נמצא עדכון · טוען מחדש…';
-      setTimeout(() => location.reload(), 800);
-    } else $('#update-msg').textContent = 'הכל מעודכן ✓';
-  } catch { $('#update-msg').textContent = 'אין חיבור כרגע. נסה שוב.'; }
+    if (!fresh) return 'offline';
+    return fresh.builtAt !== DATA.builtAt || (newVer && newVer !== APP_VERSION) ? 'update' : 'none';
+  } catch { return 'offline'; }
+}
+
+async function checkUpdate() {
+  $('#update-msg').textContent = 'בודק…';
+  const r = await findUpdate();
+  if (r === 'update') { $('#update-msg').textContent = 'נמצא עדכון · טוען מחדש…'; setTimeout(() => location.reload(), 800); }
+  else $('#update-msg').textContent = r === 'none' ? 'הכל מעודכן ✓' : 'אין חיבור כרגע. נסה שוב.';
+}
+
+// Pull down to refresh — Home Screen app only (Safari has its own). At the top of the page, drag down ≥70px and release:
+// sync now (coach) / pull calibration (viewer) + check for a new start list or version (→ reload). No reload otherwise.
+let viewPull = null;
+function setupPullRefresh() {
+  const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  if (!standalone && !params.has('ptr')) return;
+  const ind = document.createElement('div'); ind.className = 'ptr'; ind.innerHTML = '<svg class="ptr-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M5 13l7 7 7-7"/></svg><span class="ptr-text"></span>';
+  document.body.append(ind);
+  const TRIGGER = 70; let y0 = null, dy = 0, busy = false;
+  const show = (d, text) => { ind.style.transform = `translate(-50%, ${Math.min(d, 110) - 56}px)`; ind.querySelector('.ptr-text').textContent = text; ind.classList.toggle('ready', d >= TRIGGER); };
+  const hide = () => { ind.classList.add('back'); ind.style.transform = ''; ind.classList.remove('ready', 'busy'); setTimeout(() => ind.classList.remove('back'), 250); };
+  addEventListener('touchstart', e => {
+    if (busy || e.touches.length !== 1 || scrollY > 0 || document.querySelector('dialog[open]')) { y0 = null; return; }
+    if (e.target.closest('.full-wrap')?.scrollTop > 0) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0;
+  }, { passive: true });
+  addEventListener('touchmove', e => {
+    if (y0 == null) return;
+    dy = (e.touches[0].clientY - y0) * 0.55; // resistance
+    if (dy <= 0 || scrollY > 0) { if (dy < 0) y0 = null; ind.style.transform = ''; return; }
+    show(dy, dy >= TRIGGER ? 'שחרר לרענון' : 'משוך לרענון');
+  }, { passive: true });
+  addEventListener('touchend', async () => {
+    if (y0 == null) return; y0 = null;
+    if (dy < TRIGGER) { hide(); return; }
+    busy = true; ind.classList.add('busy'); show(TRIGGER, 'מרענן…');
+    await Promise.all([VIEWER ? viewPull?.() : syncNow(), findUpdate().then(r => {
+      if (r === 'update') { show(TRIGGER, 'נמצא עדכון · טוען מחדש…'); setTimeout(() => location.reload(), 600); busy = 'reload'; }
+      else showToast(r === 'none' ? 'הכל מעודכן ✓' : 'אין חיבור כרגע');
+    })]).catch(() => {});
+    if (busy === 'reload') return;
+    render(); hide(); busy = false;
+  });
 }
 
 function exportFile() {
@@ -959,8 +998,9 @@ function start() {
   setInterval(render, 250);
   setInterval(() => syncPush(), 5000); syncPush(true);
   addEventListener('online', () => syncPush(true));
-  if (SIM_AT == null && VIEWER) startViewSync(onRemote);
+  if (SIM_AT == null && VIEWER) viewPull = startViewSync(onRemote);
   else if (SIM_AT == null) startSync({ onRemote, onStatus: renderSyncState });
+  if (SIM_AT == null) setupPullRefresh();
   if ('serviceWorker' in navigator && SIM_AT == null) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
