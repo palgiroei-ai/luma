@@ -63,11 +63,22 @@ export function athleteStatus(round, k, nowMs, offsetMs = 0) {
 }
 
 // ---- calibration helpers → new offset (ms) ----
-// Current window starts now: snap to the nearest window boundary (moves at most half a window).
+// Current window starts now. Before the start / during the first window it means "the round starts now"
+// (late starts are common). Later it snaps to a window boundary, biased late: within the first 80% of a
+// window → that window starts now (competition late), otherwise → the next window starts now (early).
 export function syncWindowNow(round, nowMs, offsetMs = 0) {
   const S = round.slotSec * 1000;
-  const rel = ((nowMs - roundStart(round) - offsetMs) % S + S) % S; // time since current window started
-  return offsetMs + (rel < S / 2 ? rel : rel - S);
+  const relAll = nowMs - roundStart(round) - offsetMs;
+  if (relAll < S) return nowMs - roundStart(round);
+  const rel = ((relAll % S) + S) % S; // time since current window started
+  return offsetMs + (rel < 0.8 * S ? rel : rel - S);
+}
+
+// Windows from the first start until the last athlete finished (incl. trailing rest).
+export function windowCount(round) {
+  let last = -1;
+  round.slots.forEach((s, k) => { if (s) last = k; });
+  return last < 0 ? 0 : last + span(round);
 }
 
 // Slot k starts boulder 1 right now.

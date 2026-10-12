@@ -1,5 +1,5 @@
 import { decryptJSON } from './decrypt.js';
-import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart } from './engine.js';
+import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount } from './engine.js';
 import { store } from './store.js';
 
 const $ = s => document.querySelector(s);
@@ -27,28 +27,38 @@ const dayLabel = date => { const d = new Date(date + 'T12:00:00'); return `${DAY
 let DATA = null;
 let current = null; // round id
 let view = 'mine';
+let lastTabTap = 0;
 
 // ---- gate ----
+// → payload, null (wrong code) or 'nodata' (no network and nothing cached / server error).
+async function readBox() {
+  const tryRes = async res => { try { return res && res.ok ? await res.json() : null; } catch { return null; } };
+  return await tryRes(await fetch('data.enc.json', { cache: 'no-cache' }).catch(() => null))
+    || await tryRes(await (window.caches ? caches.match('data.enc.json') : null)?.catch?.(() => null));
+}
 async function unlock(code) {
-  const res = await fetch('data.enc.json', { cache: 'no-cache' }).catch(() => null)
-    || await caches.match('data.enc.json');
-  if (!res) return null;
-  return decryptJSON(await res.json(), code);
+  const box = await readBox();
+  if (!box) return 'nodata';
+  return decryptJSON(box, code);
 }
 
 async function boot() {
   if (store.code) {
-    DATA = await unlock(store.code);
-    if (DATA) return start();
+    const d = await unlock(store.code);
+    if (d && d !== 'nodata') { DATA = d; return start(); }
   }
   $('#gate').hidden = false;
   $('#gate-form').addEventListener('submit', async e => {
     e.preventDefault();
     $('#gate-btn').disabled = true;
     const code = $('#code').value.trim();
-    DATA = await unlock(code);
+    const d = await unlock(code);
     $('#gate-btn').disabled = false;
-    if (!DATA) { $('#gate-error').hidden = false; return; }
+    if (!d || d === 'nodata') {
+      $('#gate-error').textContent = d === 'nodata' ? 'אין חיבור לנתונים כרגע. בדוק אינטרנט ונסה שוב.' : 'הקוד שגוי, נסה שוב.';
+      $('#gate-error').hidden = false; return;
+    }
+    DATA = d;
     store.code = code;
     $('#gate').hidden = true;
     start();
@@ -118,7 +128,7 @@ function renderTimer(r, s) {
   const t = now();
   const label = $('#timer-label'), timer = $('#timer'), sub = $('#timer-sub');
   if (!r.slots.length) { label.textContent = ''; timer.textContent = '--:--'; sub.textContent = `התחלה מתוכננת ${fmtHM(roundStart(r))}`; return; }
-  const total = r.slots.length + 2 * r.boulders - 1 + (r.trailingRest ? 1 : 0);
+  const total = windowCount(r);
   if (s.phase === 'before') {
     const startMs = roundStart(r) + off(r.id);
     label.textContent = 'הראונד מתחיל בעוד';
@@ -159,7 +169,7 @@ function renderMine(r) {
       <header><h3>${esc(m.short)}</h3><span class="muted small">${esc(s.name)} · ${esc(m.cat)}</span></header>
       <div class="ath-status">${big}</div>
       <dl class="ath-meta"><div><dt>סדר</dt><dd>#${s.order}</dd></div><div><dt>גב</dt><dd>${s.bib}</dd></div>
-        <div><dt>עלייה</dt><dd>${fmtClock(st.startMs)}</dd></div><div><dt>מעבר לנורמן</dt><dd>${s.transfer ? s.transfer.slice(0, -3) : fmtHM(st.startMs - 80 * 60000)}</dd></div></dl>
+        <div><dt>עלייה</dt><dd>${fmtClock(st.startMs)}</dd></div><div><dt>מעבר לנורמן</dt><dd>${fmtHM(s.transfer ? new Date(`${r.date}T${s.transfer.padStart(8, '0')}`).getTime() + off(r.id) : st.startMs - 80 * 60000)}</dd></div></dl>
       ${notes.length ? `<p class="last-note">📝 ${esc(notes[notes.length - 1].text)}${notes.length > 1 ? ` <span class="muted">(+${notes.length - 1})</span>` : ''}</p>` : ''}
       ${appeals.length ? `<p class="last-note appeal-tag">⚑ ${appeals.length} ערעור${appeals.length > 1 ? 'ים' : ''}</p>` : ''}
       <div class="ath-actions"><button type="button" class="btn btn-sm btn-ghost" data-note="${m.k}">הערה</button>
@@ -194,7 +204,7 @@ function renderLog() {
   patch($('#view-log'), `<div class="log-actions"><button type="button" class="btn btn-sm btn-ghost" id="export-btn">ייצוא קובץ</button>
     <button type="button" class="btn btn-sm btn-ghost" id="copy-all-btn">העתק הכל</button></div>` + (items.length ? items.map(i => {
     const r = round(i.round);
-    if (i.type === 'appeal') return `<article class="log card appeal"><header><b>⚑ ערעור · ${esc(i.short)}</b><span class="muted small">${esc(r?.title)} · ${i.time}</span></header>
+    if (i.type === 'appeal') return `<article class="log card appeal"><header><b>⚑ ערעור · ${esc(i.short)}</b><span class="muted small">${esc(r?.title)} · ${esc(i.time)}</span></header>
       <pre>${esc(appealText(i))}</pre><div class="ath-actions"><button type="button" class="btn btn-sm btn-ghost" data-copy="${i.id}">העתק</button>
       ${navigator.share ? `<button type="button" class="btn btn-sm btn-ghost" data-share="${i.id}">שתף</button>` : ''}
       <button type="button" class="link" data-del-appeal="${i.id}">מחיקה</button></div></article>`;
@@ -204,6 +214,10 @@ function renderLog() {
 }
 
 function render() {
+  if (Date.now() - lastTabTap > 5 * 60000 && stateAt(round(current), now(), off(current)).phase === 'after') {
+    const next = pickDefaultRound();
+    if (next !== current) { current = next; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; }
+  }
   const r = round(current);
   const s = stateAt(r, now(), off(r.id));
   $('#clock').textContent = fmtClock(now());
@@ -222,6 +236,7 @@ function render() {
 let audio = null;
 function chime() {
   if (!audio) return;
+  if (audio.state !== 'running') audio.resume().catch(() => {});
   const t0 = audio.currentTime;
   [[880, 0], [1175, .18], [880, .36]].forEach(([f, d]) => {
     const o = audio.createOscillator(), g = audio.createGain();
@@ -248,9 +263,12 @@ function checkAlerts() {
       const startMs = slotStartMs(r, m.k, off(r.id));
       const s = r.slots[m.k];
       for (const [type, lead, cls] of [['slot', r.slotSec * 1000, 'soon'], ['min', 60000, 'now']]) {
-        const key = `${r.id}:${m.k}:${type}`;
+        // Late alert is still useful until the athlete starts (app was backgrounded / clock recalibrated);
+        // a recalibration by ≥ half a window re-arms the alert at the new time.
+        const key = `${r.id}:${m.k}:${type}:${Math.round(off(r.id) / (r.slotSec * 1000))}`;
         const at = startMs - lead;
-        if (t >= at && t < at + 90000 && !fired.was(key)) {
+        const until = type === 'slot' ? startMs - 60000 : startMs;
+        if (t >= at && t < until && !fired.was(key)) {
           fired.mark(key);
           showAlert(type === 'slot'
             ? `חלון אחד: ${m.short} (#${s.order}, גב ${s.bib}) עולה לבולדר 1 ב-${fmtClock(startMs)}`
@@ -276,7 +294,7 @@ function openNote(k) {
   $('#note-title').textContent = `הערה · ${shortOf(r.id, k)}`;
   $('#note-ctx').textContent = `${r.title} · ${fmtClock(now())} · ${currentCtx(r, k)}`;
   $('#note-text').value = '';
-  const dlg = $('#note-dlg');
+  const dlg = $('#note-dlg'); dlg.returnValue = '';
   dlg.onclose = () => {
     if (dlg.returnValue !== 'save' || !$('#note-text').value.trim()) return;
     store.addNote({ round: r.id, k, short: shortOf(r.id, k), name: s.name, at: now(), ctx: currentCtx(r, k), text: $('#note-text').value.trim() });
@@ -293,12 +311,12 @@ function openAppeal(k) {
   $('#appeal-boulder').innerHTML = Array.from({ length: r.boulders }, (_, i) => `<option ${i + 1 === def ? 'selected' : ''}>${i + 1}</option>`).join('');
   $('#appeal-time').value = fmtClock(now());
   $('#appeal-text').value = '';
-  const dlg = $('#appeal-dlg');
+  const dlg = $('#appeal-dlg'); dlg.returnValue = '';
   dlg.onclose = () => {
     if (dlg.returnValue !== 'save' || !$('#appeal-text').value.trim()) return;
     store.addAppeal({ round: r.id, k, short: shortOf(r.id, k), name: s.name, bib: s.bib, order: s.order, at: now(),
       boulder: $('#appeal-boulder').value, time: $('#appeal-time').value, text: $('#appeal-text').value.trim() });
-    setView('log');
+    showToast('הערעור נשמר · בלשונית "הערות וערעורים"'); render();
   };
   dlg.showModal();
 }
@@ -316,7 +334,8 @@ function adjust(kind) {
   else if (kind === '+slot') o += S; else if (kind === '-slot') o -= S;
   else if (kind === 'now') {
     const t = now(); const o2 = syncWindowNow(r, t, o); const d = o2 - o;
-    return confirmSync('החלון מתחיל עכשיו?', `השעון יזוז ${d >= 0 ? 'אחורה (התחרות מאחרת)' : 'קדימה (התחרות מקדימה)'} בכ-${fmtDur(Math.abs(d))}, כך שחלון חדש מתחיל ברגע הלחיצה על סנכרון.`, () => syncWindowNow(r, now(), off(r.id)));
+    const b1 = stateAt(r, t, o2).boulders[0];
+    return confirmSync('החלון מתחיל עכשיו?', `השעון יזוז ${d >= 0 ? 'אחורה (התחרות מאחרת)' : 'קדימה (התחרות מקדימה)'} בכ-${fmtDur(Math.abs(d))}. אחרי הסנכרון על בולדר 1: ${b1 ? `#${b1.order} ${b1.name}` : 'אף אחד (חלון ריק)'}. אם זה לא מי שעולה עכשיו — לחץ ביטול והשתמש ב"מתחיל עכשיו" ליד המתחרה בסדר העלייה המלא.`, () => syncWindowNow(r, now(), off(r.id)));
   }
   store.setOffset(r.id, o);
   render();
@@ -344,7 +363,7 @@ function openManual() {
   const cur = roundStart(r) + off(r.id);
   $('#manual-ctx').textContent = `${r.title} · לפי סדר העלייה ${fmtClock(roundStart(r))} · כרגע ${fmtClock(cur)}`;
   $('#manual-time').value = fmtClock(cur);
-  const dlg = $('#manual-dlg');
+  const dlg = $('#manual-dlg'); dlg.returnValue = '';
   dlg.onclose = () => {
     const v = $('#manual-time').value;
     if (dlg.returnValue !== 'save' || !v) return;
@@ -359,11 +378,11 @@ function openManual() {
 function openSim() {
   $('#sim-round').innerHTML = DATA.rounds.filter(r => r.slots.length)
     .map(r => `<option value="${r.id}" ${r.id === current ? 'selected' : ''}>${dayLabel(r.date)} · ${esc(r.title)}</option>`).join('');
-  const dlg = $('#sim-dlg');
+  const dlg = $('#sim-dlg'); dlg.returnValue = '';
   dlg.onclose = () => {
     if (dlg.returnValue !== 'go') return;
     const r = round($('#sim-round').value); const S = r.slotSec * 1000; const T0 = roundStart(r);
-    const span = (r.slots.length + 2 * r.boulders - 1 + (r.trailingRest ? 1 : 0)) * S;
+    const span = windowCount(r) * S;
     const from = $('#sim-from').value;
     const firstMine = mineOf(r.id)[0];
     const at = from === 'mine' && firstMine ? T0 + (firstMine.k - 1) * S - 5000
@@ -388,7 +407,7 @@ function start() {
   document.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
-    if (d.round) { current = d.round; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); }
+    if (d.round) { lastTabTap = Date.now(); current = d.round; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); }
     else if (d.adj) adjust(d.adj);
     else if (d.view) setView(d.view);
     else if (d.sync) syncFromSlot(Number(d.sync));
@@ -409,6 +428,7 @@ function start() {
     else if (b.id === 'manual-btn') openManual();
     else if (b.id === 'sim-btn') openSim();
     else if (b.id === 'start-btn') {
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* Safari 16.4+ only */ }
       try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch { audio = null; }
       chime(); keepAwake();
       $('#start-bar').hidden = true;
@@ -419,10 +439,14 @@ function start() {
     const min = parseFloat($('#custom-min').value);
     if (Number.isFinite(min)) { store.setOffset(current, off(current) + min * 60000); $('#custom-form').hidden = true; $('#custom-min').value = ''; render(); }
   });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (audio) keepAwake(); render(); } });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (audio) { if (audio.state !== 'running') audio.resume().catch(() => {}); keepAwake(); }
+    render();
+  });
   render();
   setInterval(render, 250);
   if ('serviceWorker' in navigator && SIM_AT == null) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-boot();
+boot().catch(() => { $('#gate').hidden = false; });
