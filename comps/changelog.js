@@ -2,6 +2,9 @@
 // Add an entry with every code deploy — tests/changelog.test.mjs keeps the first versioned entry = APP_VERSION.
 // Start-list updates (data only, no code version) are entries with `data: true` instead of `v`.
 export const CHANGELOG = [
+  { v: '1.7.0', date: '2026-10-12', items: [
+    'ליגות העל בבולדר 2 (10–12/11) ו-3 (8–10/12) נוספו, כל הראונדים "ממתין לסדר עלייה"; השעות לפי ליגה 1 עד שיגיעו סדרי העלייה',
+    'מסך ראשי: מעבר בין התחרויות; הלשוניות למעלה מציגות רק את הראונדים של התחרות הפתוחה'] },
   { v: '1.6.2', date: '2026-10-12', items: ['הגדרות ← עדכונים: היסטוריית גרסאות ועדכוני סדרי עלייה'] },
   { v: '1.6.1', date: '2026-10-12', items: ['כפתורי הכיול מתחת לשעון (זמן לבחירה, שעה ידנית, איפוס, נעילה) בסרגל אחד מעוצב; בטלפון אייקונים בלבד'] },
   { v: '1.6.0', date: '2026-10-12', items: [

@@ -4,7 +4,7 @@ import { store } from './store.js';
 import { startSync, syncNow, syncState } from './sync.js';
 import { CHANGELOG } from './changelog.js';
 
-export const APP_VERSION = '1.6.2';
+export const APP_VERSION = '1.7.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -72,6 +72,10 @@ async function boot() {
 
 // ---- helpers over data ----
 const round = id => DATA.rounds.find(r => r.id === id);
+// several competitions (Super League 1–3…): each round names its event; old data had a single DATA.event
+const EVENTS = () => DATA.events || [{ id: 'bl1', ...DATA.event }];
+const evOf = r => EVENTS().find(e => e.id === (r?.event || 'bl1')) || EVENTS()[0];
+const roundsOf = ev => DATA.rounds.filter(r => (r.event || 'bl1') === ev.id);
 // Base = Hub matches from the build; the coach can add/remove athletes per round in settings.
 const mineOf = id => {
   const r = round(id); const del = new Set(store.mineDel(id));
@@ -108,7 +112,9 @@ function patch(el, html) { if (el._html !== html) { el.innerHTML = html; el._htm
 
 function renderTabs() {
   const t = now();
-  patch($('#round-tabs'), DATA.rounds.map(r => {
+  // tabs = the competition on screen (home: the one shown / in focus; board: the open round's)
+  const tabEv = screen === 'home' ? homeEvents()[homeOpenEvent ?? focusEventIdx()].event : evOf(round(current));
+  patch($('#round-tabs'), roundsOf(tabEv).map(r => {
     const live = r.slots.length && stateAt(r, t, off(r.id)).phase === 'live';
     return `<button type="button" data-round="${r.id}" aria-pressed="${screen === 'round' && r.id === current}">
       <span class="tab-day">${dayLabel(r.date)}</span> ${esc(r.title)}${live ? ' <span class="live-dot">חי</span>' : ''}${r.slots.length ? '' : ' <span class="tab-wait">ממתין לסדר עלייה</span>'}</button>`;
@@ -206,7 +212,7 @@ function renderAll(r) {
 
 function appealText(a) {
   const r = round(a.round);
-  return [`ערעור — ${DATA.event.title} · ${r.title} (${dayLabel(r.date)})`, `ספורטאי: ${a.name} · מס' גב ${a.bib} · סדר עלייה ${a.order}`,
+  return [`ערעור — ${evOf(r).title} · ${r.title} (${dayLabel(r.date)})`, `ספורטאי: ${a.name} · מס' גב ${a.bib} · סדר עלייה ${a.order}`,
     `בולדר: ${a.boulder}`, `שעה: ${a.time}`, `תיאור: ${a.text}`].join('\n');
 }
 
@@ -247,7 +253,14 @@ function overlapHtml(r, t) {
 }
 
 let homeOpenEvent = null; // list view: which event is opened (null = the list)
-function homeEvents() { return [{ event: DATA.event, rounds: DATA.rounds }]; } // one event today; more join later
+function homeEvents() { return EVENTS().map(e => ({ event: e, rounds: roundsOf(e) })); }
+// the competition to show by default: the one with a live round, else the first not finished yet, else the last
+function focusEventIdx() {
+  const t = now(); const evs = homeEvents();
+  const done = ev => ev.rounds.every(r => roundStart(r) + off(r.id) + (r.slots.length ? windowCount(r) * r.slotSec * 1000 : 12 * 3600e3) < t);
+  const i = evs.findIndex(ev => !done(ev));
+  return i < 0 ? evs.length - 1 : i;
+}
 
 function renderHome() {
   const hv = store.settings.homeView;
@@ -276,7 +289,12 @@ function renderHomeList(seg) {
 
 function renderHomeDetail(seg, fromList) {
   const t = now();
-  const days = [...new Set(DATA.rounds.map(r => r.date))];
+  const evs = homeEvents(); const ei = homeOpenEvent ?? focusEventIdx(); const { event: ev, rounds } = evs[ei];
+  const days = [...new Set(rounds.map(r => r.date))];
+  const chips = !fromList && evs.length > 1 ? `<div class="ev-chips" role="group" aria-label="תחרות">${evs.map((e, i) => {
+    const dates = e.rounds.map(r => r.date).sort(); const d0 = new Date(dates[0] + 'T12:00:00');
+    return `<button type="button" data-ev="${i}" aria-pressed="${i === ei}">${esc(e.event.title.replace('ליגת העל ', ''))} <span class="muted">${d0.getDate()}/${d0.getMonth() + 1}</span></button>`;
+  }).join('')}</div>` : '';
   const card = r => {
     const ph = r.slots.length ? stateAt(r, t, off(r.id)).phase : 'wait';
     const badge = { live: '<span class="hb live">חי עכשיו</span>', before: '<span class="hb soon">בקרוב</span>', after: '<span class="hb done">הסתיים</span>', wait: '<span class="hb wait">ממתין לסדר עלייה</span>' }[ph];
@@ -289,8 +307,8 @@ function renderHomeDetail(seg, fromList) {
       ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} חלונות של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
-  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(DATA.event.title)} <span class="muted">· ${esc(DATA.event.place || '')}</span></h2>${seg}</div>` +
-    days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${DATA.rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
+  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(ev.title)} <span class="muted">· ${esc(ev.place || '')}</span></h2>${seg}</div>${chips}` +
+    days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
 }
 
 function showScreen(sc) {
@@ -305,7 +323,7 @@ function showScreen(sc) {
 function render() {
   if (screen === 'home') {
     $('#clock').textContent = fmtClock(now());
-    $('#event-title').textContent = DATA.event.title;
+    $('#event-title').textContent = homeEvents()[homeOpenEvent ?? focusEventIdx()].event.title;
     $('#round-sub').textContent = `מסך ראשי${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
     renderTabs(); renderHome(); checkAlerts();
     return;
@@ -317,7 +335,7 @@ function render() {
   const r = round(current);
   const s = stateAt(r, now(), off(r.id));
   $('#clock').textContent = fmtClock(now());
-  $('#event-title').textContent = DATA.event.title;
+  $('#event-title').textContent = evOf(r).title;
   $('#round-sub').textContent = `${dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים · חלון ${fmtDur(r.slotSec * 1000)}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
   renderTabs(); renderBoard(r, s); renderTimer(r, s); renderNext(r, s);
   if (view === 'mine') renderMine(r);
@@ -723,7 +741,7 @@ function openSettings() {
     if (el.type === 'checkbox') el.checked = !!v; else if (el.type === 'radio') el.checked = el.value === String(v); else el.value = String(v);
   });
   $('#dev-name').value = store.devName;
-  $('#mine-round').innerHTML = DATA.rounds.map(r => `<option value="${r.id}" ${r.id === current ? 'selected' : ''}>${dayLabel(r.date)} · ${esc(r.title)}</option>`).join('');
+  $('#mine-round').innerHTML = EVENTS().map(e => `<optgroup label="${esc(e.title)}">${roundsOf(e).map(r => `<option value="${r.id}" ${r.id === current ? 'selected' : ''}>${dayLabel(r.date)} · ${esc(r.title)}</option>`).join('')}</optgroup>`).join('');
   renderMineList();
   $('#version-info').textContent = `גרסת אפליקציה ${APP_VERSION} · סדרי עלייה עודכנו ${new Date(DATA.builtAt).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}`;
   $('#update-msg').textContent = '';
