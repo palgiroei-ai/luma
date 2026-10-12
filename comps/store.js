@@ -7,7 +7,7 @@ export const DEFAULT_SETTINGS = {
   alerts: { w2: false, w1: true, m2: false, m1: true, transfer: false },
   sound: { on: true, vol: 0.6, tone: 'chime' },
   step: 15,          // calibration step, seconds
-  lock: false,       // calibration locked
+  lock: true,        // calibration locked by default (Roei 2026-10-12); unlock in settings or the board
   theme: 'light',    // light | dark | auto
 };
 const blank = () => ({ offsets: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {} });

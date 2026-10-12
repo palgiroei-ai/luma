@@ -284,3 +284,21 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 :root[data-theme="dark"] .appeal-btn, :root[data-theme="dark"] .btn-appeal { border-color: #5A2C29; }
 :root[data-theme="dark"] .sim-bar .btn-light { background: #fff; color: #0F1724; }
 :root[data-theme="dark"] .mark { filter: invert(1) hue-rotate(180deg) brightness(1.2); }
+
+/* phone: the page itself never scrolls sideways (a wide table used to widen the page and push ⚙︎ / ⌂ out of reach) */
+#app { overflow-x: clip; }
+.full-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius); }
+@media (max-width: 600px) {
+  .topbar { gap: 10px; padding: 6px 12px; }
+  .top-logo { width: 64px; }
+  .title-block h1 { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .title-block p { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .clock { font-size: 18px; }
+  .gear { width: 38px; height: 38px; font-size: 19px; }
+  .alert-stack { top: 56px; }
+  .full { font-size: 13.5px; }
+  .full th, .full td { padding: 6px 5px; }
+  .full .c-bib { display: none; }
+  .full .row-actions { flex-direction: column; align-items: stretch; gap: 4px; }
+  .full .sync-btn { padding: 4px 6px; font-size: 12px; }
+}

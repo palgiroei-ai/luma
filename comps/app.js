@@ -2,7 +2,7 @@ import { decryptJSON } from './decrypt.js';
 import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan } from './engine.js';
 import { store } from './store.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.1.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -191,15 +191,15 @@ function renderMine(r) {
 function renderAll(r) {
   const t = now(); const mk = mineK(r.id);
   if (!r.slots.length) { patch($('#view-all'), '<p class="muted">סדר העלייה עוד לא התקבל.</p>'); return; }
-  patch($('#view-all'), `<p class="muted small hint">סנכרון לפי מי שמטפס: לחץ "מתחיל עכשיו" ליד המתחרה שעולה עכשיו לבולדר 1. ערעור אפשר על כל מתחרה.</p><table class="full"><thead><tr><th>סדר</th><th>גב</th><th>שם</th><th>עלייה</th><th>מצב</th><th></th></tr></thead><tbody>${
+  patch($('#view-all'), `<p class="muted small hint">סנכרון לפי מי שמטפס: לחץ "מתחיל עכשיו" ליד המתחרה שעולה עכשיו לבולדר 1. ערעור אפשר על כל מתחרה.</p><div class="full-wrap"><table class="full"><thead><tr><th>סדר</th><th class="c-bib">גב</th><th>שם</th><th>עלייה</th><th>מצב</th><th></th></tr></thead><tbody>${
     r.slots.map((s, k) => {
       if (!s) return `<tr class="empty-row"><td colspan="3">חלון ריק</td><td>${fmtClock(slotStartMs(r, k, off(r.id)))}</td><td></td><td></td></tr>`;
       const st = athleteStatus(r, k, t, off(r.id));
-      return `<tr class="${mk.has(k) ? 'mine' : ''} st-${st.kind}"><td>${s.order}</td><td>${s.bib}</td><td>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</td>
+      return `<tr class="${mk.has(k) ? 'mine' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</td>
         <td>${fmtClock(st.startMs)}</td><td>${statusText(r, st)}</td>
         <td class="row-actions"><button type="button" class="sync-btn" data-sync="${k}">מתחיל עכשיו</button>
           <button type="button" class="sync-btn appeal-btn" data-appeal="${k}">ערעור</button></td></tr>`;
-    }).join('')}</tbody></table>`);
+    }).join('')}</tbody></table></div>`);
 }
 
 function appealText(a) {
