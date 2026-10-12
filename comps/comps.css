@@ -434,3 +434,13 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .cseg button:focus-visible { outline: 2px solid var(--copper); outline-offset: -2px; }
 .ci { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media (max-width: 600px) { .cseg button span { display: none; } .cseg button { min-height: 44px; } .ci { width: 19px; height: 19px; } }
+
+/* version history (settings → עדכונים), like Wingate's */
+.cl-entry { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.cl-entry:last-child { border-bottom: 0; }
+.cl-head { display: flex; align-items: center; gap: 8px; }
+.cl-data { color: var(--copper-text); font-size: 14px; }
+.cl-now { font-size: 12px; font-weight: 700; color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); border-radius: 999px; padding: 1px 8px; }
+.cl-date { margin-inline-start: auto; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.cl-entry ul { margin: 6px 0 0; padding-inline-start: 20px; font-size: 14.5px; }
+.cl-entry li { margin: 2px 0; }

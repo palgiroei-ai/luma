@@ -2,8 +2,9 @@ import { decryptJSON } from './decrypt.js';
 import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan, climbOverlaps } from './engine.js';
 import { store } from './store.js';
 import { startSync, syncNow, syncState } from './sync.js';
+import { CHANGELOG } from './changelog.js';
 
-export const APP_VERSION = '1.6.1';
+export const APP_VERSION = '1.6.2';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -726,8 +727,17 @@ function openSettings() {
   renderMineList();
   $('#version-info').textContent = `גרסת אפליקציה ${APP_VERSION} · סדרי עלייה עודכנו ${new Date(DATA.builtAt).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}`;
   $('#update-msg').textContent = '';
+  renderChangelog();
   setPage('main');
   $('#settings-dlg').showModal();
+}
+
+// Version history (changelog.js, like Wingate): newest first, the running version marked; start-list updates in between.
+function renderChangelog() {
+  const fmtDate = d => d.split('-').reverse().join('/');
+  $('#changelog').innerHTML = CHANGELOG.map(e => `<div class="cl-entry">
+    <div class="cl-head">${e.data ? '<b class="cl-data">סדר עלייה</b>' : `<b dir="ltr">${esc(e.v)}</b>`}${e.v === APP_VERSION ? '<span class="cl-now">הגרסה שלך</span>' : ''}<span class="cl-date">${fmtDate(e.date)}</span></div>
+    <ul>${e.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`).join('');
 }
 
 async function checkUpdate() {
