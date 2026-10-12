@@ -3,7 +3,7 @@ import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlo
 import { store } from './store.js';
 import { startSync, syncNow, syncState } from './sync.js';
 
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.6.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -669,7 +669,12 @@ function applySettings() {
   $('#adj-minus').textContent = `מקדים ${st.step}ש׳`;
   $('#adj-plus').textContent = `מאחר ${st.step}ש׳`;
   document.querySelectorAll('.cbtn').forEach(b => { b.disabled = st.lock; });
-  $('#lock-btn').textContent = st.lock ? '🔒 כיול נעול · פתח' : 'נעל כיול';
+  // segmented bar (Roei chose option B, 2026-10-12): locked = highlighted segment
+  const lb = $('#lock-btn');
+  lb.querySelector('span').textContent = st.lock ? 'נעול' : 'נעל';
+  lb.querySelector('use').setAttribute('href', st.lock ? '#i-lock' : '#i-unlock');
+  lb.classList.toggle('on', st.lock); lb.setAttribute('aria-pressed', String(st.lock));
+  lb.setAttribute('aria-label', st.lock ? 'הכיול נעול · לחץ לפתיחה' : 'נעל כיול');
   document.body.classList.toggle('calib-locked', st.lock);
 }
 

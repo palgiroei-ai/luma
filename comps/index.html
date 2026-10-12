@@ -99,12 +99,19 @@
             <button type="button" class="cbtn" data-adj="+step" id="adj-plus">מאחר 15ש׳</button>
             <button type="button" class="cbtn" data-adj="+slot">מאחר חלון</button>
           </div>
-          <div class="calib-row small">
-            <span class="muted" id="offset-label"></span>
-            <button type="button" class="link" id="custom-btn">זמן לבחירה</button>
-            <button type="button" class="link" id="manual-btn">שעת התחלה ידנית</button>
-            <button type="button" class="link" id="reset-btn">איפוס</button>
-            <button type="button" class="link" id="lock-btn"></button>
+          <div class="muted small calib-stat" id="offset-label"></div>
+          <svg width="0" height="0" class="svg-defs" aria-hidden="true">
+            <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+            <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></symbol>
+            <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></symbol>
+            <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+            <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></symbol>
+          </svg>
+          <div class="cseg" role="group" aria-label="כלי כיול">
+            <button type="button" id="custom-btn" aria-label="זמן לבחירה"><svg class="ci" aria-hidden="true"><use href="#i-clock"/></svg><span>זמן לבחירה</span></button>
+            <button type="button" id="manual-btn" aria-label="שעת התחלה ידנית"><svg class="ci" aria-hidden="true"><use href="#i-edit"/></svg><span>שעה ידנית</span></button>
+            <button type="button" id="reset-btn" class="danger" aria-label="איפוס כיול"><svg class="ci" aria-hidden="true"><use href="#i-reset"/></svg><span>איפוס</span></button>
+            <button type="button" id="lock-btn"><svg class="ci" aria-hidden="true"><use href="#i-lock"/></svg><span></span></button>
           </div>
           <form class="custom" id="custom-form" hidden>
             <label>הזזה בדקות <input type="number" step="0.25" id="custom-min" inputmode="decimal" placeholder="2 / -1.5"></label>

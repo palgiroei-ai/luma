@@ -420,3 +420,17 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .ios-row .ios-text { flex: 1; min-width: 0; max-width: 60%; font: inherit; font-size: 16px; color: var(--muted); text-align: end; background: transparent; border: 0; padding: 4px 0; }
 .ios-row .ios-text:focus { outline: none; color: var(--navy); }
 .log-sync { margin-inline-start: auto; align-self: center; }
+
+/* calibration tools under the timer: one segmented bar (option B, Roei 2026-10-12); phone = icons only */
+.svg-defs { position: absolute; width: 0; height: 0; }
+.calib-stat { text-align: center; font-variant-numeric: tabular-nums; }
+.cseg { display: flex; width: 100%; max-width: 620px; margin-inline: auto; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--chalk); }
+.cseg button { flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 6px 8px;
+  border: 0; background: transparent; color: var(--navy); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.cseg button + button { border-inline-start: 1px solid var(--border); }
+.cseg button:active { background: var(--line); }
+.cseg button.danger { color: var(--danger); }
+.cseg button.on { background: var(--copper-bg); color: var(--copper-text); }
+.cseg button:focus-visible { outline: 2px solid var(--copper); outline-offset: -2px; }
+.ci { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 600px) { .cseg button span { display: none; } .cseg button { min-height: 44px; } .ci { width: 19px; height: 19px; } }
