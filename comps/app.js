@@ -1,10 +1,10 @@
 import { decryptJSON } from './decrypt.js';
 import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan, climbOverlaps } from './engine.js';
 import { store } from './store.js';
-import { startSync, syncNow, syncState } from './sync.js';
+import { startSync, startViewSync, syncNow, syncState, authHeaders, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
 
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.8.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -29,6 +29,7 @@ const DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 const dayLabel = date => { const d = new Date(date + 'T12:00:00'); return `${DAYS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`; };
 
 let DATA = null;
+let VIEWER = false; // read-only viewer (parents/athletes): no notes, appeals, calibration, alerts; only rounds from now on
 let current = null; // round id
 let view = 'mine';
 let lastTabTap = 0;
@@ -36,15 +37,19 @@ let screen = 'round'; // 'home' | 'round'
 
 // ---- gate ----
 // → payload, null (wrong code) or 'nodata' (no network and nothing cached / server error).
-async function readBox() {
+async function readBox(file) {
   const tryRes = async res => { try { return res && res.ok ? await res.json() : null; } catch { return null; } };
-  return await tryRes(await fetch('data.enc.json', { cache: 'no-cache' }).catch(() => null))
-    || await tryRes(await (window.caches ? caches.match('data.enc.json') : null)?.catch?.(() => null));
+  return await tryRes(await fetch(file, { cache: 'no-cache' }).catch(() => null))
+    || await tryRes(await (window.caches ? caches.match(file) : null)?.catch?.(() => null));
 }
+// The coach code opens data.enc.json; the viewer code (parents/athletes) opens data.view.enc.json (role 'viewer').
 async function unlock(code) {
-  const box = await readBox();
+  const box = await readBox('data.enc.json');
   if (!box) return 'nodata';
-  return decryptJSON(box, code);
+  const d = await decryptJSON(box, code);
+  if (d) return d;
+  const vbox = await readBox('data.view.enc.json');
+  return vbox ? decryptJSON(vbox, code) : null;
 }
 
 async function boot() {
@@ -75,7 +80,11 @@ const round = id => DATA.rounds.find(r => r.id === id);
 // several competitions (Super League 1–3…): each round names its event; old data had a single DATA.event
 const EVENTS = () => DATA.events || [{ id: 'bl1', ...DATA.event }];
 const evOf = r => EVENTS().find(e => e.id === (r?.event || 'bl1')) || EVENTS()[0];
-const roundsOf = ev => DATA.rounds.filter(r => (r.event || 'bl1') === ev.id);
+// viewer: only rounds still ahead (or running now)
+const todayStr = () => { const d = new Date(now()); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const visible = r => !VIEWER || (r.slots.length ? roundEndMs(r) > now() : r.date >= todayStr());
+const roundsOf = ev => DATA.rounds.filter(r => (r.event || 'bl1') === ev.id && visible(r));
+const MINE_NAME = () => (VIEWER ? 'הנבחרת של רועי' : 'שלי');
 // Base = Hub matches from the build; the coach can add/remove athletes per round in settings.
 const mineOf = id => {
   const r = round(id); const del = new Set(store.mineDel(id));
@@ -102,7 +111,7 @@ function pickDefaultRound() {
   const t = now();
   const live = DATA.rounds.find(r => r.slots.length && stateAt(r, t, off(r.id)).phase === 'live');
   if (live) return live.id;
-  const upcoming = DATA.rounds.filter(r => roundStart(r) > t).sort((a, b) => roundStart(a) - roundStart(b));
+  const upcoming = DATA.rounds.filter(r => roundStart(r) > t && visible(r)).sort((a, b) => roundStart(a) - roundStart(b));
   const withSlots = upcoming.find(r => r.slots.length);
   return (withSlots || upcoming[0] || DATA.rounds[DATA.rounds.length - 1]).id;
 }
@@ -156,10 +165,10 @@ function renderTimer(r, s) {
   } else if (s.phase === 'after') {
     label.textContent = 'הראונד הסתיים'; timer.textContent = '0:00'; sub.textContent = ''; timer.className = 'timer done';
   } else {
-    label.textContent = `חלון ${s.n + 1} מתוך ${total} · נותר`;
+    label.textContent = `סבב ${s.n + 1} מתוך ${total} · נותר`;
     timer.textContent = fmtDur(s.slotLeftMs);
     timer.className = 'timer' + (s.slotLeftMs <= 60000 ? ' warn' : '');
-    sub.textContent = `החלון הבא ${fmtClock(s.slotEndMs)}`;
+    sub.textContent = `הסבב הבא ${fmtClock(s.slotEndMs)}`;
   }
   const o = off(r.id);
   $('#offset-label').textContent = o === 0 ? 'שעון לפי סדר העלייה' : `כיול: ${o > 0 ? 'מאחר' : 'מקדים'} ${fmtDur(Math.abs(o))}`;
@@ -176,8 +185,8 @@ function renderNext(r, s) {
 function renderMine(r) {
   const t = now();
   const list = mineOf(r.id);
-  if (!list.length) { patch($('#view-mine'), `<p class="muted">${r.slots.length ? 'אין ספורטאים שלי בראונד הזה.' : 'סדר העלייה עוד לא התקבל.'}</p>`); return; }
-  patch($('#view-mine'), overlapHtml(r, t) + list.map(m => {
+  if (!list.length) { patch($('#view-mine'), `<p class="muted">${r.slots.length ? (VIEWER ? 'אין ספורטאים מהנבחרת של רועי בראונד הזה.' : 'אין ספורטאים שלי בראונד הזה.') : 'סדר העלייה עוד לא התקבל.'}</p>`); return; }
+  patch($('#view-mine'), (VIEWER ? '<p class="muted small viewer-hint">מודגשים: הספורטאים של רועי פלגי</p>' : overlapHtml(r, t)) + list.map(m => {
     const s = r.slots[m.k];
     const st = athleteStatus(r, m.k, t, off(r.id));
     const notes = store.notes(n => n.round === r.id && n.k === m.k);
@@ -201,7 +210,7 @@ function renderAll(r) {
   if (!r.slots.length) { patch($('#view-all'), '<p class="muted">סדר העלייה עוד לא התקבל.</p>'); return; }
   patch($('#view-all'), `<p class="muted small hint">סנכרון לפי מי שמטפס: לחץ "מתחיל עכשיו" ליד המתחרה שעולה עכשיו לבולדר 1. ערעור אפשר על כל מתחרה.</p><div class="full-wrap"><table class="full"><thead><tr><th>סדר</th><th class="c-bib">גב</th><th>שם</th><th>עלייה</th><th>מצב</th><th></th></tr></thead><tbody>${
     r.slots.map((s, k) => {
-      if (!s) return `<tr class="empty-row"><td colspan="3">חלון ריק</td><td>${fmtClock(slotStartMs(r, k, off(r.id)))}</td><td></td><td></td></tr>`;
+      if (!s) return `<tr class="empty-row"><td colspan="3">סבב ריק</td><td>${fmtClock(slotStartMs(r, k, off(r.id)))}</td><td></td><td></td></tr>`;
       const st = athleteStatus(r, k, t, off(r.id));
       return `<tr class="${mk.has(k) ? 'mine' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</td>
         <td>${fmtClock(st.startMs)}</td><td>${statusText(r, st)}</td>
@@ -249,17 +258,50 @@ function overlapHtml(r, t) {
     const who = w.climbers.map(c => `<span class="ovl-who"><b>${esc(shortOf(r.id, c.k))}</b> בולדר ${c.boulder}</span>`).join('');
     return `<li class="${cls}"><span class="ovl-at">${fmtClock(w.startMs)}–${fmtHM(w.endMs)}</span><span class="ovl-list">${who}</span>${cls === 'now' ? '<span class="ovl-badge">עכשיו</span>' : ''}</li>`;
   }).join('');
-  return `<div class="ovl card"><div class="ovl-head"><b>⚠︎ חפיפות בטיפוס</b><span class="muted small">${ov.length} חלונות שבהם ${max > 2 ? 'עד ' + max : 'שניים'} שלך מטפסים במקביל</span></div><ol>${rows}</ol></div>`;
+  return `<div class="ovl card"><div class="ovl-head"><b>⚠︎ חפיפות בטיפוס</b><span class="muted small">${ov.length} סבבים שבהם ${max > 2 ? 'עד ' + max : 'שניים'} שלך מטפסים במקביל</span></div><ol>${rows}</ol></div>`;
 }
 
 let homeOpenEvent = null; // list view: which event is opened (null = the list)
-function homeEvents() { return EVENTS().map(e => ({ event: e, rounds: roundsOf(e) })); }
-// the competition to show by default: the one with a live round, else the first not finished yet, else the last
+// Every competition by date. A competition without rounds (lead leagues for now) is listed by its `dates` only.
+// Viewer: only rounds still ahead, and competitions with something still ahead.
+const hasRounds = e => DATA.rounds.some(r => (r.event || 'bl1') === e.id);
+const evDates = e => e.dates || [...new Set(DATA.rounds.filter(r => (r.event || 'bl1') === e.id).map(r => r.date))].sort();
+function homeEvents() {
+  const all = EVENTS().map(e => ({ event: e, rounds: roundsOf(e), dates: evDates(e) })).sort((a, b) => (a.dates[0] < b.dates[0] ? -1 : 1));
+  const v = all.filter(x => x.rounds.length || (!hasRounds(x.event) && (!VIEWER || x.dates.at(-1) >= todayStr())));
+  return v.length ? v : all.slice(-1);
+}
+// phase of a whole competition: live / before / after (by its rounds, or by its dates when it has none)
+function evPhase(ev, t = now()) {
+  if (ev.rounds.length) {
+    const rs = ev.rounds.filter(r => r.slots.length);
+    if (rs.some(r => stateAt(r, t, off(r.id)).phase === 'live')) return 'live';
+    const done = r => roundStart(r) + off(r.id) + (r.slots.length ? windowCount(r) * r.slotSec * 1000 : 12 * 3600e3) < t;
+    return ev.rounds.every(done) ? 'after' : 'before';
+  }
+  const today = todayStr();
+  return ev.dates.at(-1) < today ? 'after' : ev.dates[0] <= today ? 'live' : 'before';
+}
+// the competition to show by default: the first one not finished yet, else the last
 function focusEventIdx() {
-  const t = now(); const evs = homeEvents();
-  const done = ev => ev.rounds.every(r => roundStart(r) + off(r.id) + (r.slots.length ? windowCount(r) * r.slotSec * 1000 : 12 * 3600e3) < t);
-  const i = evs.findIndex(ev => !done(ev));
+  const evs = homeEvents(); const i = evs.findIndex(ev => evPhase(ev) !== 'after');
   return i < 0 ? evs.length - 1 : i;
+}
+// "13–15/10" (always left-to-right, so RTL text never scrambles it)
+function rangeLabel(dates) {
+  const d0 = new Date(dates[0] + 'T12:00:00'), d1 = new Date(dates.at(-1) + 'T12:00:00');
+  const txt = dates.length < 2 ? `${d0.getDate()}/${d0.getMonth() + 1}`
+    : d0.getMonth() === d1.getMonth() ? `${d0.getDate()}–${d1.getDate()}/${d1.getMonth() + 1}` : `${d0.getDate()}/${d0.getMonth() + 1}–${d1.getDate()}/${d1.getMonth() + 1}`;
+  return `<span dir="ltr" class="ev-dates">${txt}</span>`;
+}
+// only the nearest upcoming competition is "בקרוב"; later ones count the days
+function evBadge(ev, evs) {
+  const ph = evPhase(ev);
+  if (ph === 'live') return ev.rounds.length ? '<span class="hb live">חי עכשיו</span>' : '<span class="hb live">היום</span>';
+  if (ph === 'after') return '<span class="hb done">הסתיים</span>';
+  if (evs.find(x => evPhase(x) === 'before') === ev) return '<span class="hb soon">בקרוב</span>';
+  const days = Math.round((new Date(ev.dates[0] + 'T12:00:00') - new Date(todayStr() + 'T12:00:00')) / 864e5);
+  return `<span class="hb later">בעוד ${days} ימים</span>`;
 }
 
 function renderHome() {
@@ -271,43 +313,41 @@ function renderHome() {
 
 function renderHomeList(seg) {
   const t = now();
-  const rows = homeEvents().map((ev, i) => {
-    const rs = ev.rounds.filter(r => r.slots.length);
-    const ph = rs.some(r => stateAt(r, t, off(r.id)).phase === 'live') ? 'live' : rs.length && rs.every(r => stateAt(r, t, off(r.id)).phase === 'after') ? 'after' : 'before';
-    const badge = { live: '<span class="hb live">חי עכשיו</span>', before: '<span class="hb soon">בקרוב</span>', after: '<span class="hb done">הסתיים</span>' }[ph];
-    const dates = [...new Set(ev.rounds.map(r => r.date))].sort();
-    const d0 = new Date(dates[0] + 'T12:00:00'), d1 = new Date(dates[dates.length - 1] + 'T12:00:00');
-    const range = dates.length > 1 ? `${d0.getDate()}–${d1.getDate()}/${d1.getMonth() + 1}` : `${d0.getDate()}/${d0.getMonth() + 1}`;
+  const evs = homeEvents();
+  const rows = evs.map((ev, i) => {
+    const ph = evPhase(ev, t), badge = evBadge(ev, evs);
+    const meta = [ev.event.place && esc(ev.event.place), rangeLabel(ev.dates), ev.rounds.length ? `${ev.rounds.length} ראונדים` : 'הראונדים יתווספו בהמשך'].filter(Boolean).join(' · ');
     const people = new Set(ev.rounds.flatMap(r => mineOf(r.id).map(m => r.slots[m.k].name)));
     const ovl = ev.rounds.reduce((n, r) => n + (mineOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
     return `<button type="button" class="ev-row card ph-${ph}" data-ev="${i}">
-      <span class="ev-main"><b>${esc(ev.event.title)}</b><span class="muted small">${esc(ev.event.place || '')} · ${range} · ${ev.rounds.length} ראונדים</span></span>
-      <span class="ev-side">${badge}<span class="small">${people.size} שלי${ovl ? ` · <span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>`;
+      <span class="ev-main"><b>${esc(ev.event.title)}</b><span class="muted small">${meta}</span></span>
+      <span class="ev-side">${badge}<span class="small">${!ev.rounds.length ? '' : `${people.size} ${VIEWER ? 'מהנבחרת' : 'שלי'}`}${ovl ? ` · <span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>`;
   }).join('');
   patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}</div><div class="ev-list">${rows}</div>`);
 }
 
 function renderHomeDetail(seg, fromList) {
   const t = now();
-  const evs = homeEvents(); const ei = homeOpenEvent ?? focusEventIdx(); const { event: ev, rounds } = evs[ei];
+  const evs = homeEvents(); const ei = homeOpenEvent ?? focusEventIdx(); const cur = evs[Math.min(ei, evs.length - 1)]; const { event: ev, rounds } = cur;
   const days = [...new Set(rounds.map(r => r.date))];
   const chips = !fromList && evs.length > 1 ? `<div class="ev-chips" role="group" aria-label="תחרות">${evs.map((e, i) => {
-    const dates = e.rounds.map(r => r.date).sort(); const d0 = new Date(dates[0] + 'T12:00:00');
+    const d0 = new Date(e.dates[0] + 'T12:00:00');
     return `<button type="button" data-ev="${i}" aria-pressed="${i === ei}">${esc(e.event.title.replace('ליגת העל ', ''))} <span class="muted">${d0.getDate()}/${d0.getMonth() + 1}</span></button>`;
   }).join('')}</div>` : '';
   const card = r => {
     const ph = r.slots.length ? stateAt(r, t, off(r.id)).phase : 'wait';
     const badge = { live: '<span class="hb live">חי עכשיו</span>', before: '<span class="hb soon">בקרוב</span>', after: '<span class="hb done">הסתיים</span>', wait: '<span class="hb wait">ממתין לסדר עלייה</span>' }[ph];
     const mine = mineOf(r.id).map(m => `<li><b>${esc(m.short)}</b> <span>#${r.slots[m.k].order} · ${fmtHM(slotStartMs(r, m.k, off(r.id)))}</span></li>`).join('');
-    const live = ph === 'live' ? (() => { const s = stateAt(r, t, off(r.id)); const b1 = s.boulders[0]; return `<p class="h-live">חלון ${s.n + 1} מתוך ${windowCount(r)} · בולדר 1: ${b1 ? `#${b1.order} ${esc(b1.name)}` : '—'}</p>`; })() : '';
+    const live = ph === 'live' ? (() => { const s = stateAt(r, t, off(r.id)); const b1 = s.boulders[0]; return `<p class="h-live">סבב ${s.n + 1} מתוך ${windowCount(r)} · בולדר 1: ${b1 ? `#${b1.order} ${esc(b1.name)}` : '—'}</p>`; })() : '';
     return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(r.title)}</h3>${badge}</div>
-      <p class="muted small">${fmtHM(roundStart(r) + off(r.id))}${r.slots.length ? `–${fmtHM(roundEndMs(r))}` : ''} · ${r.boulders} בולדרים · חלון ${fmtDur(r.slotSec * 1000)}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
+      <p class="muted small">${fmtHM(roundStart(r) + off(r.id))}${r.slots.length ? `–${fmtHM(roundEndMs(r))}` : ''} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec * 1000)}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
       ${live}${mine ? `<ul class="h-mine">${mine}</ul>` : `<p class="muted small">${r.slots.length ? 'אין ספורטאים שלי' : ''}</p>`}
-      ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} חלונות של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
+      ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} סבבים של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
-  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(ev.title)} <span class="muted">· ${esc(ev.place || '')}</span></h2>${seg}</div>${chips}` +
+  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(ev.title)} <span class="muted">· ${ev.place ? esc(ev.place) + ' · ' : ''}${rangeLabel(cur.dates)}</span></h2>${seg}</div>${chips}` +
+    (rounds.length ? '' : `<div class="card h-empty"><p><b>${evBadge(cur, evs)}</b></p><p class="muted">הראונדים וסדרי העלייה יתווספו כשיתפרסמו.${ev.place ? '' : ' המיקום עוד לא פורסם.'}</p></div>`) +
     days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
 }
 
@@ -336,7 +376,7 @@ function render() {
   const s = stateAt(r, now(), off(r.id));
   $('#clock').textContent = fmtClock(now());
   $('#event-title').textContent = evOf(r).title;
-  $('#round-sub').textContent = `${dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים · חלון ${fmtDur(r.slotSec * 1000)}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
+  $('#round-sub').textContent = `${dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec * 1000)}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
   renderTabs(); renderBoard(r, s); renderTimer(r, s); renderNext(r, s);
   if (view === 'mine') renderMine(r);
   if (view === 'all') renderAll(r);
@@ -384,7 +424,7 @@ function showAlert(text, cls, group = '') {
 }
 
 // Every alert for my athletes in all rounds (same list drives the in-app banner and the lock-screen push).
-const ALERT_LBL = { w2: '2 חלונות', w1: 'חלון אחד', m2: '2 דקות', m1: 'דקה', s10: '10 שניות' };
+const ALERT_LBL = { w2: '2 סבבים', w1: 'סבב אחד', m2: '2 דקות', m1: 'דקה', s10: '10 שניות' };
 function alertEntries() {
   const out = [];
   for (const r of DATA.rounds) {
@@ -410,6 +450,7 @@ function alertEntries() {
 }
 
 function checkAlerts() {
+  if (VIEWER) return;
   const t = now();
   for (const a of alertEntries()) {
     if (t >= a.at && t < a.until && !fired.was(a.key)) { fired.mark(a.key); showAlert(a.text, a.cls, a.tag); }
@@ -445,6 +486,7 @@ function pushEnv() {
   return 'ready';
 }
 async function syncPush(force = false) {
+  if (VIEWER) return;
   if (!store.push.on || pushEnv() !== 'ready' || Notification.permission !== 'granted') return;
   const t = Date.now();
   if (!force && t < pushNextTry) return;
@@ -570,7 +612,7 @@ function adjust(kind) {
   else if (kind === 'now') {
     const t = now(); const o2 = syncWindowNow(r, t, o); const d = o2 - o;
     const b1 = stateAt(r, t, o2).boulders[0];
-    return confirmSync('החלון מתחיל עכשיו?', `השעון יזוז ${d >= 0 ? 'אחורה (התחרות מאחרת)' : 'קדימה (התחרות מקדימה)'} בכ-${fmtDur(Math.abs(d))}. אחרי הסנכרון על בולדר 1: ${b1 ? `#${b1.order} ${b1.name}` : 'אף אחד (חלון ריק)'}. אם זה לא מי שעולה עכשיו — לחץ ביטול והשתמש ב"מתחיל עכשיו" ליד המתחרה בסדר העלייה המלא.`, () => syncWindowNow(r, now(), off(r.id)));
+    return confirmSync('הסבב מתחיל עכשיו?', `השעון יזוז ${d >= 0 ? 'אחורה (התחרות מאחרת)' : 'קדימה (התחרות מקדימה)'} בכ-${fmtDur(Math.abs(d))}. אחרי הסנכרון על בולדר 1: ${b1 ? `#${b1.order} ${b1.name}` : 'אף אחד (סבב ריק)'}. אם זה לא מי שעולה עכשיו — לחץ ביטול והשתמש ב"מתחיל עכשיו" ליד המתחרה בסדר העלייה המלא.`, () => syncWindowNow(r, now(), off(r.id)));
   }
   store.setOffset(r.id, o);
   render();
@@ -675,6 +717,51 @@ function onRemote(ch) {
   }
 }
 
+// ---- feedback (like Wingate): everyone sends a bug / suggestion; Roei (coach code) sees all, sets status + reply ----
+const FB_STATUS = { new: 'חדש', in_progress: 'בטיפול', done: 'טופל', wont_do: 'לא יטופל' };
+const FB_TYPE = { bug: 'תקלה', suggestion: 'הצעה' };
+let fbType = 'bug', fbFilter = 'open', fbAll = [];
+async function fbCall(path, body) {
+  const res = await fetch(SYNC_URL + path, { method: body ? 'POST' : 'GET', headers: await authHeaders(VIEWER), body: body && JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || String(res.status));
+  return data;
+}
+const fbDate = ms => new Date(ms).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fbItem = (i, owner) => `<div class="fb-item st-${i.status}"><div class="fb-head"><b>${FB_TYPE[i.type]}</b><span class="fb-st">${FB_STATUS[i.status]}</span><span class="muted small">${fbDate(i.created)}</span></div>
+  <p class="fb-body">${esc(i.text)}</p>${owner ? `<p class="muted small">${esc([i.name, i.role === 'viewer' ? 'צופה' : 'מאמן', i.version && 'גרסה ' + i.version, i.screen, i.device].filter(Boolean).join(' · '))}</p>` : ''}
+  ${owner ? `<div class="fb-admin"><select data-fbst="${i.id}" aria-label="סטטוס">${Object.entries(FB_STATUS).map(([k, v]) => `<option value="${k}" ${k === i.status ? 'selected' : ''}>${v}</option>`).join('')}</select>
+    <input type="text" class="fb-reply" data-fbreply="${i.id}" value="${esc(i.reply)}" placeholder="תשובה לשולח" maxlength="2000"><button type="button" class="btn btn-sm btn-ghost" data-fbsave="${i.id}">שמור</button></div>`
+    : i.reply ? `<p class="fb-reply-text">תשובה: ${esc(i.reply)}</p>` : ''}</div>`;
+async function loadMyFeedback() {
+  const box = $('#fb-mine');
+  if (!store.fbIds.length) { box.innerHTML = '<p class="ios-row muted small">עוד לא שלחת משוב מהמכשיר הזה.</p>'; return; }
+  try { const { items } = await fbCall('/feedback/mine?ids=' + store.fbIds.join(',')); box.innerHTML = items.map(i => fbItem(i, false)).join('') || '<p class="ios-row muted small">—</p>'; }
+  catch { box.innerHTML = '<p class="ios-row muted small">אין חיבור כרגע.</p>'; }
+}
+function renderAllFeedback() {
+  const list = fbAll.filter(i => fbFilter === 'all' || (fbFilter === 'open' ? ['new', 'in_progress'].includes(i.status) : i.type === fbFilter));
+  $('#fb-all').innerHTML = list.map(i => fbItem(i, true)).join('') || '<p class="ios-row muted small">אין משובים כאן.</p>';
+  document.querySelectorAll('[data-fbf]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fbf === fbFilter)));
+}
+async function loadAllFeedback() {
+  $('#fb-all').innerHTML = '<p class="ios-row muted small">טוען…</p>';
+  try { fbAll = (await fbCall('/feedback/all')).items; renderAllFeedback(); updateFbCount(); }
+  catch { $('#fb-all').innerHTML = '<p class="ios-row muted small">אין חיבור כרגע.</p>'; }
+}
+function updateFbCount() { const n = fbAll.filter(i => i.status === 'new').length; if ($('#v-fbadmin')) $('#v-fbadmin').textContent = n ? `${n} חדשים` : ''; }
+async function sendFeedback() {
+  const text = $('#fb-text').value.trim();
+  if (text.length < 3) { $('#fb-msg').textContent = 'כתוב כמה מילים על התקלה או ההצעה.'; return; }
+  $('#fb-send').disabled = true; $('#fb-msg').textContent = 'שולח…';
+  try {
+    const { id } = await fbCall('/feedback', { type: fbType, text, name: VIEWER ? $('#fb-name').value.trim() : 'רועי', version: APP_VERSION,
+      device: navigator.userAgent, screen: `${innerWidth}×${innerHeight}${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? ' · אפליקציה' : ''}` });
+    store.addFbId(id); $('#fb-text').value = ''; $('#fb-msg').textContent = 'נשלח ✓ תודה! אפשר לראות כאן למטה את הסטטוס והתשובה.'; loadMyFeedback();
+  } catch { $('#fb-msg').textContent = 'אין חיבור כרגע. הטקסט נשאר כאן, נסה שוב כשיש קליטה.'; }
+  $('#fb-send').disabled = false;
+}
+
 // ---- settings ----
 const THEME_BG = { light: '#F5F1EA', plum: '#1A1024', charcoal: '#141216', black: '#000000' };
 const DARK_NAMES = { plum: 'שזיף', charcoal: 'פחם', black: 'שחור' };
@@ -698,7 +785,7 @@ function applySettings() {
 }
 
 // ---- settings screen (iPhone style, like Wingate): a main list of rows → one page per topic ----
-const PAGE_TITLES = { main: 'הגדרות', alerts: 'מתי להתריע', push: 'מסך נעול', sound: 'צליל', calib: 'כיול', mine: 'הספורטאים שלי', look: 'מראה', data: 'הערות וערעורים', sync: 'סנכרון בין מכשירים', updates: 'עדכונים' };
+const PAGE_TITLES = { main: 'הגדרות', alerts: 'מתי להתריע', push: 'מסך נעול', sound: 'צליל', calib: 'כיול', mine: 'הספורטאים שלי', look: 'מראה', data: 'הערות וערעורים', sync: 'סנכרון בין מכשירים', feedback: 'תקלה או הצעה', fbadmin: 'משובים שהתקבלו', updates: 'עדכונים' };
 function setPage(pg) {
   document.querySelectorAll('#settings-dlg .ios-page').forEach(el => { el.hidden = el.dataset.pg !== pg; });
   $('#set-title').textContent = PAGE_TITLES[pg] || 'הגדרות';
@@ -706,11 +793,14 @@ function setPage(pg) {
   if (pg === 'main') renderSettingsMain();
   if (pg === 'push') renderPushState();
   if (pg === 'sync') { renderSyncState(); syncNow(); }
+  if (pg === 'feedback') loadMyFeedback();
+  if (pg === 'fbadmin') loadAllFeedback();
   $('#settings-form').scrollTop = 0; $('#settings-dlg').scrollTop = 0;
+  $('#set-title').focus({ focusVisible: false });
 }
 function renderSettingsMain() {
   const st = store.settings;
-  const al = [['w2', '2 חלונות'], ['w1', 'חלון'], ['m2', '2 דק׳'], ['m1', 'דקה'], ['s10', '10 ש׳'], ['s0', 'בעלייה'], ['transfer', 'נורמן']].filter(([k]) => st.alerts[k]).map(([, l]) => l);
+  const al = [['w2', '2 סבבים'], ['w1', 'סבב'], ['m2', '2 דק׳'], ['m1', 'דקה'], ['s10', '10 ש׳'], ['s0', 'בעלייה'], ['transfer', 'נורמן']].filter(([k]) => st.alerts[k]).map(([, l]) => l);
   $('#v-alerts').textContent = al.length ? al.join(' · ') : 'כבוי';
   $('#v-push').textContent = store.push.on && pushEnv() === 'ready' ? 'פעיל' : 'כבוי';
   $('#v-sound').textContent = st.sound.on ? { chime: 'פעמון', beep: 'ביפים', alarm: 'אזעקה' }[st.sound.tone] : 'כבוי';
@@ -748,6 +838,8 @@ function openSettings() {
   renderChangelog();
   setPage('main');
   $('#settings-dlg').showModal();
+  $('#set-title').focus({ focusVisible: false }); // iPadOS ringed "סיום" (first button) on open — start on the title instead
+  if (!VIEWER && SIM_AT == null) fbCall('/feedback/all').then(r => { fbAll = r.items; updateFbCount(); }).catch(() => {});
 }
 
 // Version history (changelog.js, like Wingate): newest first, the running version marked; start-list updates in between.
@@ -782,6 +874,9 @@ function exportFile() {
 }
 
 function start() {
+  VIEWER = DATA.role === 'viewer';
+  document.body.classList.toggle('viewer', VIEWER);
+  if (VIEWER) { $('[data-view="mine"]').textContent = MINE_NAME(); $('#start-bar').hidden = true; }
   $('#app').hidden = false;
   document.querySelectorAll('.app-ver').forEach(el => { el.textContent = APP_VERSION; });
   current = params.get('round') && round(params.get('round')) ? params.get('round') : pickDefaultRound();
@@ -814,6 +909,13 @@ function start() {
     else if (b.id === 'test-sound') { ensureAudio(); chime(true); }
     else if (b.id === 'lock-btn') { store.setSetting('lock', !store.settings.lock); applySettings(); }
     else if (b.id === 'check-update') checkUpdate();
+    else if (d.fbtype) { fbType = d.fbtype; document.querySelectorAll('[data-fbtype]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); }
+    else if (b.id === 'fb-send') sendFeedback();
+    else if (d.fbf) { fbFilter = d.fbf; renderAllFeedback(); }
+    else if (d.fbsave) {
+      const id = d.fbsave; const status = document.querySelector(`[data-fbst="${id}"]`).value, reply = document.querySelector(`[data-fbreply="${id}"]`).value.trim();
+      fbCall('/feedback/update', { id, status, reply }).then(() => { const it = fbAll.find(i => i.id === id); Object.assign(it, { status, reply }); renderAllFeedback(); updateFbCount(); showToast('נשמר'); }).catch(() => showToast('אין חיבור כרגע'));
+    }
     else if (b.id === 'sync-now') { $('#sync-state').textContent = 'מסנכרן…'; syncNow(); }
     else if (b.id === 'push-toggle') { if (store.push.on && pushEnv() === 'ready') pushDisable(); else pushEnable(); }
     else if (b.id === 'push-test') pushCall('/test', {}).then(r => showToast(r.ok ? 'נשלחה התראת ניסיון · נעל את האייפד ובדוק' : 'השליחה נכשלה')).catch(() => showToast('אין חיבור לשרת ההתראות'));
@@ -821,7 +923,7 @@ function start() {
     else if (b.id === 'clear-notes') askConfirm('מחיקת הערות וערעורים', 'כל ההערות והערעורים יימחקו מכל המכשירים. כדאי לייצא קודם.', 'מחיקה', () => { store.clearNotesAppeals(); render(); showToast('נמחק'); });
     else if (b.id === 'logout-btn') askConfirm('יציאה', 'בכניסה הבאה תצטרך להזין את הקוד שוב. ההערות והכיולים נשארים באייפד.', 'יציאה', () => { store.logout(); location.href = './'; }); else if (b.id === 'copy-all-btn') {
       copy([...store.appeals().map(appealText), ...store.notes().map(n => `${n.short} · ${round(n.round)?.title} · ${fmtClock(n.at)} · ${n.ctx}\n${n.text}`)].join('\n\n'));
-    } else if (b.id === 'custom-btn') { $('#custom-form').hidden = !$('#custom-form').hidden; }
+    }
     else if (b.id === 'reset-btn') { store.setOffset(current, 0); render(); }
     else if (b.id === 'manual-btn') openManual();
     else if (b.id === 'sim-btn') openSim();
@@ -848,11 +950,6 @@ function start() {
   $('#dev-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }); // Enter must not close the dialog
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applySettings);
   applySettings();
-  $('#custom-form').addEventListener('submit', e => {
-    e.preventDefault();
-    const min = parseFloat($('#custom-min').value);
-    if (Number.isFinite(min)) { store.setOffset(current, off(current) + min * 60000); $('#custom-form').hidden = true; $('#custom-min').value = ''; render(); }
-  });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
     if (audio) { if (audio.state !== 'running') audio.resume().catch(() => {}); keepAwake(); }
@@ -862,7 +959,8 @@ function start() {
   setInterval(render, 250);
   setInterval(() => syncPush(), 5000); syncPush(true);
   addEventListener('online', () => syncPush(true));
-  if (SIM_AT == null) startSync({ onRemote, onStatus: renderSyncState });
+  if (SIM_AT == null && VIEWER) startViewSync(onRemote);
+  else if (SIM_AT == null) startSync({ onRemote, onStatus: renderSyncState });
   if ('serviceWorker' in navigator && SIM_AT == null) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 

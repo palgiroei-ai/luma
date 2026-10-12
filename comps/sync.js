@@ -9,6 +9,13 @@ const POLL_MS = 10000, RETRY_MS = 30000, DEBOUNCE_MS = 400, TIMEOUT_MS = 8000;
 export const syncState = { ok: null, at: 0, error: '' }; // ok: null = not tried yet
 let key = null, inflight = null, again = false, timer = null, nextPoll = 0, hooks = {};
 
+// headers for the shared endpoints: coach code → X-Comp-Key, viewer code → X-View-Key
+export async function authHeaders(viewer) {
+  if (!viewer) return { 'Content-Type': 'application/json', 'X-Comp-Key': await apiKey() };
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('comp-view:' + store.code));
+  return { 'Content-Type': 'application/json', 'X-View-Key': [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('') };
+}
+
 export async function apiKey() {
   if (!key) {
     const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('comp-push:' + store.code));
@@ -61,6 +68,22 @@ export function syncNow() {
     }
   })();
   return inflight;
+}
+
+// Viewer (parents/athletes): read-only — only the coach's calibration + my-athlete changes, every 30 s while on screen.
+export function startViewSync(onRemote) {
+  let vkey = null, busy = false;
+  const pull = async () => {
+    if (busy || document.visibilityState !== 'visible') return; busy = true;
+    try {
+      if (!vkey) { const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('comp-view:' + store.code)); vkey = [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join(''); }
+      const res = await fetch(`${SYNC_URL}/view?rev=${store.rev}`, { headers: { 'X-View-Key': vkey } });
+      if (res.ok) { const d = await res.json(); const ch = store.applyRemote(d.items, d.rev); if (ch.any) onRemote(ch); }
+    } catch { /* offline: keep the last calibration */ } finally { busy = false; }
+  };
+  addEventListener('online', pull);
+  document.addEventListener('visibilitychange', pull);
+  setInterval(pull, 30000); pull();
 }
 
 export function startSync(h = {}) {

@@ -6,13 +6,13 @@
 const KEY = new URLSearchParams(location.search).get('at') ? 'comps.sim.v1' : 'comps.v1';
 const CODE_KEY = 'comps.code';
 export const DEFAULT_SETTINGS = {
-  alerts: { w2: false, w1: true, m2: false, m1: true, s10: false, s0: false, transfer: false },
+  alerts: { w2: false, w1: true, m2: false, m1: false, s10: true, s0: false, transfer: false }, // default: one round + 10 s before (Roei 2026-10-12)
   sound: { on: true, vol: 0.6, tone: 'chime' },
   step: 15,          // calibration step, seconds
   lock: true,        // calibration locked by default (Roei 2026-10-12); unlock in settings or the board
   theme: 'light',    // light | dark | auto
   dark: 'plum',      // dark style like Wingate: plum | charcoal | black
-  homeView: 'detail', // home screen: detail (all rounds) | list (one row per event)
+  homeView: 'list',  // home screen: list (one row per competition, default — Roei 2026-10-12) | detail
 };
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const blank = () => ({ offsets: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {}, push: { on: false, device: null },
@@ -102,6 +102,10 @@ export const store = {
   exportAll() {
     return JSON.stringify({ device: state.devName, notes: this.notes(), appeals: this.appeals(), offsets: state.offsets, mineAdd: state.mineAdd, mineDel: state.mineDel }, null, 2);
   },
+
+  // feedback this device sent (ids) → "המשובים שלי"
+  get fbIds() { return state.fbIds || []; },
+  addFbId(id) { state.fbIds = [id, ...(state.fbIds || [])].slice(0, 100); save(); },
 
   // ---- sync ----
   get device() { return state.device; },
