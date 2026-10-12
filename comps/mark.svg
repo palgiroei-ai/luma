@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="LUMA">
+  <title>LUMA</title>
+  <circle cx="20" cy="20" r="16" stroke="#C0743A" stroke-width="2.4" opacity=".6"/>
+  <path d="M6 22h7l3-8 5 14 3-6h10" stroke="#14243B" stroke-width="2.4"/>
+</svg>

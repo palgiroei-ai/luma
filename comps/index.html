@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>מעקב ראונד · PalgiTraining</title>
+  <meta name="theme-color" content="#F5F1EA">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="מעקב ראונד">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="mark.svg">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&family=Jost:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="comps.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+
+<section id="gate" class="gate" hidden>
+  <form class="gate-card" id="gate-form" autocomplete="off">
+    <img class="gate-logo" src="logo-palgitraining.svg" alt="PalgiTraining" width="621" height="155">
+    <h1>מעקב ראונד</h1>
+    <p class="muted">הזן את קוד הכניסה.</p>
+    <label class="sr-only" for="code">קוד כניסה</label>
+    <input id="code" name="code" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" placeholder="קוד כניסה" required>
+    <button class="btn btn-primary" type="submit" id="gate-btn">כניסה</button>
+    <p class="gate-error" id="gate-error" role="alert" hidden>הקוד שגוי, נסה שוב.</p>
+    <a class="powered" href="https://luma.palgitraining.com/" target="_blank" rel="noopener">
+      <span class="powered-by" lang="en">Powered by</span>
+      <span class="brand-row"><img class="mark" src="mark.svg" alt=""><span class="wordmark">LUMA</span></span>
+    </a>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <img class="top-logo" src="logo-palgitraining.svg" alt="PalgiTraining" width="621" height="155">
+    <div class="title-block">
+      <h1 id="event-title"></h1>
+      <p class="muted" id="round-sub"></p>
+    </div>
+    <div class="clock" id="clock" aria-label="שעה"></div>
+    <a class="powered" href="https://luma.palgitraining.com/" target="_blank" rel="noopener" aria-label="Powered by LUMA">
+      <span class="powered-by" lang="en">Powered by</span>
+      <span class="brand-row"><img class="mark" src="mark.svg" alt=""><span class="wordmark">LUMA</span></span>
+    </a>
+  </header>
+
+  <nav class="tabs" id="round-tabs" aria-label="ראונדים"></nav>
+
+  <div class="start-bar" id="start-bar">
+    <button class="btn btn-primary" type="button" id="start-btn">התחל מעקב (צליל + מסך דלוק)</button>
+    <span class="muted small">באייפד: לחיצה אחת מפעילה את הצליל של ההתראות.</span>
+    <button class="btn btn-sm btn-ghost sim-open" type="button" id="sim-btn">הדמיית ראונד</button>
+  </div>
+  <div class="sim-bar" id="sim-bar" hidden>
+    <b>מצב הדמיה</b> · השעון מדומה, הערות וכיולים כאן לא נשמרים בתחרות האמיתית.
+    <a class="btn btn-sm btn-light" href="./">יציאה מההדמיה</a>
+  </div>
+
+  <div class="alert-stack" id="alerts" aria-live="assertive"></div>
+
+  <main class="main">
+    <section class="board" id="board" aria-label="מסלולים"></section>
+
+    <section class="mid">
+      <div class="timer-card card">
+        <div class="timer-label" id="timer-label"></div>
+        <div class="timer" id="timer">--:--</div>
+        <div class="timer-sub muted" id="timer-sub"></div>
+        <div class="calib" aria-label="כיול שעון">
+          <div class="calib-row">
+            <button type="button" class="cbtn" data-adj="-slot">מקדים חלון</button>
+            <button type="button" class="cbtn" data-adj="-15">מקדים 15ש׳</button>
+            <button type="button" class="cbtn cbtn-main" data-adj="now">החלון מתחיל עכשיו</button>
+            <button type="button" class="cbtn" data-adj="+15">מאחר 15ש׳</button>
+            <button type="button" class="cbtn" data-adj="+slot">מאחר חלון</button>
+          </div>
+          <div class="calib-row small">
+            <span class="muted" id="offset-label"></span>
+            <button type="button" class="link" id="custom-btn">זמן לבחירה</button>
+            <button type="button" class="link" id="manual-btn">שעת התחלה ידנית</button>
+            <button type="button" class="link" id="reset-btn">איפוס</button>
+          </div>
+          <form class="custom" id="custom-form" hidden>
+            <label>הזזה בדקות <input type="number" step="0.25" id="custom-min" inputmode="decimal" placeholder="2 / -1.5"></label>
+            <button class="btn btn-sm btn-primary" type="submit">החל</button>
+            <span class="muted small">חיובי = התחרות מאחרת, שלילי = מקדימה</span>
+          </form>
+        </div>
+      </div>
+      <div class="next-card card">
+        <h2>הבאים לעלות</h2>
+        <ol class="next" id="next"></ol>
+      </div>
+    </section>
+
+    <section aria-labelledby="mine-h">
+      <div class="sec-head">
+        <h2 id="mine-h">הספורטאים שלי</h2>
+        <div class="seg" role="group" aria-label="תצוגה">
+          <button type="button" data-view="mine" aria-pressed="true">שלי</button>
+          <button type="button" data-view="all" aria-pressed="false">סדר עלייה מלא</button>
+          <button type="button" data-view="log" aria-pressed="false">הערות וערעורים</button>
+        </div>
+      </div>
+      <div id="view-mine" class="mine-grid"></div>
+      <div id="view-all" hidden></div>
+      <div id="view-log" hidden></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="note-dlg" class="dlg">
+  <form method="dialog" id="note-form">
+    <h2 id="note-title"></h2>
+    <p class="muted small" id="note-ctx"></p>
+    <textarea id="note-text" rows="5" placeholder="הערה…" required></textarea>
+    <div class="dlg-actions">
+      <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
+      <button class="btn btn-primary" value="save">שמירה</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="confirm-dlg" class="dlg">
+  <form method="dialog">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-text"></p>
+    <div class="dlg-actions">
+      <button class="btn btn-ghost" value="cancel">ביטול</button>
+      <button class="btn btn-primary" value="ok" id="confirm-ok">סנכרון</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="manual-dlg" class="dlg">
+  <form method="dialog" id="manual-form">
+    <h2>שעת התחלה ידנית</h2>
+    <p class="muted small" id="manual-ctx"></p>
+    <label>הראונד (מתחרה #1) מתחיל ב- <input id="manual-time" type="time" step="1" dir="ltr" required></label>
+    <div class="dlg-actions">
+      <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
+      <button class="btn btn-primary" value="save">החל</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="sim-dlg" class="dlg">
+  <form method="dialog" id="sim-form">
+    <h2>הדמיית ראונד</h2>
+    <p class="muted small">פותח את האפליקציה עם שעון מדומה, כדי לראות איך ראונד נראה בלייב. לא נוגע בנתונים האמיתיים.</p>
+    <label>ראונד <select id="sim-round"></select></label>
+    <div class="grid2">
+      <label>להתחיל מ- <select id="sim-from">
+        <option value="-120">2 דק' לפני ההתחלה</option>
+        <option value="mine">חלון לפני הספורטאי הראשון שלי</option>
+        <option value="mid">אמצע הראונד</option>
+        <option value="end">רבע שעה לפני הסוף</option>
+      </select></label>
+      <label>מהירות <select id="sim-speed">
+        <option value="1">רגילה</option>
+        <option value="5">פי 5</option>
+        <option value="20" selected>פי 20</option>
+        <option value="60">פי 60</option>
+      </select></label>
+    </div>
+    <div class="dlg-actions">
+      <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
+      <button class="btn btn-primary" value="go">הפעל הדמיה</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="appeal-dlg" class="dlg">
+  <form method="dialog" id="appeal-form">
+    <h2>ערעור</h2>
+    <p class="muted small" id="appeal-who"></p>
+    <div class="grid2">
+      <label>בולדר <select id="appeal-boulder"></select></label>
+      <label>שעה <input id="appeal-time" type="text" inputmode="numeric" dir="ltr"></label>
+    </div>
+    <label>מה קרה <textarea id="appeal-text" rows="5" placeholder="תיאור: אחיזה, ניסיון, טופ/זון, החלטת שופט…" required></textarea></label>
+    <div class="dlg-actions">
+      <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
+      <button class="btn btn-primary" value="save">שמירה</button>
+    </div>
+  </form>
+</dialog>
+
+</body>
+</html>

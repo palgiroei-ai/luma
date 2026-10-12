@@ -28,3 +28,7 @@ The Climbing Academy case card links to `#try`; the top nav has "נסו בעצמ
   iteration 3); top nav gained "לקוחות" (#case); texts of pillars, features, `#try` ("ראו את LUMA בפעולה",
   "סביבת המאמן / הספורטאי"), step 03, case cards ("מאז 2025 / בשימוש שוטף") and the form intro rewritten by Roei.
   Open: an email address on Roei's own domain instead of palgiroei@gmail.com.
+
+## comps/ — מעקב ראונד (2026-10-12)
+Code-gated iPad app for Roei to follow competition rounds live (encrypted `data.enc.json`, noindex). GENERATED from the private
+repo `~/claude-projects/comp-tracker` (`COMP_CODE=… OUT=../luma-site/comps npm run build`) — don't edit files here by hand.
