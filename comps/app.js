@@ -1,6 +1,8 @@
 import { decryptJSON } from './decrypt.js';
-import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount } from './engine.js';
+import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan } from './engine.js';
 import { store } from './store.js';
+
+export const APP_VERSION = '1.1.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -68,7 +70,14 @@ async function boot() {
 
 // ---- helpers over data ----
 const round = id => DATA.rounds.find(r => r.id === id);
-const mineOf = id => DATA.mine[id] || [];
+// Base = Hub matches from the build; the coach can add/remove athletes per round in settings.
+const mineOf = id => {
+  const r = round(id); const del = new Set(store.mineDel(id));
+  const base = (DATA.mine[id] || []).filter(m => !del.has(m.k));
+  const extra = store.mineAdd(id).filter(k => r.slots[k] && !base.some(m => m.k === k))
+    .map(k => ({ k, short: r.slots[k].name.split(' ')[0], cat: 'נוסף ידנית', added: true }));
+  return [...base, ...extra].sort((a, b) => a.k - b.k);
+};
 const mineK = id => new Set(mineOf(id).map(m => m.k));
 const shortOf = (id, k) => mineOf(id).find(m => m.k === k)?.short;
 const off = id => store.offset(id);
@@ -273,16 +282,26 @@ function render() {
 
 // ---- alerts: one window before my athlete starts, and 1 minute before ----
 let audio = null;
-function chime() {
-  if (!audio) return;
+const TONES = {
+  chime: { type: 'sine', notes: [[880, 0, .35], [1175, .18, .35], [880, .36, .4]] },
+  beep: { type: 'square', notes: [[1000, 0, .12], [1000, .2, .12], [1000, .4, .12]] },
+  alarm: { type: 'sawtooth', notes: [[700, 0, .25], [1000, .25, .25], [700, .5, .25], [1000, .75, .25], [700, 1, .3]] },
+};
+function chime(force = false) {
+  const snd = store.settings.sound;
+  if (!audio || (!snd.on && !force)) return;
   if (audio.state !== 'running') audio.resume().catch(() => {});
-  const t0 = audio.currentTime;
-  [[880, 0], [1175, .18], [880, .36]].forEach(([f, d]) => {
+  const t0 = audio.currentTime; const tone = TONES[snd.tone] || TONES.chime; const peak = 0.6 * snd.vol;
+  tone.notes.forEach(([f, d, len]) => {
     const o = audio.createOscillator(), g = audio.createGain();
-    o.frequency.value = f; o.type = 'sine';
-    g.gain.setValueAtTime(0, t0 + d); g.gain.linearRampToValueAtTime(.35, t0 + d + .02); g.gain.exponentialRampToValueAtTime(.001, t0 + d + .35);
-    o.connect(g).connect(audio.destination); o.start(t0 + d); o.stop(t0 + d + .4);
+    o.frequency.value = f; o.type = tone.type;
+    g.gain.setValueAtTime(0, t0 + d); g.gain.linearRampToValueAtTime(peak, t0 + d + .02); g.gain.exponentialRampToValueAtTime(.001, t0 + d + len);
+    o.connect(g).connect(audio.destination); o.start(t0 + d); o.stop(t0 + d + len + .05);
   });
+}
+function ensureAudio() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* Safari 16.4+ only */ }
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch { audio = null; }
 }
 
 function showAlert(text, cls) {
@@ -301,17 +320,17 @@ function checkAlerts() {
     for (const m of mineOf(r.id)) {
       const startMs = slotStartMs(r, m.k, off(r.id));
       const s = r.slots[m.k];
-      for (const [type, lead, cls] of [['slot', r.slotSec * 1000, 'soon'], ['min', 60000, 'now']]) {
-        // Late alert is still useful until the athlete starts (app was backgrounded / clock recalibrated);
-        // a recalibration by ≥ half a window re-arms the alert at the new time.
-        const key = `${r.id}:${m.k}:${type}:${Math.round(off(r.id) / (r.slotSec * 1000))}`;
-        const at = startMs - lead;
-        const until = type === 'slot' ? startMs - 60000 : startMs;
-        if (t >= at && t < until && !fired.was(key)) {
+      const transferMs = s.transfer ? new Date(`${r.date}T${s.transfer.padStart(8, '0')}`).getTime() : null;
+      // Each alert stays due until the next chosen one (late alerts still useful: app was backgrounded /
+      // clock recalibrated); a recalibration by ≥ half a window re-arms it at the new time.
+      for (const a of alertPlan(r, m.k, off(r.id), store.settings.alerts, transferMs)) {
+        const key = `${r.id}:${m.k}:${a.type}:${Math.round(off(r.id) / (r.slotSec * 1000))}`;
+        if (t >= a.at && t < a.until && !fired.was(key)) {
           fired.mark(key);
-          showAlert(type === 'slot'
-            ? `חלון אחד: ${m.short} (#${s.order}, גב ${s.bib}) עולה לבולדר 1 ב-${fmtClock(startMs)}`
-            : `דקה: ${m.short} (#${s.order}) עולה ב-${fmtClock(startMs)}`, cls);
+          const lbl = { w2: '2 חלונות', w1: 'חלון אחד', m2: '2 דקות', m1: 'דקה' }[a.type];
+          showAlert(a.type === 'transfer'
+            ? `מעבר לנורמן: ${m.short} (#${s.order}) · עולה ב-${fmtClock(startMs)}`
+            : `${lbl}: ${m.short} (#${s.order}, גב ${s.bib}) עולה לבולדר 1 ב-${fmtClock(startMs)}`, a.type === 'm1' || a.type === 'm2' ? 'now' : 'soon');
         }
       }
     }
@@ -370,7 +389,9 @@ function setView(v) {
 
 function adjust(kind) {
   const r = round(current); const S = r.slotSec * 1000; let o = off(r.id);
-  if (kind === '+15') o += 15000; else if (kind === '-15') o -= 15000;
+  if (store.settings.lock) { showToast('הכיול נעול · אפשר לפתוח בהגדרות או ב"פתח נעילה"'); return; }
+  const step = store.settings.step * 1000;
+  if (kind === '+step') o += step; else if (kind === '-step') o -= step;
   else if (kind === '+slot') o += S; else if (kind === '-slot') o -= S;
   else if (kind === 'now') {
     const t = now(); const o2 = syncWindowNow(r, t, o); const d = o2 - o;
@@ -382,8 +403,19 @@ function adjust(kind) {
 }
 
 // Every sync that jumps the clock asks first (Roei: a stray tap must not move the round).
+function askConfirm(title, text, okLabel, onOk) {
+  $('#confirm-title').textContent = title;
+  $('#confirm-text').textContent = text;
+  $('#confirm-ok').textContent = okLabel;
+  const dlg = $('#confirm-dlg');
+  dlg.onclose = () => { if (dlg.returnValue === 'ok') onOk(); };
+  dlg.returnValue = '';
+  dlg.showModal();
+}
+
 function confirmSync(title, text, newOffset) {
   const r = round(current);
+  $('#confirm-ok').textContent = 'סנכרון';
   $('#confirm-title').textContent = title;
   $('#confirm-text').textContent = text;
   const dlg = $('#confirm-dlg');
@@ -394,11 +426,13 @@ function confirmSync(title, text, newOffset) {
 }
 
 function syncFromSlot(k) {
+  if (store.settings.lock) { showToast('הכיול נעול · אפשר לפתוח בהגדרות'); return; }
   const r = round(current); const s = r.slots[k]; const o = syncSlotNow(r, k, now());
   confirmSync(`#${s.order} ${s.name} מתחיל עכשיו?`, `כל הסבב יכויל כך ש-#${s.order} עולה עכשיו לבולדר 1 (${o === off(r.id) ? 'ללא שינוי' : `${o > off(r.id) ? 'מאחר' : 'מקדים'} ב-${fmtDur(Math.abs(o - off(r.id)))} לעומת הכיול הנוכחי`}).`, () => syncSlotNow(r, k, now()));
 }
 
 function openManual() {
+  if (store.settings.lock) { showToast('הכיול נעול · אפשר לפתוח בהגדרות'); return; }
   const r = round(current);
   const cur = roundStart(r) + off(r.id);
   $('#manual-ctx').textContent = `${r.title} · לפי סדר העלייה ${fmtClock(roundStart(r))} · כרגע ${fmtClock(cur)}`;
@@ -440,6 +474,62 @@ function showToast(text) {
   document.body.append(el); setTimeout(() => el.remove(), 1800);
 }
 
+// ---- settings ----
+function applySettings() {
+  const st = store.settings;
+  const theme = st.theme === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : st.theme;
+  document.documentElement.dataset.theme = theme;
+  $('#adj-minus').textContent = `מקדים ${st.step}ש׳`;
+  $('#adj-plus').textContent = `מאחר ${st.step}ש׳`;
+  document.querySelectorAll('.cbtn').forEach(b => { b.disabled = st.lock; });
+  $('#lock-btn').textContent = st.lock ? '🔒 כיול נעול · פתח' : 'נעל כיול';
+  document.body.classList.toggle('calib-locked', st.lock);
+}
+
+function renderMineList() {
+  const id = $('#mine-round').value; const r = round(id); const mk = mineK(id);
+  const base = new Set((DATA.mine[id] || []).map(m => m.k));
+  $('#mine-list').innerHTML = r.slots.length ? r.slots.map((s, k) => s ? `<label class="${mk.has(k) ? 'on' : ''}">
+    <input type="checkbox" data-mine-k="${k}" data-base="${base.has(k) ? 1 : ''}" ${mk.has(k) ? 'checked' : ''}> #${s.order} ${esc(s.name)}${base.has(k) ? ' <span class="muted small">(Hub)</span>' : ''}</label>` : '').join('')
+    : '<p class="muted small">סדר העלייה עוד לא התקבל.</p>';
+}
+
+function openSettings() {
+  const st = store.settings; const f = $('#settings-form');
+  f.querySelectorAll('[data-set]').forEach(el => {
+    const [a, b] = el.dataset.set.split('.'); const v = b ? st[a][b] : st[a];
+    if (el.type === 'checkbox') el.checked = !!v; else if (el.type === 'radio') el.checked = el.value === v; else el.value = String(v);
+  });
+  $('#mine-round').innerHTML = DATA.rounds.map(r => `<option value="${r.id}" ${r.id === current ? 'selected' : ''}>${dayLabel(r.date)} · ${esc(r.title)}</option>`).join('');
+  renderMineList();
+  $('#version-info').textContent = `גרסת אפליקציה ${APP_VERSION} · סדרי עלייה עודכנו ${new Date(DATA.builtAt).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}`;
+  $('#update-msg').textContent = '';
+  $('#settings-dlg').showModal();
+}
+
+async function checkUpdate() {
+  $('#update-msg').textContent = 'בודק…';
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    await reg?.update();
+    const res = await fetch('data.enc.json', { cache: 'no-store' });
+    const fresh = res.ok ? await decryptJSON(await res.json(), store.code) : null;
+    const codeRes = await fetch('app.js', { cache: 'no-store' });
+    const newVer = codeRes.ok ? ((await codeRes.text()).match(/APP_VERSION = '([^']+)'/) || [])[1] : null;
+    if (!fresh) { $('#update-msg').textContent = 'אין חיבור כרגע. נסה שוב.'; return; }
+    if (fresh.builtAt !== DATA.builtAt || (newVer && newVer !== APP_VERSION)) {
+      $('#update-msg').textContent = 'נמצא עדכון · טוען מחדש…';
+      setTimeout(() => location.reload(), 800);
+    } else $('#update-msg').textContent = 'הכל מעודכן ✓';
+  } catch { $('#update-msg').textContent = 'אין חיבור כרגע. נסה שוב.'; }
+}
+
+function exportFile() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([store.exportAll()], { type: 'application/json' }));
+  a.download = `comp-notes-${new Date(now()).toISOString().slice(0, 10)}.json`; a.click();
+}
+
 function start() {
   $('#app').hidden = false;
   current = params.get('round') && round(params.get('round')) ? params.get('round') : pickDefaultRound();
@@ -463,23 +553,40 @@ function start() {
     else if (d.share) navigator.share({ text: appealText(store.appeals(a => a.id === d.share)[0]) }).catch(() => {});
     else if (d.delNote) { store.deleteNote(d.delNote); render(); }
     else if (d.delAppeal) { store.deleteAppeal(d.delAppeal); render(); }
-    else if (b.id === 'export-btn') {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([store.exportAll()], { type: 'application/json' }));
-      a.download = `comp-notes-${new Date(now()).toISOString().slice(0, 10)}.json`; a.click();
-    } else if (b.id === 'copy-all-btn') {
+    else if (b.id === 'export-btn' || b.id === 'export-btn2') exportFile();
+    else if (b.id === 'settings-btn') openSettings();
+    else if (b.id === 'test-sound') { ensureAudio(); chime(true); }
+    else if (b.id === 'lock-btn') { store.setSetting('lock', !store.settings.lock); applySettings(); }
+    else if (b.id === 'check-update') checkUpdate();
+    else if (b.id === 'reset-all') askConfirm('איפוס כיול', 'הכיול יתאפס בכל הראונדים, והשעון יחזור לזמנים שבסדר העלייה.', 'איפוס', () => { store.resetOffsets(); render(); showToast('הכיול אופס'); });
+    else if (b.id === 'clear-notes') askConfirm('מחיקת הערות וערעורים', 'כל ההערות והערעורים יימחקו מהאייפד. כדאי לייצא קודם.', 'מחיקה', () => { store.clearNotesAppeals(); render(); showToast('נמחק'); });
+    else if (b.id === 'logout-btn') askConfirm('יציאה', 'בכניסה הבאה תצטרך להזין את הקוד שוב. ההערות והכיולים נשארים באייפד.', 'יציאה', () => { store.logout(); location.href = './'; }); else if (b.id === 'copy-all-btn') {
       copy([...store.appeals().map(appealText), ...store.notes().map(n => `${n.short} · ${round(n.round)?.title} · ${fmtClock(n.at)} · ${n.ctx}\n${n.text}`)].join('\n\n'));
     } else if (b.id === 'custom-btn') { $('#custom-form').hidden = !$('#custom-form').hidden; }
     else if (b.id === 'reset-btn') { store.setOffset(current, 0); render(); }
     else if (b.id === 'manual-btn') openManual();
     else if (b.id === 'sim-btn') openSim();
     else if (b.id === 'start-btn') {
-      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* Safari 16.4+ only */ }
-      try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch { audio = null; }
+      ensureAudio();
       chime(); keepAwake();
       $('#start-bar').hidden = true;
     }
   });
+  $('#settings-form').addEventListener('change', e => {
+    const el = e.target;
+    if (el.dataset.mineK != null) {
+      store.toggleMine($('#mine-round').value, Number(el.dataset.mineK), !el.checked, !!el.dataset.base);
+      renderMineList(); for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); return;
+    }
+    if (el.id === 'mine-round') { renderMineList(); return; }
+    if (!el.dataset.set) return;
+    const v = el.type === 'checkbox' ? el.checked : el.type === 'range' || el.dataset.num != null ? Number(el.value) : el.value;
+    if (el.type === 'radio' && !el.checked) return;
+    store.setSetting(el.dataset.set, v);
+    applySettings(); render();
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applySettings);
+  applySettings();
   $('#custom-form').addEventListener('submit', e => {
     e.preventDefault();
     const min = parseFloat($('#custom-min').value);

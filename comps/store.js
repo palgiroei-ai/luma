@@ -3,7 +3,14 @@
 // Simulation (?at=…) uses its own key so demo notes/offsets never mix with the real competition.
 const KEY = new URLSearchParams(location.search).get('at') ? 'comps.sim.v1' : 'comps.v1';
 const CODE_KEY = 'comps.code';
-const blank = () => ({ offsets: {}, notes: [], appeals: [], fired: {}, code: null });
+export const DEFAULT_SETTINGS = {
+  alerts: { w2: false, w1: true, m2: false, m1: true, transfer: false },
+  sound: { on: true, vol: 0.6, tone: 'chime' },
+  step: 15,          // calibration step, seconds
+  lock: false,       // calibration locked
+  theme: 'light',    // light | dark | auto
+};
+const blank = () => ({ offsets: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {} });
 
 let state = blank();
 try { state = { ...blank(), ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { /* keep blank */ }
@@ -25,5 +32,26 @@ export const store = {
   deleteAppeal(id) { state.appeals = state.appeals.filter(a => a.id !== id); save(); },
   wasFired(key) { return !!state.fired[key]; },
   markFired(key) { state.fired[key] = Date.now(); save(); },
+  get settings() {
+    const st = state.settings || {};
+    return { ...DEFAULT_SETTINGS, ...st, alerts: { ...DEFAULT_SETTINGS.alerts, ...st.alerts }, sound: { ...DEFAULT_SETTINGS.sound, ...st.sound } };
+  },
+  setSetting(path, value) {
+    const [a, b] = path.split('.');
+    state.settings = state.settings || {};
+    if (b) state.settings[a] = { ...(state.settings[a] || {}), [b]: value }; else state.settings[a] = value;
+    save();
+  },
+  // per-round adjustments to "my athletes": slot indexes added / removed by the coach
+  mineAdd(roundId) { return state.mineAdd[roundId] || []; },
+  mineDel(roundId) { return state.mineDel[roundId] || []; },
+  toggleMine(roundId, k, isMineNow, isBase) {
+    const add = new Set(this.mineAdd(roundId)), del = new Set(this.mineDel(roundId));
+    if (isMineNow) { add.delete(k); if (isBase) del.add(k); } else { del.delete(k); if (!isBase) add.add(k); }
+    state.mineAdd[roundId] = [...add]; state.mineDel[roundId] = [...del]; save();
+  },
+  resetOffsets() { state.offsets = {}; save(); },
+  clearNotesAppeals() { state.notes = []; state.appeals = []; save(); },
+  logout() { try { localStorage.removeItem(CODE_KEY); } catch { /* ignore */ } state.code = null; save(); },
   exportAll() { return JSON.stringify({ notes: state.notes, appeals: state.appeals, offsets: state.offsets }, null, 2); },
 };

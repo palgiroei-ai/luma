@@ -45,6 +45,7 @@
       <p class="muted" id="round-sub"></p>
     </div>
     <div class="clock" id="clock" aria-label="שעה"></div>
+    <button type="button" class="gear" id="settings-btn" aria-label="הגדרות">⚙︎</button>
     <a class="powered" href="https://luma.palgitraining.com/" target="_blank" rel="noopener" aria-label="Powered by LUMA">
       <span class="powered-by" lang="en">Powered by</span>
       <span class="brand-row"><img class="mark" src="mark.svg" alt=""><span class="wordmark">LUMA</span></span>
@@ -78,9 +79,9 @@
         <div class="calib" aria-label="כיול שעון">
           <div class="calib-row">
             <button type="button" class="cbtn" data-adj="-slot">מקדים חלון</button>
-            <button type="button" class="cbtn" data-adj="-15">מקדים 15ש׳</button>
+            <button type="button" class="cbtn" data-adj="-step" id="adj-minus">מקדים 15ש׳</button>
             <button type="button" class="cbtn cbtn-main" data-adj="now">החלון מתחיל עכשיו</button>
-            <button type="button" class="cbtn" data-adj="+15">מאחר 15ש׳</button>
+            <button type="button" class="cbtn" data-adj="+step" id="adj-plus">מאחר 15ש׳</button>
             <button type="button" class="cbtn" data-adj="+slot">מאחר חלון</button>
           </div>
           <div class="calib-row small">
@@ -88,6 +89,7 @@
             <button type="button" class="link" id="custom-btn">זמן לבחירה</button>
             <button type="button" class="link" id="manual-btn">שעת התחלה ידנית</button>
             <button type="button" class="link" id="reset-btn">איפוס</button>
+            <button type="button" class="link" id="lock-btn"></button>
           </div>
           <form class="custom" id="custom-form" hidden>
             <label>הזזה בדקות <input type="number" step="0.25" id="custom-min" inputmode="decimal" placeholder="2 / -1.5"></label>
@@ -127,6 +129,80 @@
       <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
       <button class="btn btn-primary" value="save">שמירה</button>
     </div>
+  </form>
+</dialog>
+
+<dialog id="settings-dlg" class="dlg dlg-wide">
+  <form method="dialog" id="settings-form">
+    <div class="set-head"><h2>הגדרות</h2><button class="btn btn-sm btn-primary" value="close">סגירה</button></div>
+
+    <section class="set">
+      <h3>התראות לספורטאים שלי</h3>
+      <div class="chips">
+        <label><input type="checkbox" data-set="alerts.w2"> 2 חלונות לפני</label>
+        <label><input type="checkbox" data-set="alerts.w1"> חלון לפני</label>
+        <label><input type="checkbox" data-set="alerts.m2"> 2 דקות לפני</label>
+        <label><input type="checkbox" data-set="alerts.m1"> דקה לפני</label>
+        <label><input type="checkbox" data-set="alerts.transfer"> מעבר לנורמן</label>
+      </div>
+    </section>
+
+    <section class="set">
+      <h3>צליל</h3>
+      <div class="row">
+        <label class="sw"><input type="checkbox" data-set="sound.on"> צליל פעיל</label>
+        <label>עוצמה <input type="range" min="0.1" max="1" step="0.1" data-set="sound.vol"></label>
+        <label>צליל <select data-set="sound.tone"><option value="chime">פעמון</option><option value="beep">ביפים</option><option value="alarm">אזעקה</option></select></label>
+        <button type="button" class="btn btn-sm btn-ghost" id="test-sound">בדיקת צליל</button>
+      </div>
+      <p class="muted small">באייפד: מתג השקט ועוצמת המכשיר משפיעים. אחרי פתיחה לחץ "התחל מעקב".</p>
+    </section>
+
+    <section class="set">
+      <h3>כיול</h3>
+      <div class="row">
+        <label>צעד כיול <select data-set="step" data-num><option value="5">5 ש׳</option><option value="10">10 ש׳</option><option value="15">15 ש׳</option><option value="30">30 ש׳</option></select></label>
+        <label class="sw"><input type="checkbox" data-set="lock"> נעילת כיול (מונע לחיצות בטעות)</label>
+        <button type="button" class="btn btn-sm btn-ghost" id="reset-all">איפוס כיול בכל הראונדים</button>
+      </div>
+    </section>
+
+    <section class="set">
+      <h3>הספורטאים שלי בראונד</h3>
+      <label>ראונד <select id="mine-round"></select></label>
+      <div class="mine-list" id="mine-list"></div>
+    </section>
+
+    <section class="set">
+      <h3>מראה</h3>
+      <div class="chips">
+        <label><input type="radio" name="theme" value="light" data-set="theme"> בהיר</label>
+        <label><input type="radio" name="theme" value="dark" data-set="theme"> כהה</label>
+        <label><input type="radio" name="theme" value="auto" data-set="theme"> לפי האייפד</label>
+      </div>
+    </section>
+
+    <section class="set">
+      <h3>נתונים</h3>
+      <div class="row">
+        <button type="button" class="btn btn-sm btn-ghost" id="export-btn2">ייצוא הערות וערעורים</button>
+        <button type="button" class="btn btn-sm btn-ghost danger" id="clear-notes">מחיקת כל ההערות והערעורים</button>
+      </div>
+    </section>
+
+    <section class="set">
+      <h3>עדכונים</h3>
+      <p class="small" id="version-info"></p>
+      <div class="row">
+        <button type="button" class="btn btn-sm btn-ghost" id="check-update">בדוק עדכונים</button>
+        <span class="small" id="update-msg"></span>
+      </div>
+    </section>
+
+    <section class="set">
+      <h3>חשבון</h3>
+      <button type="button" class="btn btn-sm btn-ghost danger" id="logout-btn">יציאה (דורש קוד מחדש)</button>
+    </section>
   </form>
 </dialog>
 

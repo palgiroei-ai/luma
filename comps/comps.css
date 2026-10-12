@@ -247,3 +247,40 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   .h-grid { grid-template-columns: 1fr; }
 }
 .next li { min-width: 0; overflow: hidden; }
+
+/* settings */
+.gear { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border); background: var(--card); font-size: 22px; cursor: pointer; color: var(--navy); }
+.dlg-wide { width: min(720px, calc(100vw - 24px)); max-height: calc(100vh - 40px); }
+.set-head { display: flex; align-items: center; justify-content: space-between; position: sticky; top: -20px; background: var(--card); padding: 4px 0 8px; z-index: 1; }
+.set { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
+.set h3 { font-size: 15px; font-weight: 800; }
+.set .row, .set .chips { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.set .chips label, .set .sw { display: flex; flex-direction: row; align-items: center; gap: 6px; font-weight: 500; background: var(--chalk); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; }
+.set .row > label:not(.sw) { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.set input[type=checkbox], .set input[type=radio] { width: 20px; height: 20px; accent-color: var(--navy); }
+.set select { width: auto; }
+.set input[type=range] { width: 140px; padding: 0; }
+.mine-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px; max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
+.mine-list label { display: flex; flex-direction: row; gap: 6px; align-items: center; font-weight: 400; padding: 4px 6px; border-radius: 6px; }
+.mine-list label.on { background: var(--copper-bg); font-weight: 700; }
+.btn.danger { color: var(--danger); border-color: #F0C4C0; }
+.cbtn:disabled { opacity: .45; cursor: not-allowed; }
+.calib-locked .sync-btn:not(.appeal-btn) { opacity: .4; }
+
+/* dark theme */
+:root[data-theme="dark"] {
+  --chalk: #0F1724; --navy: #E8EDF5; --navy-2: #C9D3E3; --card: #18222F; --border: #2A3646; --line: #222D3B;
+  --muted: #9AA6B6; --copper: #D08245; --copper-text: #F0B27E; --copper-bg: #3A2A1D; --danger: #FF6B5E; --danger-bg: #3A1F1E;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+:root[data-theme="dark"] .btn-primary, :root[data-theme="dark"] .cbtn-main, :root[data-theme="dark"] .tabs button[aria-pressed="true"],
+:root[data-theme="dark"] .home-tab[aria-pressed="true"], :root[data-theme="dark"] .seg button[aria-pressed="true"] { background: #E8EDF5; color: #0F1724; border-color: #E8EDF5; }
+:root[data-theme="dark"] .lane.mine { color: #fff; }
+:root[data-theme="dark"] .ath.boulder { background: #2A2118; }
+:root[data-theme="dark"] .top-logo, :root[data-theme="dark"] .gate-logo { filter: invert(1) hue-rotate(180deg) brightness(1.1); }
+:root[data-theme="dark"] .toast { background: #E8EDF5; color: #0F1724; }
+:root[data-theme="dark"] .sim-bar { background: #26385A; }
+:root[data-theme="dark"] .appeal-btn, :root[data-theme="dark"] .btn-appeal { border-color: #5A2C29; }
+:root[data-theme="dark"] .sim-bar .btn-light { background: #fff; color: #0F1724; }
+:root[data-theme="dark"] .mark { filter: invert(1) hue-rotate(180deg) brightness(1.2); }

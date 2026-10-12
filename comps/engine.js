@@ -90,3 +90,16 @@ export function syncSlotNow(round, k, nowMs) {
 export function syncManualStart(round, startMs) {
   return startMs - roundStart(round);
 }
+
+// ---- alerts ----
+// prefs: { w2, w1, m2, m1, transfer } booleans. Each timed alert stays "due" until the next chosen one
+// (so opening the app late shows only the most relevant alert), the last one until the athlete starts.
+const LEADS = [['w2', r => 2 * r.slotSec * 1000], ['w1', r => r.slotSec * 1000], ['m2', () => 120000], ['m1', () => 60000]];
+
+export function alertPlan(round, k, offsetMs, prefs, transferMs = null) {
+  const start = slotStartMs(round, k, offsetMs);
+  const chosen = LEADS.filter(([t]) => prefs[t]).map(([t, f]) => ({ type: t, lead: f(round) })).sort((a, b) => b.lead - a.lead);
+  const plan = chosen.map((c, i) => ({ type: c.type, at: start - c.lead, until: i + 1 < chosen.length ? start - chosen[i + 1].lead : start }));
+  if (prefs.transfer && transferMs != null) plan.unshift({ type: 'transfer', at: transferMs + offsetMs, until: Math.min(start, transferMs + offsetMs + 10 * 60000) });
+  return plan;
+}
