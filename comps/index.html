@@ -148,6 +148,17 @@
     </section>
 
     <section class="set">
+      <h3>התראות גם כשהאפליקציה סגורה</h3>
+      <div class="row">
+        <button type="button" class="push-switch" role="switch" id="push-toggle" aria-checked="false" aria-label="התראות על מסך נעול"><span class="push-switch-knob"></span></button>
+        <span>התראות על מסך נעול</span>
+        <button type="button" class="btn btn-sm btn-ghost" id="push-test" hidden>שלח התראת ניסיון</button>
+      </div>
+      <p class="small" id="push-state"></p>
+      <p class="muted small">מגיעות גם כשהאייפד נעול או באפליקציה אחרת · צריך אינטרנט (הסים עוזר) · דיוק של כמה שניות. שינוי כיול נשלח לשרת כשיש חיבור.</p>
+    </section>
+
+    <section class="set">
       <h3>צליל</h3>
       <div class="row">
         <label class="sw"><input type="checkbox" data-set="sound.on"> צליל פעיל</label>

@@ -1,5 +1,5 @@
 // Offline support: page files cache-first; data.enc.json network-first (new start lists win when online).
-const CACHE = 'comps-v2';
+const CACHE = 'comps-v3';
 const TIMEOUT_MS = 3000; // weak hall Wi-Fi: don't hang on a stalled network, use the cache
 const FILES = ['./', 'index.html', 'app.js', 'engine.js', 'store.js', 'decrypt.js', 'comps.css', 'logo-palgitraining.svg', 'mark.svg', 'icon-180.png', 'manifest.webmanifest', 'data.enc.json'];
 
@@ -30,4 +30,20 @@ self.addEventListener('fetch', e => {
     if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
     return res;
   })));
+});
+
+// Lock-screen alerts (comp-push Worker). Every push shows a notification (iOS requires it).
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'מעקב ראונד', {
+    body: d.body || '', tag: d.tag || undefined, icon: 'icon-180.png', badge: 'icon-180.png', lang: 'he', dir: 'rtl', data: { url: './' },
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) if ('focus' in c) return c.focus();
+    return self.clients.openWindow('./');
+  }));
 });

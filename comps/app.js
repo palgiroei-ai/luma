@@ -2,7 +2,7 @@ import { decryptJSON } from './decrypt.js';
 import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan } from './engine.js';
 import { store } from './store.js';
 
-export const APP_VERSION = '1.1.1';
+export const APP_VERSION = '1.2.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -314,8 +314,10 @@ function showAlert(text, cls) {
   chime();
 }
 
-function checkAlerts() {
-  const t = now();
+// Every alert for my athletes in all rounds (same list drives the in-app banner and the lock-screen push).
+const ALERT_LBL = { w2: '2 חלונות', w1: 'חלון אחד', m2: '2 דקות', m1: 'דקה' };
+function alertEntries() {
+  const out = [];
   for (const r of DATA.rounds) {
     for (const m of mineOf(r.id)) {
       const startMs = slotStartMs(r, m.k, off(r.id));
@@ -325,16 +327,117 @@ function checkAlerts() {
       // clock recalibrated); a recalibration by ≥ half a window re-arms it at the new time.
       for (const a of alertPlan(r, m.k, off(r.id), store.settings.alerts, transferMs)) {
         const key = `${r.id}:${m.k}:${a.type}:${Math.round(off(r.id) / (r.slotSec * 1000))}`;
-        if (t >= a.at && t < a.until && !fired.was(key)) {
-          fired.mark(key);
-          const lbl = { w2: '2 חלונות', w1: 'חלון אחד', m2: '2 דקות', m1: 'דקה' }[a.type];
-          showAlert(a.type === 'transfer'
-            ? `מעבר לנורמן: ${m.short} (#${s.order}) · עולה ב-${fmtClock(startMs)}`
-            : `${lbl}: ${m.short} (#${s.order}, גב ${s.bib}) עולה לבולדר 1 ב-${fmtClock(startMs)}`, a.type === 'm1' || a.type === 'm2' ? 'now' : 'soon');
-        }
+        const text = a.type === 'transfer'
+          ? `מעבר לנורמן: ${m.short} (#${s.order}) · עולה ב-${fmtClock(startMs)}`
+          : `${ALERT_LBL[a.type]}: ${m.short} (#${s.order}, גב ${s.bib}) עולה לבולדר 1 ב-${fmtClock(startMs)}`;
+        out.push({ key, at: a.at, until: a.until, text, cls: a.type === 'm1' || a.type === 'm2' ? 'now' : 'soon',
+          title: a.type === 'transfer' ? `${m.short} · מעבר לנורמן` : `${m.short} · עוד ${ALERT_LBL[a.type]}`,
+          body: `${text} · ${r.title}` });
       }
     }
   }
+  return out;
+}
+
+function checkAlerts() {
+  const t = now();
+  for (const a of alertEntries()) {
+    if (t >= a.at && t < a.until && !fired.was(a.key)) { fired.mark(a.key); showAlert(a.text, a.cls); }
+  }
+}
+
+// ---- lock-screen alerts (Web Push via the comp-push Worker) ----
+// The plan is sent whenever it changes (settings, calibration, my athletes); the Worker sends each alert on time
+// even when the app is closed. Needs the Home Screen app on iPadOS 16.4+ and a connection when the alert fires.
+const PUSH_URL = 'https://comp-push.palgiacademy.workers.dev';
+let pushKey = null, pushSent = '', pushNextTry = 0;
+async function pushHeaders() {
+  if (!pushKey) {
+    const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('comp-push:' + store.code));
+    pushKey = [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return { 'Content-Type': 'application/json', 'X-Comp-Key': pushKey };
+}
+async function pushCall(path, body) {
+  const res = await fetch(PUSH_URL + path, { method: 'POST', headers: await pushHeaders(), body: JSON.stringify({ device: store.push.device, ...body }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || String(res.status));
+  return data;
+}
+function pushEnv() {
+  const ua = navigator.userAgent || '';
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  if (SIM_AT != null) return 'sim';
+  if (ios && !standalone) return 'ios-install';
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') return 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  return 'ready';
+}
+async function syncPush(force = false) {
+  if (!store.push.on || pushEnv() !== 'ready' || Notification.permission !== 'granted') return;
+  const t = Date.now();
+  if (!force && t < pushNextTry) return;
+  const alerts = alertEntries().filter(a => a.until > t).map(({ key, at, until, title, body }) => ({ key, at, until, title, body }));
+  const sig = JSON.stringify(alerts);
+  if (!force && sig === pushSent) return;
+  pushNextTry = t + 5000;
+  try { await pushCall('/schedule', { alerts }); pushSent = sig; renderPushState(); }
+  catch (e) {
+    pushNextTry = t + 30000;
+    if (e.message === 'not subscribed') await pushSubscribe().catch(() => {}); // server lost us: subscribe again
+  }
+}
+async function pushSubscribe() {
+  const reg = await navigator.serviceWorker.ready;
+  const { publicKey } = await (await fetch(PUSH_URL + '/key')).json();
+  const b64 = publicKey.replace(/-/g, '+').replace(/_/g, '/');
+  const key = Uint8Array.from(atob(b64 + '==='.slice((b64.length + 3) % 4)), c => c.charCodeAt(0));
+  const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+  await pushCall('/subscribe', { sub: sub.toJSON() });
+}
+async function pushEnable() {
+  const perm = Notification.requestPermission(); // must start inside the tap (iOS)
+  store.setPush(true);
+  try {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+    if (await perm !== 'granted') throw new Error('perm');
+    await pushSubscribe();
+    pushSent = ''; await syncPush(true);
+    showToast('התראות על מסך נעול הופעלו ✓');
+  } catch (e) {
+    store.setPush(false);
+    showToast(e.message === 'perm' ? 'לא אושרו התראות. אפשר לאשר בהגדרות האייפד → התראות → מעקב ראונד' : 'אין חיבור לשרת ההתראות. נסה שוב.');
+  }
+  renderPushState();
+}
+async function pushDisable() {
+  store.setPush(false);
+  try { await pushCall('/unsubscribe', {}); } catch { /* offline: the server drops it when the push fails */ }
+  try { await (await (await navigator.serviceWorker.ready).pushManager.getSubscription())?.unsubscribe(); } catch { /* ignore */ }
+  pushSent = ''; renderPushState();
+}
+async function renderPushState() {
+  const box = $('#push-state'); if (!box) return;
+  const env = pushEnv(), on = store.push.on && env === 'ready';
+  $('#push-toggle').setAttribute('aria-checked', String(on));
+  $('#push-toggle').disabled = env !== 'ready';
+  $('#push-test').hidden = !on;
+  const msg = {
+    sim: 'לא זמין במצב הדמיה.',
+    'ios-install': 'עובד רק מהאייקון במסך הבית: בספארי לחץ שתף ← "הוסף למסך הבית", ופתח משם.',
+    unsupported: 'המכשיר לא תומך בהתראות (צריך iPadOS 16.4 ומעלה).',
+    denied: 'ההתראות חסומות: הגדרות האייפד ← התראות ← מעקב ראונד ← אפשר.',
+  }[env];
+  if (msg) { box.textContent = msg; return; }
+  if (!on) { box.textContent = 'כבוי · ההתראות מופיעות רק כשהאפליקציה פתוחה.'; return; }
+  box.textContent = pushSent ? 'פעיל ✓ · בודק בשרת…' : 'פעיל · ממתין לחיבור לשרת…';
+  try {
+    const st = await (await fetch(`${PUSH_URL}/status?device=${encodeURIComponent(store.push.device)}`, { headers: await pushHeaders() })).json();
+    const serverOk = !st.pending || st.alarm != null; // the Worker's alarm is armed for the next alert
+    box.textContent = !st.subscribed ? 'פעיל · נרשם מחדש לשרת…'
+      : `פעיל ✓ · ${st.pending} התראות מתוזמנות${st.next ? ` · הבאה ${fmtHM(st.next.at)} (${st.next.title})` : ''}${serverOk ? ' · שרת תקין' : ' · ⚠︎ שרת ההתראות לא מגיב כרגע'}`;
+  } catch { box.textContent = 'פעיל · אין חיבור לשרת כרגע (ההתראות שכבר נשלחו לשרת יגיעו).'; }
 }
 
 let wakeLock = null;
@@ -504,6 +607,7 @@ function openSettings() {
   renderMineList();
   $('#version-info').textContent = `גרסת אפליקציה ${APP_VERSION} · סדרי עלייה עודכנו ${new Date(DATA.builtAt).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}`;
   $('#update-msg').textContent = '';
+  renderPushState();
   $('#settings-dlg').showModal();
 }
 
@@ -558,6 +662,8 @@ function start() {
     else if (b.id === 'test-sound') { ensureAudio(); chime(true); }
     else if (b.id === 'lock-btn') { store.setSetting('lock', !store.settings.lock); applySettings(); }
     else if (b.id === 'check-update') checkUpdate();
+    else if (b.id === 'push-toggle') { if (store.push.on && pushEnv() === 'ready') pushDisable(); else pushEnable(); }
+    else if (b.id === 'push-test') pushCall('/test', {}).then(r => showToast(r.ok ? 'נשלחה התראת ניסיון · נעל את האייפד ובדוק' : 'השליחה נכשלה')).catch(() => showToast('אין חיבור לשרת ההתראות'));
     else if (b.id === 'reset-all') askConfirm('איפוס כיול', 'הכיול יתאפס בכל הראונדים, והשעון יחזור לזמנים שבסדר העלייה.', 'איפוס', () => { store.resetOffsets(); render(); showToast('הכיול אופס'); });
     else if (b.id === 'clear-notes') askConfirm('מחיקת הערות וערעורים', 'כל ההערות והערעורים יימחקו מהאייפד. כדאי לייצא קודם.', 'מחיקה', () => { store.clearNotesAppeals(); render(); showToast('נמחק'); });
     else if (b.id === 'logout-btn') askConfirm('יציאה', 'בכניסה הבאה תצטרך להזין את הקוד שוב. ההערות והכיולים נשארים באייפד.', 'יציאה', () => { store.logout(); location.href = './'; }); else if (b.id === 'copy-all-btn') {
@@ -599,6 +705,8 @@ function start() {
   });
   render();
   setInterval(render, 250);
+  setInterval(() => syncPush(), 5000); syncPush(true);
+  addEventListener('online', () => syncPush(true));
   if ('serviceWorker' in navigator && SIM_AT == null) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 

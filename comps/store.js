@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS = {
   lock: true,        // calibration locked by default (Roei 2026-10-12); unlock in settings or the board
   theme: 'light',    // light | dark | auto
 };
-const blank = () => ({ offsets: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {} });
+const blank = () => ({ offsets: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {}, push: { on: false, device: null } });
 
 let state = blank();
 try { state = { ...blank(), ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { /* keep blank */ }
@@ -49,6 +49,12 @@ export const store = {
     const add = new Set(this.mineAdd(roundId)), del = new Set(this.mineDel(roundId));
     if (isMineNow) { add.delete(k); if (isBase) del.add(k); } else { del.delete(k); if (!isBase) add.add(k); }
     state.mineAdd[roundId] = [...add]; state.mineDel[roundId] = [...del]; save();
+  },
+  // lock-screen alerts (Web Push): a random id for this iPad + whether the coach turned it on
+  get push() { return state.push || { on: false, device: null }; },
+  setPush(on) {
+    const device = state.push?.device || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+    state.push = { on, device }; save();
   },
   resetOffsets() { state.offsets = {}; save(); },
   clearNotesAppeals() { state.notes = []; state.appeals = []; save(); },
