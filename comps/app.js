@@ -181,13 +181,14 @@ function renderMine(r) {
 function renderAll(r) {
   const t = now(); const mk = mineK(r.id);
   if (!r.slots.length) { patch($('#view-all'), '<p class="muted">סדר העלייה עוד לא התקבל.</p>'); return; }
-  patch($('#view-all'), `<table class="full"><thead><tr><th>סדר</th><th>גב</th><th>שם</th><th>עלייה</th><th>מצב</th><th></th></tr></thead><tbody>${
+  patch($('#view-all'), `<p class="muted small hint">סנכרון לפי מי שמטפס: לחץ "מתחיל עכשיו" ליד המתחרה שעולה עכשיו לבולדר 1. ערעור אפשר על כל מתחרה.</p><table class="full"><thead><tr><th>סדר</th><th>גב</th><th>שם</th><th>עלייה</th><th>מצב</th><th></th></tr></thead><tbody>${
     r.slots.map((s, k) => {
       if (!s) return `<tr class="empty-row"><td colspan="3">חלון ריק</td><td>${fmtClock(slotStartMs(r, k, off(r.id)))}</td><td></td><td></td></tr>`;
       const st = athleteStatus(r, k, t, off(r.id));
       return `<tr class="${mk.has(k) ? 'mine' : ''} st-${st.kind}"><td>${s.order}</td><td>${s.bib}</td><td>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</td>
         <td>${fmtClock(st.startMs)}</td><td>${statusText(r, st)}</td>
-        <td><button type="button" class="sync-btn" data-sync="${k}">מתחיל עכשיו</button></td></tr>`;
+        <td class="row-actions"><button type="button" class="sync-btn" data-sync="${k}">מתחיל עכשיו</button>
+          <button type="button" class="sync-btn appeal-btn" data-appeal="${k}">ערעור</button></td></tr>`;
     }).join('')}</tbody></table>`);
 }
 
@@ -307,14 +308,15 @@ function openAppeal(k) {
   const r = round(current); const s = r.slots[k];
   const st = athleteStatus(r, k, now(), off(r.id));
   const def = st.kind === 'boulder' ? st.boulder : st.kind === 'rest' ? st.from : st.kind === 'waiting' ? 1 : r.boulders;
-  $('#appeal-who').textContent = `${shortOf(r.id, k)} · ${s.name} · גב ${s.bib} · ${r.title}`;
+  const who = shortOf(r.id, k) || s.name;
+  $('#appeal-who').textContent = `${shortOf(r.id, k) ? `${who} · ` : ''}${s.name} · #${s.order} · גב ${s.bib} · ${r.title}`;
   $('#appeal-boulder').innerHTML = Array.from({ length: r.boulders }, (_, i) => `<option ${i + 1 === def ? 'selected' : ''}>${i + 1}</option>`).join('');
   $('#appeal-time').value = fmtClock(now());
   $('#appeal-text').value = '';
   const dlg = $('#appeal-dlg'); dlg.returnValue = '';
   dlg.onclose = () => {
     if (dlg.returnValue !== 'save' || !$('#appeal-text').value.trim()) return;
-    store.addAppeal({ round: r.id, k, short: shortOf(r.id, k), name: s.name, bib: s.bib, order: s.order, at: now(),
+    store.addAppeal({ round: r.id, k, short: who, name: s.name, bib: s.bib, order: s.order, at: now(),
       boulder: $('#appeal-boulder').value, time: $('#appeal-time').value, text: $('#appeal-text').value.trim() });
     showToast('הערעור נשמר · בלשונית "הערות וערעורים"'); render();
   };

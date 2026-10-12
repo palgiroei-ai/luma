@@ -209,4 +209,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .sim-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 16px 8px; padding: 10px 14px; border-radius: 12px; background: #2B3F5E; color: #fff; }
 .sim-bar .btn-light { background: #fff; color: var(--navy); text-decoration: none; margin-inline-start: auto; }
 .full .sync-btn { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
-.full tr.st-done .sync-btn { opacity: .5; }
+.full tr.st-done .sync-btn:not(.appeal-btn) { opacity: .5; }
+.full .row-actions { white-space: nowrap; display: flex; gap: 6px; }
+.full .appeal-btn { background: var(--danger-bg); color: var(--danger); border-color: #F0C4C0; }
+.hint { margin: 0 0 8px; }
