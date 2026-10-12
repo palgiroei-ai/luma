@@ -5,6 +5,8 @@ Climbing Academy Hub app — real app screenshots (fictional sample data) inside
 each tap, a Hebrew caption per step, chapters and a "try it yourself" mode. Self-contained (images are
 data: URIs, ~2–2.5MB each). Generated from the app by the capture/build scripts kept with the app
 (palgiroei-ai/wingate-academy-hub); regenerate there when the app's screens change.
+Staff guides (2026-10-12): `fitness-coach.html`, `manager.html`, `route-setter.html` — same generator (shared chapters in
+`tools/guide/staff-common.js`), ~3.7–4.2MB each, no `?demo` script (not linked from the site, only from the app's settings).
 
 ## Site: "נסו בעצמכם" instead of drawn phones (2026-10-10)
 Roei: the site was too long and the three drawn demo phones (hero + two showcases) added little. Removed all three
