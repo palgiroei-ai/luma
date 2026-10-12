@@ -2,7 +2,7 @@ import { decryptJSON } from './decrypt.js';
 import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan } from './engine.js';
 import { store } from './store.js';
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -423,6 +423,7 @@ async function renderPushState() {
   $('#push-toggle').setAttribute('aria-checked', String(on));
   $('#push-toggle').disabled = env !== 'ready';
   $('#push-test').hidden = !on;
+  if ($('#v-push')) $('#v-push').textContent = on ? 'פעיל' : 'כבוי';
   const msg = {
     sim: 'לא זמין במצב הדמיה.',
     'ios-install': 'עובד רק מהאייקון במסך הבית: בספארי לחץ שתף ← "הוסף למסך הבית", ופתח משם.',
@@ -578,10 +579,15 @@ function showToast(text) {
 }
 
 // ---- settings ----
+const THEME_BG = { light: '#F5F1EA', plum: '#1A1024', charcoal: '#141216', black: '#000000' };
+const DARK_NAMES = { plum: 'שזיף', charcoal: 'פחם', black: 'שחור' };
 function applySettings() {
   const st = store.settings;
-  const theme = st.theme === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : st.theme;
+  const dark = DARK_NAMES[st.dark] ? st.dark : 'plum';
+  const isDark = st.theme === 'dark' || (st.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  const theme = isDark ? dark : 'light';
   document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_BG[theme]);
   $('#adj-minus').textContent = `מקדים ${st.step}ש׳`;
   $('#adj-plus').textContent = `מאחר ${st.step}ש׳`;
   document.querySelectorAll('.cbtn').forEach(b => { b.disabled = st.lock; });
@@ -589,25 +595,51 @@ function applySettings() {
   document.body.classList.toggle('calib-locked', st.lock);
 }
 
+// ---- settings screen (iPhone style, like Wingate): a main list of rows → one page per topic ----
+const PAGE_TITLES = { main: 'הגדרות', alerts: 'מתי להתריע', push: 'מסך נעול', sound: 'צליל', calib: 'כיול', mine: 'הספורטאים שלי', look: 'מראה', data: 'הערות וערעורים', updates: 'עדכונים' };
+function setPage(pg) {
+  document.querySelectorAll('#settings-dlg .ios-page').forEach(el => { el.hidden = el.dataset.pg !== pg; });
+  $('#set-title').textContent = PAGE_TITLES[pg] || 'הגדרות';
+  $('#set-back').hidden = pg === 'main';
+  if (pg === 'main') renderSettingsMain();
+  if (pg === 'push') renderPushState();
+  $('#settings-form').scrollTop = 0; $('#settings-dlg').scrollTop = 0;
+}
+function renderSettingsMain() {
+  const st = store.settings;
+  const al = [['w2', '2 חלונות'], ['w1', 'חלון'], ['m2', '2 דק׳'], ['m1', 'דקה'], ['transfer', 'נורמן']].filter(([k]) => st.alerts[k]).map(([, l]) => l);
+  $('#v-alerts').textContent = al.length ? al.join(' · ') : 'כבוי';
+  $('#v-push').textContent = store.push.on && pushEnv() === 'ready' ? 'פעיל' : 'כבוי';
+  $('#v-sound').textContent = st.sound.on ? { chime: 'פעמון', beep: 'ביפים', alarm: 'אזעקה' }[st.sound.tone] : 'כבוי';
+  $('#v-calib').textContent = `${st.lock ? 'נעול' : 'פתוח'} · ${st.step} ש׳`;
+  $('#v-mine').textContent = `${mineOf(current).length} בראונד`;
+  $('#v-look').textContent = st.theme === 'light' ? 'בהיר' : `${st.theme === 'auto' ? 'לפי המכשיר' : 'כהה'} · ${DARK_NAMES[st.dark] || 'שזיף'}`;
+  const n = store.notes().length + store.appeals().length;
+  $('#v-data').textContent = n ? String(n) : '';
+  $('#v-updates').textContent = APP_VERSION;
+  $('#dark-group').hidden = st.theme === 'light';
+}
+
 function renderMineList() {
   const id = $('#mine-round').value; const r = round(id); const mk = mineK(id);
   const base = new Set((DATA.mine[id] || []).map(m => m.k));
-  $('#mine-list').innerHTML = r.slots.length ? r.slots.map((s, k) => s ? `<label class="${mk.has(k) ? 'on' : ''}">
-    <input type="checkbox" data-mine-k="${k}" data-base="${base.has(k) ? 1 : ''}" ${mk.has(k) ? 'checked' : ''}> #${s.order} ${esc(s.name)}${base.has(k) ? ' <span class="muted small">(Hub)</span>' : ''}</label>` : '').join('')
-    : '<p class="muted small">סדר העלייה עוד לא התקבל.</p>';
+  $('#mine-list').innerHTML = r.slots.length ? r.slots.map((s, k) => s ? `<label class="ios-row${mk.has(k) ? ' on' : ''}">
+    <span class="lbl">#${s.order} ${esc(s.name)}${base.has(k) ? ' <span class="muted small">(Hub)</span>' : ''}</span>
+    <input type="checkbox" class="ios-sw" data-mine-k="${k}" data-base="${base.has(k) ? 1 : ''}" ${mk.has(k) ? 'checked' : ''}></label>` : '').join('')
+    : '<p class="ios-row muted small">סדר העלייה עוד לא התקבל.</p>';
 }
 
 function openSettings() {
   const st = store.settings; const f = $('#settings-form');
   f.querySelectorAll('[data-set]').forEach(el => {
     const [a, b] = el.dataset.set.split('.'); const v = b ? st[a][b] : st[a];
-    if (el.type === 'checkbox') el.checked = !!v; else if (el.type === 'radio') el.checked = el.value === v; else el.value = String(v);
+    if (el.type === 'checkbox') el.checked = !!v; else if (el.type === 'radio') el.checked = el.value === String(v); else el.value = String(v);
   });
   $('#mine-round').innerHTML = DATA.rounds.map(r => `<option value="${r.id}" ${r.id === current ? 'selected' : ''}>${dayLabel(r.date)} · ${esc(r.title)}</option>`).join('');
   renderMineList();
   $('#version-info').textContent = `גרסת אפליקציה ${APP_VERSION} · סדרי עלייה עודכנו ${new Date(DATA.builtAt).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}`;
   $('#update-msg').textContent = '';
-  renderPushState();
+  setPage('main');
   $('#settings-dlg').showModal();
 }
 
@@ -645,6 +677,7 @@ function start() {
   document.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
+    if (d.page) { setPage(d.page); return; }
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; showScreen('round'); }
     else if (b.id === 'home-btn') showScreen('home');
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); }
@@ -689,7 +722,7 @@ function start() {
     const v = el.type === 'checkbox' ? el.checked : el.type === 'range' || el.dataset.num != null ? Number(el.value) : el.value;
     if (el.type === 'radio' && !el.checked) return;
     store.setSetting(el.dataset.set, v);
-    applySettings(); render();
+    applySettings(); renderSettingsMain(); render();
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applySettings);
   applySettings();

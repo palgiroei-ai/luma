@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS = {
   step: 15,          // calibration step, seconds
   lock: true,        // calibration locked by default (Roei 2026-10-12); unlock in settings or the board
   theme: 'light',    // light | dark | auto
+  dark: 'plum',      // dark style like Wingate: plum | charcoal | black
 };
 const blank = () => ({ offsets: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {}, push: { on: false, device: null } });
 

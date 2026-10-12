@@ -16,6 +16,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&family=Jost:wght@500;600&display=swap" rel="stylesheet">
+  <script>
+  // Theme before first paint (no flash): same choice as settings → מראה (store.js key, device-local).
+  (function () {
+    var BG = { light: '#F5F1EA', plum: '#1A1024', charcoal: '#141216', black: '#000000' };
+    try {
+      var key = /[?&]at=/.test(location.search) ? 'comps.sim.v1' : 'comps.v1';
+      var st = (JSON.parse(localStorage.getItem(key) || '{}').settings) || {};
+      var dark = BG[st.dark] && st.dark !== 'light' ? st.dark : 'plum';
+      var sys = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+      var t = st.theme === 'dark' || (st.theme === 'auto' && sys) ? dark : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', BG[t]);
+    } catch (e) { /* storage blocked: light */ }
+  })();
+  </script>
   <link rel="stylesheet" href="comps.css">
   <script type="module" src="app.js"></script>
 </head>
@@ -132,88 +147,117 @@
   </form>
 </dialog>
 
-<dialog id="settings-dlg" class="dlg dlg-wide">
+<dialog id="settings-dlg" class="dlg dlg-wide ios">
   <form method="dialog" id="settings-form">
-    <div class="set-head"><h2>הגדרות</h2><button class="btn btn-sm btn-primary" value="close">סגירה</button></div>
+    <div class="ios-head">
+      <button type="button" class="ios-back" data-page="main" id="set-back" hidden><span class="ios-back-chev"></span>הגדרות</button>
+      <h2 id="set-title">הגדרות</h2>
+      <button class="ios-done" value="close">סיום</button>
+    </div>
 
-    <section class="set">
-      <h3>התראות לספורטאים שלי</h3>
-      <div class="chips">
-        <label><input type="checkbox" data-set="alerts.w2"> 2 חלונות לפני</label>
-        <label><input type="checkbox" data-set="alerts.w1"> חלון לפני</label>
-        <label><input type="checkbox" data-set="alerts.m2"> 2 דקות לפני</label>
-        <label><input type="checkbox" data-set="alerts.m1"> דקה לפני</label>
-        <label><input type="checkbox" data-set="alerts.transfer"> מעבר לנורמן</label>
-      </div>
-    </section>
+    <div class="ios-page" data-pg="main">
+      <div class="ios-group"><p class="ios-gtitle">התראות</p><div class="ios-box">
+        <button type="button" class="ios-row nav" data-page="alerts"><span class="ico">🔔</span><span class="lbl">מתי להתריע</span><span class="val" id="v-alerts"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav" data-page="push"><span class="ico">📲</span><span class="lbl">התראות על מסך נעול</span><span class="val" id="v-push"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav" data-page="sound"><span class="ico">🔊</span><span class="lbl">צליל</span><span class="val" id="v-sound"></span><span class="chev"></span></button>
+      </div></div>
+      <div class="ios-group"><p class="ios-gtitle">תחרות</p><div class="ios-box">
+        <button type="button" class="ios-row nav" data-page="calib"><span class="ico">🎯</span><span class="lbl">כיול</span><span class="val" id="v-calib"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav" data-page="mine"><span class="ico">👥</span><span class="lbl">הספורטאים שלי</span><span class="val" id="v-mine"></span><span class="chev"></span></button>
+      </div></div>
+      <div class="ios-group"><p class="ios-gtitle">כללי</p><div class="ios-box">
+        <button type="button" class="ios-row nav" data-page="look"><span class="ico">🌓</span><span class="lbl">מראה</span><span class="val" id="v-look"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav" data-page="data"><span class="ico">📝</span><span class="lbl">הערות וערעורים</span><span class="val" id="v-data"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav" data-page="updates"><span class="ico">⬆️</span><span class="lbl">עדכונים</span><span class="val" id="v-updates"></span><span class="chev"></span></button>
+      </div></div>
+      <div class="ios-group"><div class="ios-box">
+        <button type="button" class="ios-row danger center" id="logout-btn">יציאה</button>
+      </div><p class="ios-foot">היציאה דורשת קוד בכניסה הבאה. ההערות והכיולים נשארים במכשיר.</p></div>
+    </div>
 
-    <section class="set">
-      <h3>התראות גם כשהאפליקציה סגורה</h3>
-      <div class="row">
-        <button type="button" class="push-switch" role="switch" id="push-toggle" aria-checked="false" aria-label="התראות על מסך נעול"><span class="push-switch-knob"></span></button>
-        <span>התראות על מסך נעול</span>
-        <button type="button" class="btn btn-sm btn-ghost" id="push-test" hidden>שלח התראת ניסיון</button>
-      </div>
-      <p class="small" id="push-state"></p>
-      <p class="muted small">מגיעות גם כשהאייפד נעול או באפליקציה אחרת · צריך אינטרנט (הסים עוזר) · דיוק של כמה שניות. שינוי כיול נשלח לשרת כשיש חיבור.</p>
-    </section>
+    <div class="ios-page" data-pg="alerts" hidden>
+      <div class="ios-group"><p class="ios-gtitle">לפני שספורטאי שלי עולה לבולדר 1</p><div class="ios-box">
+        <label class="ios-row"><span class="lbl">2 חלונות לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.w2"></label>
+        <label class="ios-row"><span class="lbl">חלון לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.w1"></label>
+        <label class="ios-row"><span class="lbl">2 דקות לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.m2"></label>
+        <label class="ios-row"><span class="lbl">דקה לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.m1"></label>
+      </div></div>
+      <div class="ios-group"><div class="ios-box">
+        <label class="ios-row"><span class="lbl">מעבר לנורמן</span><input type="checkbox" class="ios-sw" data-set="alerts.transfer"></label>
+      </div><p class="ios-foot">פתחת את האפליקציה באיחור? מופיעה רק ההתראה הרלוונטית ביותר.</p></div>
+    </div>
 
-    <section class="set">
-      <h3>צליל</h3>
-      <div class="row">
-        <label class="sw"><input type="checkbox" data-set="sound.on"> צליל פעיל</label>
-        <label>עוצמה <input type="range" min="0.1" max="1" step="0.1" data-set="sound.vol"></label>
-        <label>צליל <select data-set="sound.tone"><option value="chime">פעמון</option><option value="beep">ביפים</option><option value="alarm">אזעקה</option></select></label>
-        <button type="button" class="btn btn-sm btn-ghost" id="test-sound">בדיקת צליל</button>
-      </div>
-      <p class="muted small">באייפד: מתג השקט ועוצמת המכשיר משפיעים. אחרי פתיחה לחץ "התחל מעקב".</p>
-    </section>
+    <div class="ios-page" data-pg="push" hidden>
+      <div class="ios-group"><div class="ios-box">
+        <div class="ios-row"><span class="lbl">התראות על מסך נעול</span><button type="button" class="push-switch" role="switch" id="push-toggle" aria-checked="false" aria-label="התראות על מסך נעול"><span class="push-switch-knob"></span></button></div>
+        <button type="button" class="ios-row link" id="push-test" hidden>שלח התראת ניסיון</button>
+      </div><p class="ios-foot" id="push-state"></p></div>
+      <p class="ios-foot">מגיעות גם כשהאייפד נעול או באפליקציה אחרת. צריך אינטרנט ברגע ההתראה (הסים עוזר); בלי קליטה ההתראה נשמרת עד 10 דקות. שינוי כיול נשלח לשרת כשיש חיבור.</p>
+    </div>
 
-    <section class="set">
-      <h3>כיול</h3>
-      <div class="row">
-        <label>צעד כיול <select data-set="step" data-num><option value="5">5 ש׳</option><option value="10">10 ש׳</option><option value="15">15 ש׳</option><option value="30">30 ש׳</option></select></label>
-        <label class="sw"><input type="checkbox" data-set="lock"> נעילת כיול (מונע לחיצות בטעות)</label>
-        <button type="button" class="btn btn-sm btn-ghost" id="reset-all">איפוס כיול בכל הראונדים</button>
-      </div>
-    </section>
+    <div class="ios-page" data-pg="sound" hidden>
+      <div class="ios-group"><div class="ios-box">
+        <label class="ios-row"><span class="lbl">צליל בהתראות</span><input type="checkbox" class="ios-sw" data-set="sound.on"></label>
+        <label class="ios-row"><span class="lbl">עוצמה</span><input type="range" min="0.1" max="1" step="0.1" data-set="sound.vol"></label>
+      </div></div>
+      <div class="ios-group"><p class="ios-gtitle">סוג צליל</p><div class="ios-box">
+        <label class="ios-row check"><span class="lbl">פעמון</span><input type="radio" name="tone" value="chime" data-set="sound.tone"><span class="tick">✓</span></label>
+        <label class="ios-row check"><span class="lbl">ביפים</span><input type="radio" name="tone" value="beep" data-set="sound.tone"><span class="tick">✓</span></label>
+        <label class="ios-row check"><span class="lbl">אזעקה</span><input type="radio" name="tone" value="alarm" data-set="sound.tone"><span class="tick">✓</span></label>
+      </div></div>
+      <div class="ios-group"><div class="ios-box">
+        <button type="button" class="ios-row link" id="test-sound">בדיקת צליל</button>
+      </div><p class="ios-foot">באייפד: מתג השקט ועוצמת המכשיר משפיעים. אחרי פתיחה לחץ "התחל מעקב".</p></div>
+    </div>
 
-    <section class="set">
-      <h3>הספורטאים שלי בראונד</h3>
-      <label>ראונד <select id="mine-round"></select></label>
-      <div class="mine-list" id="mine-list"></div>
-    </section>
+    <div class="ios-page" data-pg="calib" hidden>
+      <div class="ios-group"><div class="ios-box">
+        <label class="ios-row"><span class="lbl">נעילת כיול</span><input type="checkbox" class="ios-sw" data-set="lock"></label>
+      </div><p class="ios-foot">מונע לחיצה בטעות על כפתורי הכיול והסנכרון. אפשר לפתוח גם מהלוח.</p></div>
+      <div class="ios-group"><p class="ios-gtitle">צעד כיול</p><div class="ios-box">
+        <label class="ios-row check"><span class="lbl">5 שניות</span><input type="radio" name="step" value="5" data-set="step" data-num><span class="tick">✓</span></label>
+        <label class="ios-row check"><span class="lbl">10 שניות</span><input type="radio" name="step" value="10" data-set="step" data-num><span class="tick">✓</span></label>
+        <label class="ios-row check"><span class="lbl">15 שניות</span><input type="radio" name="step" value="15" data-set="step" data-num><span class="tick">✓</span></label>
+        <label class="ios-row check"><span class="lbl">30 שניות</span><input type="radio" name="step" value="30" data-set="step" data-num><span class="tick">✓</span></label>
+      </div></div>
+      <div class="ios-group"><div class="ios-box">
+        <button type="button" class="ios-row danger center" id="reset-all">איפוס כיול בכל הראונדים</button>
+      </div></div>
+    </div>
 
-    <section class="set">
-      <h3>מראה</h3>
-      <div class="chips">
-        <label><input type="radio" name="theme" value="light" data-set="theme"> בהיר</label>
-        <label><input type="radio" name="theme" value="dark" data-set="theme"> כהה</label>
-        <label><input type="radio" name="theme" value="auto" data-set="theme"> לפי האייפד</label>
-      </div>
-    </section>
+    <div class="ios-page" data-pg="mine" hidden>
+      <div class="ios-group"><div class="ios-box">
+        <label class="ios-row"><span class="lbl">ראונד</span><select id="mine-round"></select></label>
+      </div></div>
+      <div class="ios-group"><p class="ios-gtitle">מסומנים = הספורטאים שלי (כרטיס + התראות)</p><div class="ios-box mine-list" id="mine-list"></div></div>
+    </div>
 
-    <section class="set">
-      <h3>נתונים</h3>
-      <div class="row">
-        <button type="button" class="btn btn-sm btn-ghost" id="export-btn2">ייצוא הערות וערעורים</button>
-        <button type="button" class="btn btn-sm btn-ghost danger" id="clear-notes">מחיקת כל ההערות והערעורים</button>
-      </div>
-    </section>
+    <div class="ios-page" data-pg="look" hidden>
+      <div class="ios-group"><p class="ios-gtitle">מצב</p><div class="ios-box">
+        <label class="ios-row check"><span class="lbl">בהיר</span><input type="radio" name="theme" value="light" data-set="theme"><span class="tick">✓</span></label>
+        <label class="ios-row check"><span class="lbl">כהה</span><input type="radio" name="theme" value="dark" data-set="theme"><span class="tick">✓</span></label>
+        <label class="ios-row check"><span class="lbl">לפי המכשיר</span><input type="radio" name="theme" value="auto" data-set="theme"><span class="tick">✓</span></label>
+      </div></div>
+      <div class="ios-group" id="dark-group"><p class="ios-gtitle">סגנון כהה</p><div class="ios-box">
+        <label class="ios-row check"><span class="sw-dot" style="--a:#1A1024;--b:#F2ECE3"></span><span class="lbl">שזיף</span><input type="radio" name="dark" value="plum" data-set="dark"><span class="tick">✓</span></label>
+        <label class="ios-row check"><span class="sw-dot" style="--a:#141216;--b:#B39BE0"></span><span class="lbl">פחם</span><input type="radio" name="dark" value="charcoal" data-set="dark"><span class="tick">✓</span></label>
+        <label class="ios-row check"><span class="sw-dot" style="--a:#000000;--b:#E8834A"></span><span class="lbl">שחור</span><input type="radio" name="dark" value="black" data-set="dark"><span class="tick">✓</span></label>
+      </div><p class="ios-foot">כמו באפליקציית וינגייט. נשמר במכשיר הזה.</p></div>
+    </div>
 
-    <section class="set">
-      <h3>עדכונים</h3>
-      <p class="small" id="version-info"></p>
-      <div class="row">
-        <button type="button" class="btn btn-sm btn-ghost" id="check-update">בדוק עדכונים</button>
-        <span class="small" id="update-msg"></span>
-      </div>
-    </section>
+    <div class="ios-page" data-pg="data" hidden>
+      <div class="ios-group"><div class="ios-box">
+        <button type="button" class="ios-row link" id="export-btn2">ייצוא הערות וערעורים</button>
+        <button type="button" class="ios-row danger center" id="clear-notes">מחיקת כל ההערות והערעורים</button>
+      </div><p class="ios-foot">ההערות שמורות רק במכשיר הזה. כדאי לייצא לפני מחיקה.</p></div>
+    </div>
 
-    <section class="set">
-      <h3>חשבון</h3>
-      <button type="button" class="btn btn-sm btn-ghost danger" id="logout-btn">יציאה (דורש קוד מחדש)</button>
-    </section>
+    <div class="ios-page" data-pg="updates" hidden>
+      <div class="ios-group"><div class="ios-box">
+        <div class="ios-row"><span class="lbl" id="version-info"></span></div>
+        <button type="button" class="ios-row link" id="check-update">בדוק עדכונים</button>
+      </div><p class="ios-foot" id="update-msg"></p></div>
+    </div>
   </form>
 </dialog>
 
