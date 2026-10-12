@@ -1,7 +1,7 @@
 // Offline support: page files cache-first; data.enc.json network-first (new start lists win when online).
-const CACHE = 'comps-v4';
+const CACHE = 'comps-v5';
 const TIMEOUT_MS = 3000; // weak hall Wi-Fi: don't hang on a stalled network, use the cache
-const FILES = ['./', 'index.html', 'app.js', 'engine.js', 'store.js', 'decrypt.js', 'comps.css', 'logo-palgitraining.svg', 'mark.svg', 'icon-180.png', 'manifest.webmanifest', 'data.enc.json'];
+const FILES = ['./', 'index.html', 'app.js', 'engine.js', 'store.js', 'sync.js', 'decrypt.js', 'comps.css', 'logo-palgitraining.svg', 'mark.svg', 'icon-180.png', 'manifest.webmanifest', 'data.enc.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -13,7 +13,7 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET') return;
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return; // API calls (sync, push status) always go live
   const networkFirst = url.pathname.endsWith('data.enc.json') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
   if (networkFirst) {
     const cached = () => caches.match(e.request, { ignoreSearch: true });

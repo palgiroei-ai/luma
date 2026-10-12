@@ -416,3 +416,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .ev-main b { font-size: 17px; }
 .ev-side { display: grid; justify-items: end; gap: 4px; text-align: end; }
 .ev-row .chev { width: 8px; height: 8px; flex: none; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(135deg); }
+/* sync page: device name field (iOS-style right-aligned value) */
+.ios-row .ios-text { flex: 1; min-width: 0; max-width: 60%; font: inherit; font-size: 16px; color: var(--muted); text-align: end; background: transparent; border: 0; padding: 4px 0; }
+.ios-row .ios-text:focus { outline: none; color: var(--navy); }
+.log-sync { margin-inline-start: auto; align-self: center; }

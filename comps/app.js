@@ -1,8 +1,9 @@
 import { decryptJSON } from './decrypt.js';
 import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan, climbOverlaps } from './engine.js';
 import { store } from './store.js';
+import { startSync, syncNow, syncState } from './sync.js';
 
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -212,14 +213,15 @@ function renderLog() {
   const notes = store.notes().map(n => ({ ...n, type: 'note' }));
   const appeals = store.appeals().map(a => ({ ...a, type: 'appeal' }));
   const items = [...notes, ...appeals].sort((a, b) => b.at - a.at);
+  const from = i => (store.deviceCount > 1 && store.deviceName(i.dev) ? ` · ${esc(store.deviceName(i.dev))}` : '');
   patch($('#view-log'), `<div class="log-actions"><button type="button" class="btn btn-sm btn-ghost" id="export-btn">ייצוא קובץ</button>
-    <button type="button" class="btn btn-sm btn-ghost" id="copy-all-btn">העתק הכל</button></div>` + (items.length ? items.map(i => {
+    <button type="button" class="btn btn-sm btn-ghost" id="copy-all-btn">העתק הכל</button><span class="muted small log-sync">${esc(syncLabel())}</span></div>` + (items.length ? items.map(i => {
     const r = round(i.round);
-    if (i.type === 'appeal') return `<article class="log card appeal"><header><b>⚑ ערעור · ${esc(i.short)}</b><span class="muted small">${esc(r?.title)} · ${esc(i.time)}</span></header>
+    if (i.type === 'appeal') return `<article class="log card appeal"><header><b>⚑ ערעור · ${esc(i.short)}</b><span class="muted small">${esc(r?.title)} · ${esc(i.time)}${from(i)}</span></header>
       <pre>${esc(appealText(i))}</pre><div class="ath-actions"><button type="button" class="btn btn-sm btn-ghost" data-copy="${i.id}">העתק</button>
       ${navigator.share ? `<button type="button" class="btn btn-sm btn-ghost" data-share="${i.id}">שתף</button>` : ''}
       <button type="button" class="link" data-del-appeal="${i.id}">מחיקה</button></div></article>`;
-    return `<article class="log card"><header><b>📝 ${esc(i.short)}</b><span class="muted small">${esc(r?.title)} · ${fmtClock(i.at)} · ${esc(i.ctx)}</span></header>
+    return `<article class="log card"><header><b>📝 ${esc(i.short)}</b><span class="muted small">${esc(r?.title)} · ${fmtClock(i.at)} · ${esc(i.ctx)}${from(i)}</span></header>
       <p>${esc(i.text)}</p><button type="button" class="link" data-del-note="${i.id}">מחיקה</button></article>`;
   }).join('') : '<p class="muted">עוד אין הערות או ערעורים.</p>'));
 }
@@ -627,6 +629,33 @@ function showToast(text) {
   document.body.append(el); setTimeout(() => el.remove(), 1800);
 }
 
+// ---- sync between the coach's devices (sync.js) ----
+function syncLabel(short = false) {
+  if (SIM_AT != null) return short ? 'כבוי' : 'הדמיה · לא מסונכרן';
+  const n = store.pendingCount();
+  if (n && syncState.ok === false) return `${n} ממתינים לחיבור`;
+  if (n) return short ? 'מסנכרן…' : `${n} שינויים נשלחים…`;
+  if (syncState.ok === true || store.lastSync) return `${short ? '' : 'מסונכרן '}✓ ${fmtHM(syncState.at || store.lastSync)}`;
+  return syncState.ok === false ? 'אין חיבור' : 'מתחבר…';
+}
+function renderSyncState() {
+  if ($('#v-sync')) $('#v-sync').textContent = syncLabel(true);
+  if ($('#sync-state')) $('#sync-state').textContent = syncLabel();
+  if ($('#sync-devices')) {
+    $('#sync-devices').textContent = store.deviceCount > 1 ? `מכשירים: ${[store.devName, ...store.deviceNames()].join(' · ')}` : 'עוד לא התחבר מכשיר נוסף עם הקוד.';
+  }
+  const lg = $('#view-log .log-sync'); if (lg) lg.textContent = syncLabel();
+}
+function onRemote(ch) {
+  for (const x of ['mine', 'all', 'log', 'home']) if ($('#view-' + x)) $('#view-' + x)._html = null;
+  render(); renderSyncState();
+  const other = ch.offsets.filter(o => o.dev && o.dev !== store.device);
+  if (other.length) {
+    const r = round(other[0].round);
+    showToast(`הכיול${r ? ' של ' + r.title : ''} עודכן ממכשיר אחר${store.deviceName(other[0].dev) ? ' (' + store.deviceName(other[0].dev) + ')' : ''}`);
+  }
+}
+
 // ---- settings ----
 const THEME_BG = { light: '#F5F1EA', plum: '#1A1024', charcoal: '#141216', black: '#000000' };
 const DARK_NAMES = { plum: 'שזיף', charcoal: 'פחם', black: 'שחור' };
@@ -645,13 +674,14 @@ function applySettings() {
 }
 
 // ---- settings screen (iPhone style, like Wingate): a main list of rows → one page per topic ----
-const PAGE_TITLES = { main: 'הגדרות', alerts: 'מתי להתריע', push: 'מסך נעול', sound: 'צליל', calib: 'כיול', mine: 'הספורטאים שלי', look: 'מראה', data: 'הערות וערעורים', updates: 'עדכונים' };
+const PAGE_TITLES = { main: 'הגדרות', alerts: 'מתי להתריע', push: 'מסך נעול', sound: 'צליל', calib: 'כיול', mine: 'הספורטאים שלי', look: 'מראה', data: 'הערות וערעורים', sync: 'סנכרון בין מכשירים', updates: 'עדכונים' };
 function setPage(pg) {
   document.querySelectorAll('#settings-dlg .ios-page').forEach(el => { el.hidden = el.dataset.pg !== pg; });
   $('#set-title').textContent = PAGE_TITLES[pg] || 'הגדרות';
   $('#set-back').hidden = pg === 'main';
   if (pg === 'main') renderSettingsMain();
   if (pg === 'push') renderPushState();
+  if (pg === 'sync') { renderSyncState(); syncNow(); }
   $('#settings-form').scrollTop = 0; $('#settings-dlg').scrollTop = 0;
 }
 function renderSettingsMain() {
@@ -666,6 +696,7 @@ function renderSettingsMain() {
   const n = store.notes().length + store.appeals().length;
   $('#v-data').textContent = n ? String(n) : '';
   $('#v-updates').textContent = APP_VERSION;
+  $('#v-sync').textContent = syncLabel(true);
   $('#dark-group').hidden = st.theme === 'light';
 }
 
@@ -685,6 +716,7 @@ function openSettings() {
     const [a, b] = el.dataset.set.split('.'); const v = b ? st[a][b] : st[a];
     if (el.type === 'checkbox') el.checked = !!v; else if (el.type === 'radio') el.checked = el.value === String(v); else el.value = String(v);
   });
+  $('#dev-name').value = store.devName;
   $('#mine-round').innerHTML = DATA.rounds.map(r => `<option value="${r.id}" ${r.id === current ? 'selected' : ''}>${dayLabel(r.date)} · ${esc(r.title)}</option>`).join('');
   renderMineList();
   $('#version-info').textContent = `גרסת אפליקציה ${APP_VERSION} · סדרי עלייה עודכנו ${new Date(DATA.builtAt).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}`;
@@ -749,10 +781,11 @@ function start() {
     else if (b.id === 'test-sound') { ensureAudio(); chime(true); }
     else if (b.id === 'lock-btn') { store.setSetting('lock', !store.settings.lock); applySettings(); }
     else if (b.id === 'check-update') checkUpdate();
+    else if (b.id === 'sync-now') { $('#sync-state').textContent = 'מסנכרן…'; syncNow(); }
     else if (b.id === 'push-toggle') { if (store.push.on && pushEnv() === 'ready') pushDisable(); else pushEnable(); }
     else if (b.id === 'push-test') pushCall('/test', {}).then(r => showToast(r.ok ? 'נשלחה התראת ניסיון · נעל את האייפד ובדוק' : 'השליחה נכשלה')).catch(() => showToast('אין חיבור לשרת ההתראות'));
-    else if (b.id === 'reset-all') askConfirm('איפוס כיול', 'הכיול יתאפס בכל הראונדים, והשעון יחזור לזמנים שבסדר העלייה.', 'איפוס', () => { store.resetOffsets(); render(); showToast('הכיול אופס'); });
-    else if (b.id === 'clear-notes') askConfirm('מחיקת הערות וערעורים', 'כל ההערות והערעורים יימחקו מהאייפד. כדאי לייצא קודם.', 'מחיקה', () => { store.clearNotesAppeals(); render(); showToast('נמחק'); });
+    else if (b.id === 'reset-all') askConfirm('איפוס כיול', 'הכיול יתאפס בכל הראונדים ובכל המכשירים, והשעון יחזור לזמנים שבסדר העלייה.', 'איפוס', () => { store.resetOffsets(); render(); showToast('הכיול אופס'); });
+    else if (b.id === 'clear-notes') askConfirm('מחיקת הערות וערעורים', 'כל ההערות והערעורים יימחקו מכל המכשירים. כדאי לייצא קודם.', 'מחיקה', () => { store.clearNotesAppeals(); render(); showToast('נמחק'); });
     else if (b.id === 'logout-btn') askConfirm('יציאה', 'בכניסה הבאה תצטרך להזין את הקוד שוב. ההערות והכיולים נשארים באייפד.', 'יציאה', () => { store.logout(); location.href = './'; }); else if (b.id === 'copy-all-btn') {
       copy([...store.appeals().map(appealText), ...store.notes().map(n => `${n.short} · ${round(n.round)?.title} · ${fmtClock(n.at)} · ${n.ctx}\n${n.text}`)].join('\n\n'));
     } else if (b.id === 'custom-btn') { $('#custom-form').hidden = !$('#custom-form').hidden; }
@@ -772,12 +805,14 @@ function start() {
       renderMineList(); for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); return;
     }
     if (el.id === 'mine-round') { renderMineList(); return; }
+    if (el.id === 'dev-name') { store.setDevName(el.value); el.value = store.devName; renderSyncState(); return; }
     if (!el.dataset.set) return;
     const v = el.type === 'checkbox' ? el.checked : el.type === 'range' || el.dataset.num != null ? Number(el.value) : el.value;
     if (el.type === 'radio' && !el.checked) return;
     store.setSetting(el.dataset.set, v);
     applySettings(); renderSettingsMain(); render();
   });
+  $('#dev-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }); // Enter must not close the dialog
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applySettings);
   applySettings();
   $('#custom-form').addEventListener('submit', e => {
@@ -794,6 +829,7 @@ function start() {
   setInterval(render, 250);
   setInterval(() => syncPush(), 5000); syncPush(true);
   addEventListener('online', () => syncPush(true));
+  if (SIM_AT == null) startSync({ onRemote, onStatus: renderSyncState });
   if ('serviceWorker' in navigator && SIM_AT == null) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 

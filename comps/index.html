@@ -140,7 +140,7 @@
   <form method="dialog" id="note-form">
     <h2 id="note-title"></h2>
     <p class="muted small" id="note-ctx"></p>
-    <textarea id="note-text" rows="5" placeholder="הערה…" required></textarea>
+    <textarea id="note-text" rows="5" maxlength="3000" placeholder="הערה…" required></textarea>
     <div class="dlg-actions">
       <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
       <button class="btn btn-primary" value="save">שמירה</button>
@@ -168,12 +168,13 @@
       </div></div>
       <div class="ios-group"><p class="ios-gtitle">כללי</p><div class="ios-box">
         <button type="button" class="ios-row nav" data-page="look"><span class="ico">🌓</span><span class="lbl">מראה</span><span class="val" id="v-look"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav" data-page="sync"><span class="ico">☁️</span><span class="lbl">סנכרון בין מכשירים</span><span class="val" id="v-sync"></span><span class="chev"></span></button>
         <button type="button" class="ios-row nav" data-page="data"><span class="ico">📝</span><span class="lbl">הערות וערעורים</span><span class="val" id="v-data"></span><span class="chev"></span></button>
         <button type="button" class="ios-row nav" data-page="updates"><span class="ico">⬆️</span><span class="lbl">עדכונים</span><span class="val" id="v-updates"></span><span class="chev"></span></button>
       </div></div>
       <div class="ios-group"><div class="ios-box">
         <button type="button" class="ios-row danger center" id="logout-btn">יציאה</button>
-      </div><p class="ios-foot">היציאה דורשת קוד בכניסה הבאה. ההערות והכיולים נשארים במכשיר.</p></div>
+      </div><p class="ios-foot">היציאה דורשת קוד בכניסה הבאה. ההערות והכיולים נשמרים.</p></div>
       <footer class="app-footer" lang="en" dir="ltr"><span class="app-ver"></span> · Powered by <a class="footer-luma" href="https://luma.palgitraining.com" target="_blank" rel="noopener">LUMA<svg class="luma-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg></a> · By Roei Palgi</footer>
     </div>
 
@@ -253,7 +254,18 @@
       <div class="ios-group"><div class="ios-box">
         <button type="button" class="ios-row link" id="export-btn2">ייצוא הערות וערעורים</button>
         <button type="button" class="ios-row danger center" id="clear-notes">מחיקת כל ההערות והערעורים</button>
-      </div><p class="ios-foot">ההערות שמורות רק במכשיר הזה. כדאי לייצא לפני מחיקה.</p></div>
+      </div><p class="ios-foot">ההערות והערעורים משותפים לכל המכשירים שנכנסו עם הקוד (ונשמרים בגיבוי יומי). מחיקה מוחקת מכולם.</p></div>
+    </div>
+
+    <div class="ios-page" data-pg="sync" hidden>
+      <div class="ios-group"><div class="ios-box">
+        <label class="ios-row"><span class="lbl">שם המכשיר</span><input type="text" id="dev-name" class="ios-text" maxlength="40" autocomplete="off" enterkeyhint="done"></label>
+      </div><p class="ios-foot">מופיע ליד הערות וערעורים, ובהודעה כשמכשיר אחר משנה כיול.</p></div>
+      <div class="ios-group"><div class="ios-box">
+        <div class="ios-row"><span class="lbl" id="sync-state"></span></div>
+        <button type="button" class="ios-row link" id="sync-now">סנכרן עכשיו</button>
+      </div><p class="ios-foot" id="sync-devices"></p></div>
+      <p class="ios-foot">משותף בין כל המכשירים: הערות, ערעורים, כיול והספורטאים שלי. לא משותף: התראות, צליל ומראה (לכל מכשיר משלו). בלי קליטה הכל נשמר במכשיר ועולה לשרת כשהחיבור חוזר.</p>
     </div>
 
     <div class="ios-page" data-pg="updates" hidden>
@@ -322,7 +334,7 @@
       <label>בולדר <select id="appeal-boulder"></select></label>
       <label>שעה <input id="appeal-time" type="text" inputmode="numeric" dir="ltr"></label>
     </div>
-    <label>מה קרה <textarea id="appeal-text" rows="5" placeholder="תיאור: אחיזה, ניסיון, טופ/זון, החלטת שופט…" required></textarea></label>
+    <label>מה קרה <textarea id="appeal-text" rows="5" maxlength="3000" placeholder="תיאור: אחיזה, ניסיון, טופ/זון, החלטת שופט…" required></textarea></label>
     <div class="dlg-actions">
       <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
       <button class="btn btn-primary" value="save">שמירה</button>
