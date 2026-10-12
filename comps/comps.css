@@ -490,3 +490,180 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .ptr.busy .ptr-arrow { animation: ptr-spin .8s linear infinite; }
 @keyframes ptr-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .ptr.busy .ptr-arrow { animation: none; } }
+
+/* add-to-home-screen guide (install.js) — ported from Wingate's Stylesheet.html, tokens mapped */
+:root { --overlay: rgb(15 10 25 / .5); --ok-bg: color-mix(in srgb, var(--ok) 14%, transparent); }
+  .install-entry-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 14px 0 0;
+    padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--radius);
+    background: transparent; color: var(--copper-text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .install-entry-btn svg { width: 20px; height: 20px; flex: none; }
+  .install-overlay-card {
+    width: calc(100% - 16px); max-width: 480px; max-height: calc(100dvh - 16px); overflow-y: auto; border: none;
+    background: var(--chalk); color: var(--navy); border-radius: 16px; padding: 22px 18px calc(env(safe-area-inset-bottom, 0px) + 18px); text-align: start;
+  }
+  .install-overlay-card::backdrop { background: var(--overlay); }
+  .install-overlay-card h2 { margin: 2px 0 10px; font-size: 18px; text-align: center; }
+  .install-close-btn {
+    position: absolute; top: 12px; inset-inline-end: 12px; width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--card); color: var(--navy); font-size: 16px; cursor: pointer;
+  }
+  .install-note { background: var(--copper-bg); border-radius: var(--radius); padding: 10px 12px; font-size: 14px; margin: 10px 0; }
+  .install-note.install-ok { background: var(--ok-bg); color: var(--ok); }
+  .install-note a { color: inherit; word-break: break-all; }
+  .install-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 12px 0; }
+  .install-tabs .segmented-option {
+    margin: 0; width: 100%; border: 1px solid var(--border); border-radius: var(--radius); font: inherit;
+    background: var(--card); color: var(--navy); font-weight: 600; padding: 10px 6px; cursor: pointer;
+  }
+  .install-tabs .segmented-option.active { border-color: var(--primary); background: var(--copper-bg); font-weight: 700; }
+  .install-now-btn { margin: 4px 0 6px; }
+  .install-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .install-step {
+    display: flex; align-items: center; gap: 12px; background: var(--card);
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 12px;
+  }
+  .install-step-num {
+    flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: var(--on-primary);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
+  }
+  .install-step-text { flex: 1; font-size: 15px; line-height: 1.45; }
+  .install-step-icon {
+    flex: none; width: 38px; height: 38px; border-radius: 9px; background: var(--copper-bg); color: var(--copper-text);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .install-step-icon svg { width: 22px; height: 22px; }
+  html:not(.is-mobile) .install-overlay { align-items: center; padding: 24px 16px; }
+  html:not(.is-mobile) .install-overlay-card { border-radius: 16px; }
+  /* Animated phone in the install guide (fixed device colors on purpose: it depicts a real phone screen).
+     Drawn at 236px and scaled to 0.8; the wrapper reserves the scaled height. */
+  .install-anim { height: 384px; display: flex; justify-content: center; margin: 0 0 8px; overflow: hidden; }
+  .install-anim .ia-phone { flex: none; width: 236px; height: 480px; transform: scale(.8); transform-origin: top center;
+    background: #111; border-radius: 38px; position: relative; box-shadow: 0 14px 30px rgba(20, 10, 30, .22); } /* theme-ok: install drawing */
+  .install-anim .ia-android { border-radius: 26px; }
+  .install-anim .ia-screen { position: absolute; inset: 9px; border-radius: 30px; overflow: hidden; background: #F5F1EA; color: #2E1A47; direction: rtl; text-align: right; } /* dir-ok */
+  .install-anim .ia-android .ia-screen { border-radius: 19px; }
+  .install-anim .ia-notch { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); width: 70px; height: 20px; background: #111; border-radius: 12px; z-index: 9; } /* dir-ok */
+  .install-anim .ia-android .ia-notch { width: 10px; height: 10px; top: 8px; border-radius: 50%; }
+  .install-anim img { border: none; }
+  .install-anim .ia-page { position: absolute; inset: 0; padding: 38px 10px 0; display: flex; flex-direction: column; gap: 7px; }
+  .install-anim .ia-android .ia-page { padding-top: 58px; }
+  .install-anim .ia-pgbar { display: flex; align-items: center; gap: 6px; }
+  .install-anim .ia-pgbar img { width: 22px; height: 22px; border-radius: 6px; }
+  .install-anim .ia-pgbar b { font-size: 11px; }
+  .install-anim .ia-hello { font-size: 12px; font-weight: 700; margin-top: 4px; }
+  .install-anim .ia-card { background: #fff; border: 1px solid #E5DDD0; border-radius: 9px; padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .install-anim .ia-line { height: 6px; border-radius: 3px; background: #E5DDD0; }
+  .install-anim .ia-line.s { width: 60%; }
+  .install-anim .ia-line.t { width: 40%; background: #F6E6DA; }
+  .install-anim .ia-url { font-size: 9px; color: #555; direction: ltr; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .install-anim .ia-safari { position: absolute; left: 0; right: 0; bottom: 0; height: 62px; background: rgba(250,248,245,.96); border-top: 1px solid #ddd; z-index: 3; } /* dir-ok */
+  .install-anim .ia-safari .ia-url { position: absolute; top: 7px; left: 10px; right: 10px; height: 22px; border-radius: 8px; background: #E9E6EE; display: flex; align-items: center; justify-content: center; } /* dir-ok */
+  .install-anim .ia-tools { position: absolute; top: 34px; left: 0; right: 0; display: flex; justify-content: space-around; direction: ltr; color: #2F7CF6; } /* dir-ok */
+  .install-anim .ia-tools svg { width: 17px; height: 17px; }
+  .install-anim .ia-chrome { position: absolute; left: 0; right: 0; top: 0; height: 52px; padding: 22px 8px 0; background: #fff; border-bottom: 1px solid #e3e3e3; z-index: 3; /* dir-ok */
+    display: flex; align-items: center; gap: 6px; }
+  .install-anim .ia-chrome .ia-url { flex: 1; min-width: 0; height: 22px; border-radius: 11px; background: #EEF0F3; display: flex; align-items: center; padding: 0 9px; }
+  .install-anim .ia-kebab { width: 18px; height: 22px; display: flex; align-items: center; justify-content: center; color: #444; }
+  .install-anim .ia-kebab svg { width: 16px; height: 16px; }
+  .install-anim .ia-layer { position: absolute; z-index: 5; transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .35s; }
+  .install-anim .ia-dim { position: absolute; inset: 0; background: rgba(0,0,0,.28); z-index: 4; opacity: 0; transition: opacity .35s; }
+  .install-anim .ia-sheet { left: 0; right: 0; bottom: 0; background: #F2F1F6; border-radius: 16px 16px 0 0; padding: 10px 9px 18px; transform: translateY(105%); } /* dir-ok */
+  .install-anim .ia-grab { width: 34px; height: 4px; border-radius: 2px; background: #C9C7CF; margin: 0 auto 9px; }
+  .install-anim .ia-apphead { display: flex; align-items: center; gap: 7px; background: #fff; border-radius: 10px; padding: 7px; margin-bottom: 8px; font-size: 10px; font-weight: 700; }
+  .install-anim .ia-apphead img { width: 26px; height: 26px; border-radius: 6px; }
+  .install-anim small { display: block; font-weight: 400; color: #888; font-size: 8.5px; direction: ltr; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; } /* dir-ok */
+  .install-anim .ia-list { background: #fff; border-radius: 10px; overflow: hidden; }
+  .install-anim .ia-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; font-size: 10.5px; border-bottom: 1px solid #ECEBF0; transition: background .2s; }
+  .install-anim .ia-row:last-child { border-bottom: none; }
+  .install-anim .ia-row svg { width: 14px; height: 14px; color: #333; }
+  .install-anim .ia-hit { font-weight: 700; }
+  .install-anim .ia-menu { top: 26px; left: 6px; width: 150px; background: #fff; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.22); padding: 4px 0; /* dir-ok */
+    transform-origin: top left; transform: scale(.6); opacity: 0; }
+  .install-anim .ia-menu .ia-row { border: none; padding: 8px 12px; justify-content: flex-start; gap: 9px; }
+  .install-anim .ia-addpage { inset: 0; background: #F2F1F6; transform: translateY(105%); padding: 34px 0 0; }
+  .install-anim .ia-top { display: flex; justify-content: space-between; align-items: center; padding: 0 12px 10px; font-size: 11px; color: #2E1A47; }
+  .install-anim .ia-top span { color: #2F7CF6; }
+  .install-anim .ia-add { font-weight: 700; padding: 3px 6px; border-radius: 6px; transition: background .2s; }
+  .install-anim .ia-addcard { margin: 6px 10px; background: #fff; border-radius: 10px; padding: 10px; display: flex; gap: 10px; align-items: center; font-size: 10.5px; font-weight: 600; }
+  .install-anim .ia-addcard img { width: 42px; height: 42px; border-radius: 10px; }
+  .install-anim .ia-dialog { left: 14px; right: 14px; top: 34%; background: #fff; border-radius: 18px; padding: 14px; transform: scale(.85); opacity: 0; box-shadow: 0 10px 30px rgba(0,0,0,.25); } /* dir-ok */
+  .install-anim .ia-dialog h4 { margin: 0 0 10px; font-size: 12px; }
+  .install-anim .ia-who { display: flex; align-items: center; gap: 8px; font-size: 10.5px; font-weight: 600; }
+  .install-anim .ia-who img { width: 30px; height: 30px; border-radius: 50%; }
+  .install-anim .ia-btns { display: flex; justify-content: flex-end; gap: 14px; margin-top: 14px; font-size: 11px; font-weight: 700; color: #1A73E8; }
+  .install-anim .ia-btns span { padding: 4px 8px; border-radius: 14px; transition: background .2s; }
+  .install-anim .ia-home { inset: 0; z-index: 6; opacity: 0; background: linear-gradient(160deg, #5B3E7A, #2E1A47 55%, #C8642E 140%); padding: 44px 14px 0; transition: opacity .5s; }
+  .install-anim .ia-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 10px; }
+  .install-anim .ia-app { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .install-anim .ia-app i { width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,.22); display: block; }
+  .install-anim .ia-android .ia-app i { border-radius: 50%; }
+  .install-anim .ia-app span { width: 30px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.35); }
+  .install-anim .ia-new img { width: 38px; height: 38px; border-radius: 10px; transform: scale(0); transition: transform .5s cubic-bezier(.3,1.6,.5,1) .35s; background: #F5F1EA; }
+  .install-anim .ia-android .ia-new img { border-radius: 50%; }
+  .install-anim .ia-new em { font-style: normal; font-size: 7.5px; color: #fff; white-space: nowrap; opacity: 0; transition: opacity .3s .7s; }
+  .install-anim .ia-finger { position: absolute; z-index: 20; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%;
+    background: rgba(200, 100, 46, .35); border: 2px solid rgba(255,255,255,.9); box-shadow: 0 2px 8px rgba(0,0,0,.3); /* theme-ok: install drawing */
+    transition: left .7s cubic-bezier(.45,0,.2,1), top .7s cubic-bezier(.45,0,.2,1), transform .15s, opacity .3s; left: 50%; top: 60%; opacity: 0; } /* dir-ok */
+  .install-anim .ia-finger.tap { transform: scale(.72); }
+  .install-anim .ia-finger.tap::after { content: ''; position: absolute; inset: -10px; border-radius: 50%; border: 2px solid rgba(200,100,46,.8); animation: ia-ripple .45s ease-out forwards; }
+  @keyframes ia-ripple { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.3); opacity: 0; } }
+  .install-anim [data-s="share"] .ia-sheet, .install-anim [data-s="share-tap"] .ia-sheet,
+  .install-anim [data-s="add"] .ia-addpage, .install-anim [data-s="add-tap"] .ia-addpage,
+  .install-anim [data-s="menu"] .ia-menu, .install-anim [data-s="menu-tap"] .ia-menu,
+  .install-anim [data-s="dialog"] .ia-dialog, .install-anim [data-s="dialog-tap"] .ia-dialog { transform: none; opacity: 1; }
+  .install-anim [data-s="share"] .ia-dim, .install-anim [data-s="share-tap"] .ia-dim, .install-anim [data-s="menu"] .ia-dim,
+  .install-anim [data-s="menu-tap"] .ia-dim, .install-anim [data-s="dialog"] .ia-dim, .install-anim [data-s="dialog-tap"] .ia-dim { opacity: 1; }
+  .install-anim [data-s="share-tap"] .ia-hit, .install-anim [data-s="menu-tap"] .ia-hit { background: #E4E2EA; }
+  .install-anim [data-s="add-tap"] .ia-add { background: #DCE7FB; }
+  .install-anim [data-s="dialog-tap"] .ia-ok { background: #E3EDFD; }
+  .install-anim [data-s="home"] .ia-home { opacity: 1; }
+  .install-anim [data-s="home"] .ia-new img { transform: none; }
+  .install-anim [data-s="home"] .ia-new em { opacity: 1; }
+  .install-anim .ia-standalone { inset: 0; z-index: 7; background: #F5F1EA; padding: 40px 10px 0; display: flex; flex-direction: column; gap: 8px; opacity: 0; transition: opacity .4s; }
+  .install-anim .ia-gear { margin-inline-start: auto; font-size: 13px; background: #fff; border: 1px solid #E5DDD0; border-radius: 6px; padding: 1px 5px; }
+  .install-anim .ia-set { background: #fff; border: 1px solid #E5DDD0; border-radius: 9px; padding: 9px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .install-anim .ia-set h5 { margin: 0; font-size: 11px; }
+  .install-anim .ia-pill { font-size: 9px; font-weight: 600; border-radius: 999px; padding: 2px 8px; }
+  .install-anim .ia-pill-off { background: #FBE9E7; color: #B23A34; }
+  .install-anim .ia-pill-on { background: #E5F4EA; color: #1E7A4C; display: none; }
+  .install-anim .ia-enable { align-self: stretch; text-align: center; background: #2E1A47; color: #fff; border-radius: 8px; padding: 8px; font-size: 10.5px; font-weight: 700; transition: opacity .2s; }
+  .install-anim .ia-perm-dim { position: absolute; inset: 0; background: rgba(0,0,0,.3); opacity: 0; transition: opacity .3s; }
+  .install-anim .ia-perm { position: absolute; left: 22px; right: 22px; top: 36%; background: rgba(245,245,247,.98); border-radius: 14px; text-align: center; overflow: hidden; /* dir-ok */
+    transform: scale(1.1); opacity: 0; transition: transform .3s, opacity .3s; }
+  .install-anim .ia-perm b { display: block; font-size: 10.5px; padding: 12px 12px 3px; }
+  .install-anim .ia-perm p { margin: 0; font-size: 8.5px; color: #555; padding: 0 12px 10px; }
+  .install-anim .ia-perm-btns { display: flex; border-top: 1px solid #D5D4DA; font-size: 11px; color: #2F7CF6; }
+  .install-anim .ia-perm-btns span { flex: 1; padding: 8px 0; transition: background .2s; }
+  .install-anim .ia-perm-btns span + span { border-inline-start: 1px solid #D5D4DA; }
+  .install-anim .ia-allow { font-weight: 700; }
+  .install-anim [data-s="home-tap"] .ia-home, .install-anim [data-s^="app"] .ia-home, .install-anim [data-s^="perm"] .ia-home, .install-anim [data-s="on"] .ia-home { opacity: 1; }
+  .install-anim [data-s="home-tap"] .ia-new img, .install-anim [data-s^="app"] .ia-new img, .install-anim [data-s^="perm"] .ia-new img, .install-anim [data-s="on"] .ia-new img { transform: scale(.9); }
+  .install-anim [data-s="home-tap"] .ia-new em { opacity: 1; }
+  .install-anim [data-s^="app"] .ia-standalone, .install-anim [data-s^="perm"] .ia-standalone, .install-anim [data-s="on"] .ia-standalone { opacity: 1; }
+  .install-anim [data-s="app-tap"] .ia-enable { opacity: .75; }
+  .install-anim [data-s^="perm"] .ia-perm-dim { opacity: 1; }
+  .install-anim [data-s^="perm"] .ia-perm { transform: none; opacity: 1; }
+  .install-anim [data-s="perm-tap"] .ia-allow { background: #DCDBE2; }
+  .install-anim [data-s="on"] .ia-pill-off, .install-anim [data-s="on"] .ia-enable { display: none; }
+  .install-anim [data-s="on"] .ia-pill-on { display: inline-block; }
+  .install-anim-cap { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0 0 6px; font-size: 15px; line-height: 1.4; }
+  .install-anim-cap .install-step-num { background: var(--copper); }
+  .install-anim-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 10px; }
+  .install-anim-dots i { width: 7px; height: 7px; border-radius: 4px; background: var(--border); transition: width .3s, background .3s; }
+  .install-anim-dots i.on { width: 18px; background: var(--copper); }
+  .install-all-steps summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); padding: 6px 0; }
+  .install-all-steps[open] summary { margin-bottom: 8px; }
+  .install-step { transition: border-color .3s, box-shadow .3s; }
+  .install-step.active { border-color: var(--copper); box-shadow: 0 0 0 1px var(--copper); }
+  .install-step.active .install-step-num { background: var(--copper); }
+  @media (prefers-reduced-motion: reduce) {
+    .install-anim .ia-layer, .install-anim .ia-dim, .install-anim .ia-finger, .install-anim .ia-home,
+    .install-anim .ia-new img, .install-anim .ia-new em, .install-anim .ia-standalone, .install-anim .ia-perm, .install-anim .ia-perm-dim { transition: none; }
+    .install-anim .ia-finger.tap::after { animation: none; }
+  }
+
+.gate-card .install-entry-btn { margin-top: 4px; }
+.ios-row.install-row { color: var(--copper-text); }
+.link-btn { background: none; border: none; padding: 0; font: inherit; color: var(--copper-text); font-weight: 600; text-decoration: underline; cursor: pointer; }

@@ -3,8 +3,9 @@ import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlo
 import { store } from './store.js';
 import { startSync, startViewSync, syncNow, syncState, authHeaders, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
+import { setupInstall } from './install.js';
 
-export const APP_VERSION = '1.9.1';
+export const APP_VERSION = '2.0.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -51,6 +52,8 @@ async function unlock(code) {
   const vbox = await readBox('data.view.enc.json');
   return vbox ? decryptJSON(vbox, code) : null;
 }
+
+setupInstall(() => VIEWER || !$("#gate").hidden); // before boot: the gate link works before login; there the role is unknown → no alerts step
 
 async function boot() {
   if (store.code) {
@@ -538,11 +541,11 @@ async function renderPushState() {
   if ($('#v-push')) $('#v-push').textContent = on ? 'פעיל' : 'כבוי';
   const msg = {
     sim: 'לא זמין במצב הדמיה.',
-    'ios-install': 'עובד רק מהאייקון במסך הבית: בספארי לחץ שתף ← "הוסף למסך הבית", ופתח משם.',
+    'ios-install': 'עובד רק מהאייקון במסך הבית. ',
     unsupported: 'המכשיר לא תומך בהתראות (צריך iPadOS 16.4 ומעלה).',
     denied: 'ההתראות חסומות: הגדרות האייפד ← התראות ← מעקב ראונד ← אפשר.',
   }[env];
-  if (msg) { box.textContent = msg; return; }
+  if (msg) { box.textContent = msg; if (env === 'ios-install') box.insertAdjacentHTML('beforeend', '<button type="button" class="link-btn" data-install-open>איך מוסיפים?</button>'); return; }
   if (!on) { box.textContent = 'כבוי · ההתראות מופיעות רק כשהאפליקציה פתוחה.'; return; }
   box.textContent = pushSent ? 'פעיל ✓ · בודק בשרת…' : 'פעיל · ממתין לחיבור לשרת…';
   try {
