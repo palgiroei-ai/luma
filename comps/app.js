@@ -4,7 +4,7 @@ import { store } from './store.js';
 import { startSync, startViewSync, syncNow, syncState, authHeaders, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
 
-export const APP_VERSION = '1.9.0';
+export const APP_VERSION = '1.9.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

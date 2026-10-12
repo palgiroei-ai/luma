@@ -2,6 +2,7 @@
 // Add an entry with every code deploy — tests/changelog.test.mjs keeps the first versioned entry = APP_VERSION.
 // Start-list updates (data only, no code version) are entries with `data: true` instead of `v`.
 export const CHANGELOG = [
+  { v: '1.9.1', date: '2026-10-12', items: ['לוגו: בלי השורה הקטנה "Climbing · Physio", והכיתוב PALGI TRAINING גדול יותר', 'קוד צפייה (הורים): בעדכונים רק גרסה ובדיקת עדכון, בלי היסטוריית הגרסאות'] },
   { v: '1.9.0', date: '2026-10-12', items: [
     'הלוגו של PalgiTraining גדול יותר (בכותרת ובמסך הכניסה)',
     'משיכה למטה לרענון באפליקציה ממסך הבית: סנכרון מיידי + בדיקת סדר עלייה/גרסה חדשים (טוען מחדש רק אם יש עדכון)',
