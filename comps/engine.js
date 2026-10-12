@@ -104,3 +104,18 @@ export function alertPlan(round, k, offsetMs, prefs, transferMs = null) {
   if (prefs.transfer && transferMs != null) plan.unshift({ type: 'transfer', at: transferMs + offsetMs, until: Math.min(start, transferMs + offsetMs + 10 * 60000) });
   return plan;
 }
+
+// ---- overlaps: windows where 2+ of my athletes are climbing (on a boulder) at the same time ----
+// Slot k climbs boulder j at window k+2j; resting / in transit between boulders does not count (Roei 2026-10-12).
+export function climbOverlaps(round, ks, offsetMs = 0) {
+  const byWindow = new Map();
+  for (const k of ks) {
+    for (let j = 0; j < round.boulders; j++) {
+      const n = k + 2 * j;
+      if (!byWindow.has(n)) byWindow.set(n, []);
+      byWindow.get(n).push({ k, boulder: j + 1 });
+    }
+  }
+  return [...byWindow.entries()].filter(([, c]) => c.length > 1).sort((a, b) => a[0] - b[0])
+    .map(([n, climbers]) => ({ n, startMs: slotStartMs(round, n, offsetMs), endMs: slotStartMs(round, n + 1, offsetMs), climbers: climbers.sort((a, b) => a.k - b.k) }));
+}

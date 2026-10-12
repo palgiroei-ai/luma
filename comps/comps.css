@@ -385,3 +385,34 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .luma-mark { width: 14px; height: 14px; flex: none; fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
 .luma-mark circle { stroke: var(--copper); opacity: .6; }
 .luma-mark path { stroke: currentColor; }
+
+/* overlaps: 2+ of mine climbing in the same window */
+.ovl { grid-column: 1 / -1; padding: 12px 14px; border-inline-start: 5px solid var(--danger); }
+.ovl.ok { border-inline-start-color: var(--ok); }
+.ovl-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 6px; }
+.ovl-head b { color: var(--danger); }
+.ovl.ok b { color: var(--ok); }
+.ovl ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ovl li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 8px; border-radius: 8px; background: var(--chalk); }
+.ovl li.past { opacity: .45; }
+.ovl li.now { background: var(--danger-bg); box-shadow: inset 0 0 0 2px var(--danger); }
+.ovl li.next { box-shadow: inset 0 0 0 1px var(--danger); }
+.ovl-at { font-variant-numeric: tabular-nums; font-weight: 700; direction: ltr; }
+.ovl-list { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.ovl-who b { color: var(--copper-text); }
+.ovl-badge { margin-inline-start: auto; background: var(--danger); color: #fff; border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 700; }
+.ovl-count { color: var(--danger); font-weight: 700; margin: 0; }
+.ok-text { color: var(--ok); font-weight: 600; margin: 0; }
+
+/* home: list | detail */
+.h-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.h-head .h-seg { margin-inline-start: auto; }
+.h-back { color: var(--copper-text); }
+.ev-list { display: grid; gap: 10px; }
+.ev-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; text-align: start; font: inherit; color: inherit; cursor: pointer; border-inline-start: 5px solid var(--border); }
+.ev-row.ph-live { border-inline-start-color: var(--danger); }
+.ev-row.ph-after { opacity: .7; }
+.ev-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ev-main b { font-size: 17px; }
+.ev-side { display: grid; justify-items: end; gap: 4px; text-align: end; }
+.ev-row .chev { width: 8px; height: 8px; flex: none; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(135deg); }

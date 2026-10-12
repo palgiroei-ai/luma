@@ -1,8 +1,8 @@
 import { decryptJSON } from './decrypt.js';
-import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan } from './engine.js';
+import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan, climbOverlaps } from './engine.js';
 import { store } from './store.js';
 
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -169,7 +169,7 @@ function renderMine(r) {
   const t = now();
   const list = mineOf(r.id);
   if (!list.length) { patch($('#view-mine'), `<p class="muted">${r.slots.length ? 'אין ספורטאים שלי בראונד הזה.' : 'סדר העלייה עוד לא התקבל.'}</p>`); return; }
-  patch($('#view-mine'), list.map(m => {
+  patch($('#view-mine'), overlapHtml(r, t) + list.map(m => {
     const s = r.slots[m.k];
     const st = athleteStatus(r, m.k, t, off(r.id));
     const notes = store.notes(n => n.round === r.id && n.k === m.k);
@@ -227,7 +227,51 @@ function renderLog() {
 // ---- home: all rounds by event / day, tap to open ----
 function roundEndMs(r) { return roundStart(r) + off(r.id) + windowCount(r) * r.slotSec * 1000; }
 
+// Windows where 2+ of my athletes are on a boulder at the same time (resting between boulders is fine — Roei).
+const overlapsOf = r => climbOverlaps(r, mineOf(r.id).map(m => m.k), off(r.id));
+function overlapHtml(r, t) {
+  if (mineOf(r.id).length < 2) return '';
+  const ov = overlapsOf(r);
+  if (!ov.length) return '<div class="ovl card ok"><b>✓ אין חפיפות בטיפוס</b> <span class="muted small">אף פעם לא מטפסים שניים שלך באותו זמן.</span></div>';
+  const max = Math.max(...ov.map(w => w.climbers.length));
+  const nextIdx = ov.findIndex(w => w.endMs > t);
+  const rows = ov.map((w, i) => {
+    const cls = w.endMs <= t ? 'past' : w.startMs <= t ? 'now' : i === nextIdx ? 'next' : '';
+    const who = w.climbers.map(c => `<span class="ovl-who"><b>${esc(shortOf(r.id, c.k))}</b> בולדר ${c.boulder}</span>`).join('');
+    return `<li class="${cls}"><span class="ovl-at">${fmtClock(w.startMs)}–${fmtHM(w.endMs)}</span><span class="ovl-list">${who}</span>${cls === 'now' ? '<span class="ovl-badge">עכשיו</span>' : ''}</li>`;
+  }).join('');
+  return `<div class="ovl card"><div class="ovl-head"><b>⚠︎ חפיפות בטיפוס</b><span class="muted small">${ov.length} חלונות שבהם ${max > 2 ? 'עד ' + max : 'שניים'} שלך מטפסים במקביל</span></div><ol>${rows}</ol></div>`;
+}
+
+let homeOpenEvent = null; // list view: which event is opened (null = the list)
+function homeEvents() { return [{ event: DATA.event, rounds: DATA.rounds }]; } // one event today; more join later
+
 function renderHome() {
+  const hv = store.settings.homeView;
+  const seg = `<div class="seg h-seg" role="group" aria-label="תצוגת מסך ראשי"><button type="button" data-hv="list" aria-pressed="${hv === 'list'}">רשימה</button><button type="button" data-hv="detail" aria-pressed="${hv === 'detail'}">מפורט</button></div>`;
+  if (hv === 'list' && homeOpenEvent == null) return renderHomeList(seg);
+  renderHomeDetail(seg, hv === 'list');
+}
+
+function renderHomeList(seg) {
+  const t = now();
+  const rows = homeEvents().map((ev, i) => {
+    const rs = ev.rounds.filter(r => r.slots.length);
+    const ph = rs.some(r => stateAt(r, t, off(r.id)).phase === 'live') ? 'live' : rs.length && rs.every(r => stateAt(r, t, off(r.id)).phase === 'after') ? 'after' : 'before';
+    const badge = { live: '<span class="hb live">חי עכשיו</span>', before: '<span class="hb soon">בקרוב</span>', after: '<span class="hb done">הסתיים</span>' }[ph];
+    const dates = [...new Set(ev.rounds.map(r => r.date))].sort();
+    const d0 = new Date(dates[0] + 'T12:00:00'), d1 = new Date(dates[dates.length - 1] + 'T12:00:00');
+    const range = dates.length > 1 ? `${d0.getDate()}–${d1.getDate()}/${d1.getMonth() + 1}` : `${d0.getDate()}/${d0.getMonth() + 1}`;
+    const people = new Set(ev.rounds.flatMap(r => mineOf(r.id).map(m => r.slots[m.k].name)));
+    const ovl = ev.rounds.reduce((n, r) => n + (mineOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
+    return `<button type="button" class="ev-row card ph-${ph}" data-ev="${i}">
+      <span class="ev-main"><b>${esc(ev.event.title)}</b><span class="muted small">${esc(ev.event.place || '')} · ${range} · ${ev.rounds.length} ראונדים</span></span>
+      <span class="ev-side">${badge}<span class="small">${people.size} שלי${ovl ? ` · <span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>`;
+  }).join('');
+  patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}</div><div class="ev-list">${rows}</div>`);
+}
+
+function renderHomeDetail(seg, fromList) {
   const t = now();
   const days = [...new Set(DATA.rounds.map(r => r.date))];
   const card = r => {
@@ -239,9 +283,10 @@ function renderHome() {
       <div class="h-top"><h3>${esc(r.title)}</h3>${badge}</div>
       <p class="muted small">${fmtHM(roundStart(r) + off(r.id))}${r.slots.length ? `–${fmtHM(roundEndMs(r))}` : ''} · ${r.boulders} בולדרים · חלון ${fmtDur(r.slotSec * 1000)}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
       ${live}${mine ? `<ul class="h-mine">${mine}</ul>` : `<p class="muted small">${r.slots.length ? 'אין ספורטאים שלי' : ''}</p>`}
+      ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} חלונות של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
-  patch($('#home'), `<h2 class="h-event">${esc(DATA.event.title)} <span class="muted">· ${esc(DATA.event.place || '')}</span></h2>` +
+  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(DATA.event.title)} <span class="muted">· ${esc(DATA.event.place || '')}</span></h2>${seg}</div>` +
     days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${DATA.rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
 }
 
@@ -304,9 +349,12 @@ function ensureAudio() {
   try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch { audio = null; }
 }
 
-function showAlert(text, cls) {
+// One banner per athlete: a newer alert for the same athlete replaces the older one (Roei 2026-10-12).
+function showAlert(text, cls, group = '') {
+  if (group) document.querySelectorAll('#alerts .alert').forEach(x => { if (x.dataset.group === group) x.remove(); });
   const el = document.createElement('div');
   el.className = 'alert ' + cls;
+  el.dataset.group = group;
   el.innerHTML = `<span>${esc(text)}</span><button type="button" aria-label="סגירה">✕</button>`;
   el.querySelector('button').onclick = () => el.remove();
   $('#alerts').prepend(el);
@@ -331,7 +379,7 @@ function alertEntries() {
           ? `מעבר לנורמן: ${m.short} (#${s.order}) · עולה ב-${fmtClock(startMs)}`
           : a.type === 's0' ? `עולה עכשיו: ${m.short} (#${s.order}, גב ${s.bib}) לבולדר 1 · ${fmtClock(startMs)}`
           : `${ALERT_LBL[a.type]}: ${m.short} (#${s.order}, גב ${s.bib}) עולה לבולדר 1 ב-${fmtClock(startMs)}`;
-        out.push({ key, at: a.at, until: a.until, text, cls: ['m1', 'm2', 's10', 's0'].includes(a.type) ? 'now' : 'soon',
+        out.push({ key, tag: `${r.id}:${m.k}`, at: a.at, until: a.until, text, cls: ['m1', 'm2', 's10', 's0'].includes(a.type) ? 'now' : 'soon',
           title: a.type === 'transfer' ? `${m.short} · מעבר לנורמן` : a.type === 's0' ? `${m.short} · עולה עכשיו` : `${m.short} · עוד ${ALERT_LBL[a.type]}`,
           body: `${text} · ${r.title}` });
       }
@@ -343,7 +391,7 @@ function alertEntries() {
 function checkAlerts() {
   const t = now();
   for (const a of alertEntries()) {
-    if (t >= a.at && t < a.until && !fired.was(a.key)) { fired.mark(a.key); showAlert(a.text, a.cls); }
+    if (t >= a.at && t < a.until && !fired.was(a.key)) { fired.mark(a.key); showAlert(a.text, a.cls, a.tag); }
   }
 }
 
@@ -379,7 +427,7 @@ async function syncPush(force = false) {
   if (!store.push.on || pushEnv() !== 'ready' || Notification.permission !== 'granted') return;
   const t = Date.now();
   if (!force && t < pushNextTry) return;
-  const alerts = alertEntries().filter(a => a.until > t).map(({ key, at, until, title, body }) => ({ key, at, until, title, body }));
+  const alerts = alertEntries().filter(a => a.until > t).map(({ key, tag, at, until, title, body }) => ({ key, tag, at, until, title, body }));
   const sig = JSON.stringify(alerts);
   if (!force && sig === pushSent) return;
   pushNextTry = t + 5000;
@@ -681,8 +729,11 @@ function start() {
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
     if (d.page) { setPage(d.page); return; }
+    if (d.hv) { store.setSetting('homeView', d.hv); homeOpenEvent = null; render(); return; }
+    if (d.ev != null) { homeOpenEvent = Number(d.ev); render(); return; }
+    if (b.id === 'home-back') { homeOpenEvent = null; render(); return; }
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; showScreen('round'); }
-    else if (b.id === 'home-btn') showScreen('home');
+    else if (b.id === 'home-btn') { homeOpenEvent = null; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); }
     else if (d.adj) adjust(d.adj);
     else if (d.view) setView(d.view);
