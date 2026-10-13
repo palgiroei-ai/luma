@@ -5,7 +5,7 @@ import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC
 import { CHANGELOG } from './changelog.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.5.0';
+export const APP_VERSION = '2.6.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -534,7 +534,7 @@ async function pushEnable() {
     showToast('התראות על מסך נעול הופעלו ✓');
   } catch (e) {
     store.setPush(false);
-    showToast(e.message === 'perm' ? 'לא אושרו התראות. אפשר לאשר בהגדרות האייפד → התראות → מעקב ראונד' : 'אין חיבור לשרת ההתראות. נסה שוב.');
+    showToast(e.message === 'perm' ? 'לא אושרו התראות. אפשר לאשר בהגדרות האייפד → התראות → פורטל התחרויות' : 'אין חיבור לשרת ההתראות. נסה שוב.');
   }
   renderPushState();
 }
@@ -555,7 +555,7 @@ async function renderPushState() {
     sim: 'לא זמין במצב הדמיה.',
     'ios-install': 'עובד רק מהאייקון במסך הבית. ',
     unsupported: 'המכשיר לא תומך בהתראות (צריך iPadOS 16.4 ומעלה).',
-    denied: 'ההתראות חסומות: הגדרות האייפד ← התראות ← מעקב ראונד ← אפשר.',
+    denied: 'ההתראות חסומות: הגדרות האייפד ← התראות ← פורטל התחרויות ← אפשר.',
   }[env];
   if (msg) { box.textContent = msg; if (env === 'ios-install') box.insertAdjacentHTML('beforeend', '<button type="button" class="link-btn" data-install-open>איך מוסיפים?</button>'); return; }
   if (!on) { box.textContent = 'כבוי · ההתראות מופיעות רק כשהאפליקציה פתוחה.'; return; }

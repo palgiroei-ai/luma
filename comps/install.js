@@ -73,10 +73,10 @@ const FLOWS = {
 function animHtml(tab) {
   const icon = '<img src="icon-180.png" alt="">';
   const line = c => `<div class="ia-line${c ? ' ' + c : ''}"></div>`;
-  const page = `<div class="ia-page"><div class="ia-pgbar">${icon}<b>מעקב ראונד</b></div><div class="ia-hello">ליגת העל בולדר</div>` +
+  const page = `<div class="ia-page"><div class="ia-pgbar">${icon}<b>פורטל התחרויות</b></div><div class="ia-hello">ליגת העל בולדר</div>` +
     `<div class="ia-card">${line('')}${line('s')}${line('t')}</div><div class="ia-card">${line('')}${line('s')}</div><div class="ia-card">${line('s')}${line('t')}</div></div>`;
   const home = `<div class="ia-layer ia-home"><div class="ia-grid">${'<div class="ia-app"><i></i><span></span></div>'.repeat(7)}` +
-    `<div class="ia-app ia-new">${icon}<em>מעקב ראונד</em></div></div></div>`;
+    `<div class="ia-app ia-new">${icon}<em>פורטל התחרויות</em></div></div></div>`;
   let body;
   if (tab === 'ios') {
     body = page +
@@ -87,19 +87,19 @@ function animHtml(tab) {
         '<svg viewBox="0 0 24 24" fill="none"><path d="M4 5h6a2 2 0 012 2v12a2 2 0 00-2-2H4zM20 5h-6a2 2 0 00-2 2v12a2 2 0 012-2h6z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>' +
         '<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="7" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 4h10a2 2 0 012 2v10" stroke="currentColor" stroke-width="1.8"/></svg>' +
       '</div></div><div class="ia-dim"></div>' +
-      `<div class="ia-layer ia-sheet"><div class="ia-grab"></div><div class="ia-apphead">${icon}<div>מעקב ראונד<small>${APP_URL}</small></div></div>` +
+      `<div class="ia-layer ia-sheet"><div class="ia-grab"></div><div class="ia-apphead">${icon}<div>פורטל התחרויות<small>${APP_URL}</small></div></div>` +
         `<div class="ia-list"><div class="ia-row">העתקה</div><div class="ia-row">הוספה לרשימת קריאה</div><div class="ia-row ia-hit">הוספה למסך הבית${ICONS.plusSquare}</div><div class="ia-row">הדפסה</div></div></div>` +
-      `<div class="ia-layer ia-addpage"><div class="ia-top"><span>ביטול</span><b>הוספה למסך הבית</b><span class="ia-add">הוסף</span></div><div class="ia-addcard">${icon}<div>מעקב ראונד</div></div></div>` +
+      `<div class="ia-layer ia-addpage"><div class="ia-top"><span>ביטול</span><b>הוספה למסך הבית</b><span class="ia-add">הוסף</span></div><div class="ia-addcard">${icon}<div>פורטל התחרויות</div></div></div>` +
       home +
-      `<div class="ia-layer ia-standalone"><div class="ia-pgbar">${icon}<b>מעקב ראונד</b><span class="ia-gear">⚙</span></div>` +
+      `<div class="ia-layer ia-standalone"><div class="ia-pgbar">${icon}<b>פורטל התחרויות</b><span class="ia-gear">⚙</span></div>` +
         '<div class="ia-set"><h5>התראות על מסך נעול</h5><span class="ia-pill ia-pill-off">כבוי</span><span class="ia-pill ia-pill-on">✓ פעיל</span><div class="ia-enable">הפעל התראות</div></div>' +
         `<div class="ia-card">${line('')}${line('s')}</div>` +
-        '<div class="ia-perm-dim"></div><div class="ia-perm"><b>״מעקב ראונד״ מבקש לשלוח לך הודעות</b><p>הודעות יכולות לכלול התראות, צלילים ותגים.</p><div class="ia-perm-btns"><span>אל תאפשר</span><span class="ia-allow">אפשר</span></div></div>' +
+        '<div class="ia-perm-dim"></div><div class="ia-perm"><b>״פורטל התחרויות״ מבקש לשלוח לך הודעות</b><p>הודעות יכולות לכלול התראות, צלילים ותגים.</p><div class="ia-perm-btns"><span>אל תאפשר</span><span class="ia-allow">אפשר</span></div></div>' +
       '</div>';
   } else {
     body = `<div class="ia-chrome"><div class="ia-url">${APP_URL}</div><div class="ia-kebab">${ICONS.dots}</div></div>` + page + '<div class="ia-dim"></div>' +
       `<div class="ia-layer ia-menu"><div class="ia-row">כרטיסייה חדשה</div><div class="ia-row">היסטוריה</div><div class="ia-row">הורדות</div><div class="ia-row ia-hit">${ICONS.phone}התקנת אפליקציה</div><div class="ia-row">הגדרות</div></div>` +
-      `<div class="ia-layer ia-dialog"><h4>התקנת אפליקציה</h4><div class="ia-who">${icon}<div>מעקב ראונד<small>${APP_URL}</small></div></div><div class="ia-btns"><span>ביטול</span><span class="ia-ok">התקנה</span></div></div>` +
+      `<div class="ia-layer ia-dialog"><h4>התקנת אפליקציה</h4><div class="ia-who">${icon}<div>פורטל התחרויות<small>${APP_URL}</small></div></div><div class="ia-btns"><span>ביטול</span><span class="ia-ok">התקנה</span></div></div>` +
       home;
   }
   return `<div class="install-anim" aria-hidden="true"><div class="ia-phone ia-${tab}" id="install-anim-phone" data-s="page"><div class="ia-screen"><div class="ia-notch"></div>${body}<div class="ia-finger"></div></div></div></div>`;

@@ -1,6 +1,6 @@
 {
-  "name": "מעקב ראונד · PalgiTraining",
-  "short_name": "מעקב ראונד",
+  "name": "פורטל התחרויות · PalgiTraining",
+  "short_name": "פורטל התחרויות",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

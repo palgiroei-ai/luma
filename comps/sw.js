@@ -1,5 +1,5 @@
 // Offline support: page files cache-first; data.enc.json network-first (new start lists win when online).
-const CACHE = 'comps-v16';
+const CACHE = 'comps-v17';
 const TIMEOUT_MS = 3000; // weak hall Wi-Fi: don't hang on a stalled network, use the cache
 const FILES = ['./', 'index.html', 'app.js', 'engine.js', 'store.js', 'sync.js', 'install.js', 'changelog.js', 'decrypt.js', 'comps.css', 'logo-palgitraining.svg', 'mark.svg', 'icon-180.png', 'manifest.webmanifest', 'data.enc.json', 'data.view.enc.json'];
 
@@ -36,7 +36,7 @@ self.addEventListener('fetch', e => {
 self.addEventListener('push', e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : '' }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'מעקב ראונד', {
+  e.waitUntil(self.registration.showNotification(d.title || 'פורטל התחרויות', {
     // tag = one athlete: a newer alert replaces the older notification; renotify still sounds/vibrates.
     body: d.body || '', tag: d.tag || undefined, renotify: !!d.tag, icon: 'icon-180.png', badge: 'icon-180.png', lang: 'he', dir: 'rtl', data: { url: './' },
   }));
