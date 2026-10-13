@@ -6,7 +6,7 @@ import { CHANGELOG } from './changelog.js';
 import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats } from './results.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.9.0';
+export const APP_VERSION = '2.9.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -275,21 +275,23 @@ function resCard(ranked, row, who, final, full) {
     <div class="bars" style="grid-template-columns:repeat(${row.bs.length},1fr)">${bars}</div>
     ${soleKinds.length ? `<div class="sole-key"><span class="sole-ic">${STAR}</span> = ${soleKinds.length > 1 ? 'הטופ/הזון היחיד' : SOLE[soleKinds[0]]}</div>` : ''}
     <div class="ins">
-      <div class="grp">
+      <div class="grp"><span class="gh">מיקום</span>
         ${final ? '' : kv('סבב הבא', a.advances ? '<span class="yes">עולה ✓</span>' : `חסרו ${a.missing.toFixed(1)} נק׳<small class="d">קו ${a.cutScore.toFixed(1)}</small>`)}
         ${kv('פער מהמקום שמעל', a.above ? `${r1(a.above.score - row.score).toFixed(1)} נק׳<small class="d">מקום ${a.above.rank}</small>` : 'מקום ראשון')}
         ${a.below ? kv('יתרון על שמתחת', `${r1(row.score - a.below.score).toFixed(1)} נק׳<small class="d">מקום ${a.below.rank}</small>`) : ''}
       </div>
-      <div class="grp">
-        ${kv('ירד על נפילות', `${a.lost.toFixed(1)} נק׳`)}
+      <div class="grp"><span class="gh">בולדרים</span>
         ${a.strong ? kv('הבולדר הטוב', soleJ.length > 1
           ? `בולדרים ${heList(soleJ.map(j => j + 1))}<small class="d">${soleKinds.length > 1 ? soleJ.map(j => `${a.sole[j] === 't' ? 'טופ' : 'זון'} יחיד ב־${j + 1}`).join(', ') : SOLE[soleKinds[0]]}</small>`
           : `בולדר ${a.strong.boulder}<small class="d">${resWord(a.strong.b)} · ${a.sole[a.strong.boulder - 1] ? SOLE[a.sole[a.strong.boulder - 1]] : 'מקום ' + a.strong.place}</small>`) : ''}
         ${a.weak ? kv('בולדר לשיפור', `בולדר ${a.weak.boulder}<small class="d">${a.weak.b[0] || a.weak.b[1] ? resWord(a.weak.b) : 'בלי זון'} · מקום ${a.weak.place} · ${a.weak.topN} מתוך ${a.n} עשו טופ</small>`) : ''}
-        ${kv('פלאשים', `${a.flashes}<small class="d">ממוצע ${a.flashAvg.toFixed(1)}</small>`)}
         ${kv('פתיחה מול סיום', `מקום ${a.open} · מקום ${a.close}<small class="d">${a.close < a.open ? 'סיים טוב יותר' : a.close > a.open ? 'סיים חלש יותר' : 'יציב'}</small>`)}
       </div>
-      <div class="grp"><span class="gh">מה היה קורה עם…</span>
+      <div class="grp"><span class="gh">ניסיונות</span>
+        ${kv('פלאשים', `טופ ${a.flashes} · זון ${a.zFlashes}<small class="d">ממוצע ${a.flashAvg.toFixed(1)} · ${a.zFlashAvg.toFixed(1)}</small>`)}
+        ${kv('ירד על נפילות', `${a.lost.toFixed(1)} נק׳`)}
+      </div>
+      <div class="grp"><span class="gh">תרחישים</span>
         ${a.opts.length ? a.opts.map(o => kv(WHAT_IF[o.key], what(o))).join('') : kv('טופ נוסף', 'כבר טופ בכל הבולדרים')}
       </div>
     </div></article>`;

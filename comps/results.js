@@ -58,9 +58,9 @@ export function analyze(ranked, row, full = ranked) {
     const topN = ok.filter(x => x.bs[j][0]).length;
     if (!weak || places[j] > weak.place || (places[j] === weak.place && topN > weak.topN)) weak = { boulder: j + 1, place: places[j], topN, b };
   });
-  // flashes = tops on the first attempt, vs the average of everyone in the ranking
-  const flashN = r => r.bs.filter(b => b[0] === 1).length;
-  const flashAvg = r1(ok.reduce((s, x) => s + flashN(x), 0) / n);
+  // flashes = tops / zones on the first attempt (a flashed top counts as a zone flash too), vs the ranking's average
+  const flashN = r => r.bs.filter(b => b[0] === 1).length, zFlashN = r => r.bs.filter(b => b[1] === 1).length;
+  const flashAvg = r1(ok.reduce((s, x) => s + flashN(x), 0) / n), zFlashAvg = r1(ok.reduce((s, x) => s + zFlashN(x), 0) / n);
   // opening vs closing: everyone climbs boulder 1 first and the last one last → place among everyone on each
   // (place, not points — the last boulder may simply be harder)
   const open = places[0], close = places[places.length - 1];
@@ -81,7 +81,7 @@ export function analyze(ranked, row, full = ranked) {
   const overallWith = s => 1 + all.filter(x => x.bib !== row.bib && x.score > s).length;
   for (const o of opts) { o.score = r1(row.score + o.gain); o.rank = rankWith(o.score); o.advances = overall.rank > q && overallWith(o.score) <= q; }
   return { n, quota: q, cutScore, overallRank: overall.rank, advances: overall.rank <= q, missing: overall.rank <= q ? 0 : r1(cutScore - row.score + 0.1),
-    above, below, lost, strong, weak, flashes: flashN(row), flashAvg, open, close, sole, opts, tops: tops(row.bs), zones: zones(row.bs) };
+    above, below, lost, strong, weak, flashes: flashN(row), flashAvg, zFlashes: zFlashN(row), zFlashAvg, open, close, sole, opts, tops: tops(row.bs), zones: zones(row.bs) };
 }
 
 // Per boulder: how many topped / reached only the zone, average attempts to top and to zone.
