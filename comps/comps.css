@@ -676,6 +676,24 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .has-ph .lane-label { position: relative; isolation: isolate; height: 58px; margin: -8px -8px 6px; padding: 0 8px 6px; align-items: flex-end; color: #fff !important; text-shadow: 0 1px 3px rgba(0,0,0,.6); pointer-events: none; }
 .has-ph .ph-thumb { position: absolute; inset: 0; z-index: -1; pointer-events: auto; }
 .has-ph .ph-thumb::after { content: ''; position: absolute; inset: 0; background: linear-gradient(transparent 30%, rgba(10, 18, 30, .75)); }
+/* no photo yet (coach only, 2.3.0, Roei picked option A): an empty dashed photo spot with "+" in the same place and size */
+.lane.boulder.no-ph { position: relative; overflow: hidden; isolation: isolate; }
+.no-ph .lane-label { height: 58px; margin: -8px -8px 6px; padding: 6px; align-items: stretch; }
+.no-ph .ph-ttl, .ph-add-l { display: none; }
+.ph-add { flex: 1; font: inherit; font-size: 14px; font-weight: 700; color: var(--navy); cursor: pointer; border: 2px dashed var(--border); border-radius: 9px; background: var(--chalk); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0; }
+.ph-add .plus { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 19px; line-height: 1; background: var(--primary); color: var(--on-primary); }
+.ph-add:disabled { cursor: progress; color: var(--muted); }
+.lane.mine .ph-add { border-color: rgba(255,255,255,.6); background: rgba(255,255,255,.14); color: #fff; }
+.lane.mine .ph-add .plus { background: #fff; color: var(--copper-text); }
+@media (max-width: 600px) {
+  .no-ph { padding-inline-end: calc(40% + 6px); }
+  .no-ph .lane-label { height: auto; margin: 0; padding: 0; align-items: center; }
+  .no-ph .ph-ttl { display: inline; }
+  .ph-add { position: absolute; inset-block: 6px; inset-inline-end: 6px; width: calc(40% - 6px); flex-direction: column; gap: 6px; font-size: 13px; }
+  .ph-add .plus { width: 34px; height: 34px; font-size: 24px; }
+  .ph-add-t { display: none; }
+  .ph-add-l { display: inline; }
+}
 @media (max-width: 600px) {
   .has-ph { padding-inline-end: calc(40% + 6px); }
   .has-ph .lane-label { height: auto; margin: 0; padding: 0; align-items: center; color: var(--navy) !important; text-shadow: none; pointer-events: auto; position: static; }

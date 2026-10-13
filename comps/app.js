@@ -5,7 +5,7 @@ import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC
 import { CHANGELOG } from './changelog.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.2.0';
+export const APP_VERSION = '2.3.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -146,9 +146,12 @@ function renderBoard(r, s) {
   if (!r.slots.length) { patch($('#board'), `<div class="board-msg">סדר העלייה לראונד הזה עוד לא התקבל.</div>`); return; }
   const cells = [];
   const thumb = b => { const u = photoUrl(r.id, b); return u ? `<button type="button" class="ph-thumb" data-photo="${b}" aria-label="תמונת בולדר ${b}"><img src="${u}" alt=""></button>` : ''; };
+  // no photo yet → coach gets an empty photo spot with "+" right on the board (2.3.0, Roei picked option A); viewers see the plain card
+  const addSpot = b => (VIEWER || photoV(r.id, b) ? '' : `<button type="button" class="ph-add" data-ph-add="${b}" aria-label="הוספת תמונה לבולדר ${b}"${busyPh.has(r.id + ':' + b) ? ' disabled' : ''}>${
+    busyPh.has(r.id + ':' + b) ? '<span class="ph-add-busy">מעלה…</span>' : `<span class="plus">+</span><span class="ph-add-t">בולדר ${b}</span><span class="ph-add-l">הוסף תמונה</span>`}</button>`);
   for (let j = 0; j < r.boulders; j++) {
-    const th = thumb(j + 1);
-    cells.push(slotCard(r, s.boulders[j], `lane boulder${th ? ' has-ph' : ''}`, `${th}בולדר ${j + 1}`));
+    const th = thumb(j + 1), add = th ? '' : addSpot(j + 1);
+    cells.push(slotCard(r, s.boulders[j], `lane boulder${th ? ' has-ph' : add ? ' no-ph' : ''}`, th ? `${th}בולדר ${j + 1}` : add ? `${add}<span class="ph-ttl">בולדר ${j + 1}</span>` : `בולדר ${j + 1}`));
     if (j < r.boulders - 1) cells.push(slotCard(r, s.rests[j], 'lane rest', `מנוחה <span class="nw">${j + 1}–${j + 2}</span>`));
   }
   if (r.trailingRest) cells.push(slotCard(r, s.trailing, 'lane rest', 'מנוחת סיום'));
@@ -1051,6 +1054,7 @@ function start() {
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); }
     else if (d.photo) openPhoto($('#photos-dlg').open ? gridRound : current, Number(d.photo));
     else if (b.id === 'photos-btn') openPhotos();
+    else if (d.phAdd) { gridRound = current; upTarget = Number(d.phAdd); $('#photo-file').value = ''; $('#photo-file').click(); }
     else if (d.phUp) { upTarget = Number(d.phUp); $('#photo-file').value = ''; $('#photo-file').click(); }
     else if (d.phDel) deletePhoto(gridRound, Number(d.phDel));
     else if (d.adj) adjust(d.adj);
