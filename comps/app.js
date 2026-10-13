@@ -3,9 +3,10 @@ import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlo
 import { store } from './store.js';
 import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
+import { rankRows, analyze, boulderStats, pts, kind, r1 } from './results.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.6.0';
+export const APP_VERSION = '2.7.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -87,7 +88,16 @@ const evName = e => (e?.champ ? '🏆 ' : '') + (e?.title || '');
 const evOf = r => EVENTS().find(e => e.id === (r?.event || 'bl1')) || EVENTS()[0];
 // viewer: only rounds still ahead (or running now)
 const todayStr = () => { const d = new Date(now()); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-const visible = r => !VIEWER || (r.slots.length ? roundEndMs(r) > now() : r.date >= todayStr());
+const visible = r => !VIEWER || !!resultsOf(r.id) || (r.slots.length ? roundEndMs(r) > now() : r.date >= todayStr());
+// results (2.7.0): DATA.results[roundId] = { source, rows } from src/results.mjs; round 2 counts back to round 1
+const resultsOf = id => DATA.results?.[id] || null;
+const rankCache = {};
+function rankedOf(id) {
+  const res = resultsOf(id); if (!res) return null;
+  if (rankCache[id]) return rankCache[id];
+  const prevId = id.replace(/-r2$/, '-r1'), prev = prevId !== id && resultsOf(prevId) ? rankedOf(prevId) : null;
+  return (rankCache[id] = rankRows(res.rows, prev && Object.fromEntries(prev.map(x => [x.bib, x.rank]))));
+}
 const roundsOf = ev => DATA.rounds.filter(r => (r.event || 'bl1') === ev.id && visible(r));
 const MINE_NAME = () => (VIEWER ? 'הנבחרת של רועי' : 'שלי');
 // Base = Hub matches from the build; the coach can add/remove athletes per round in settings.
@@ -222,11 +232,86 @@ function renderAll(r) {
     r.slots.map((s, k) => {
       if (!s) return `<tr class="empty-row"><td colspan="3">סבב ריק</td><td>${fmtClock(slotStartMs(r, k, off(r.id)))}</td><td></td><td></td></tr>`;
       const st = athleteStatus(r, k, t, off(r.id));
-      return `<tr class="${mk.has(k) ? 'mine' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</td>
+      const added = mk.has(k) && mineOf(r.id).find(m => m.k === k)?.added;
+      return `<tr class="${mk.has(k) ? 'mine' : ''}${added ? ' added' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</td>
         <td>${fmtClock(st.startMs)}</td><td>${statusText(r, st)}</td>
         <td class="row-actions"><button type="button" class="sync-btn" data-sync="${k}">מתחיל עכשיו</button>
           <button type="button" class="sync-btn appeal-btn" data-appeal="${k}">ערעור</button></td></tr>`;
     }).join('')}</tbody></table></div>`);
+}
+
+// ---- results (2.7.0): my athletes' cards + boulder stats + full table (design picked by Roei 2026-10-13) ----
+// a finished round with results opens on its results; otherwise leave the results tab
+function openRoundView() {
+  const r = round(current);
+  if (resultsOf(r.id) && (!r.slots.length || stateAt(r, now(), off(r.id)).phase === 'after')) setView('results');
+  else if (view === 'results') setView('mine');
+}
+const cellTxt = b => (b[0] ? `T${b[0]}` : b[1] ? `Z${b[1]}` : '–');
+const resWord = b => (b[0] ? `טופ בניסיון ${b[0]}` : `זון בניסיון ${b[1]}`);
+const sgn = g => `<bdi dir="ltr">+${g.toFixed(1)}</bdi>`;
+const WHAT_IF = { topFromZone: 'טופ במקום זון', topFromEmpty: 'טופ בבולדר ריק', zoneFromEmpty: 'זון בבולדר ריק' };
+
+function resCard(ranked, row, who) {
+  const a = analyze(ranked, row);
+  const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
+  const what = o => row.rank === 1 ? `יתרון ${sgn(o.gain)}` : `${o.rank < row.rank ? 'מקום ' + o.rank : 'נשאר ' + row.rank}<small class="d">${sgn(o.gain)}</small>${o.advances ? '<span class="up">עולה</span>' : ''}`;
+  const bars = row.bs.map((b, j) => { const k = kind(b), p = pts(b);
+    return `<div class="bar" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div></div><span class="lb">B${j + 1} ${cellTxt(b)}</span></div>`; }).join('');
+  return `<article class="card fc${who.added ? ' added' : ''}">
+    <div class="top"><div><div class="nm">${esc(row.name)}</div><div class="club">${esc(row.club)} · מס׳ ${row.bib}</div></div><div class="rk">${row.rank}<small>/${a.n}</small></div></div>
+    <div class="sc"><b>${row.score.toFixed(1)}</b> נק׳ · ${a.tops} טופים · ${a.zones} זונים</div>
+    <div class="bars" style="grid-template-columns:repeat(${row.bs.length},1fr)">${bars}</div>
+    <div class="ins">
+      <div class="grp">
+        ${kv('סבב הבא', a.advances ? '<span class="yes">עולה ✓</span>' : `חסרו ${a.missing.toFixed(1)} נק׳<small class="d">קו ${a.cutScore.toFixed(1)}</small>`)}
+        ${kv('פער מהמקום שמעל', a.above ? `${r1(a.above.score - row.score).toFixed(1)} נק׳<small class="d">מקום ${a.above.rank}</small>` : 'מקום ראשון')}
+        ${a.below ? kv('יתרון על שמתחת', `${r1(row.score - a.below.score).toFixed(1)} נק׳<small class="d">מקום ${a.below.rank}</small>`) : ''}
+      </div>
+      <div class="grp">
+        ${kv('ירד על נפילות', `${a.lost.toFixed(1)} נק׳`)}
+        ${a.strong ? kv('הבולדר הטוב', `בולדר ${a.strong.boulder}<small class="d">${resWord(a.strong.b)} · מקום ${a.strong.place}</small>`) : ''}
+      </div>
+      <div class="grp"><span class="gh">מה היה קורה עם…</span>
+        ${a.opts.length ? a.opts.map(o => kv(WHAT_IF[o.key], what(o))).join('') : kv('טופ נוסף', 'כבר טופ בכל הבולדרים')}
+      </div>
+    </div></article>`;
+}
+
+function renderResults(r) {
+  const res = resultsOf(r.id), ranked = rankedOf(r.id);
+  const ok = ranked.filter(x => x.rank != null), nB = r.boulders;
+  const whoByBib = {};
+  for (const m of mineOf(r.id)) { const s = r.slots[m.k]; if (s) whoByBib[s.bib] = m; }
+  const q = analyze(ranked, ok[0]).quota;
+  const mine = ok.filter(x => whoByBib[x.bib]);
+  const cards = mine.length ? `<div class="focus">${mine.map(x => resCard(ranked, x, whoByBib[x.bib])).join('')}</div>`
+    : `<p class="muted">${VIEWER ? 'אין ספורטאים מהנבחרת של רועי בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
+  const stats = boulderStats(ranked, nB).map(b => {
+    const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
+    return `<div class="bs-row"><b>בולדר ${b.boulder}</b><div class="stack"><span class="t" style="width:${b.tops / b.n * 100}%"></span><span class="z" style="width:${b.zoneOnly / b.n * 100}%"></span></div>
+      <span class="c">${b.tops} טופ · ${b.tops + b.zoneOnly} זון / ${b.n}</span><span></span>
+      <div class="mydots">${md}<span class="avg">ממוצע ניסיונות לטופ ${b.avgTop ?? '–'}</span><span class="avg">ממוצע ניסיונות לזון ${b.avgZone ?? '–'}</span></div></div>`;
+  }).join('');
+  const cell = b => { const k = kind(b);
+    return `<div class="cell ${k}"><span class="a">${k === 'n' ? '—' : (b[0] ? 'T' + b[0] + ' ' : '') + 'Z' + b[1]}</span><span class="p">${k === 'n' ? '0' : pts(b).toFixed(1)}</span></div>`; };
+  let cutDone = false;
+  const rows = ranked.map(x => {
+    const w = whoByBib[x.bib], cls = w ? (w.added ? 'mine added' : 'mine') : '';
+    let pre = '';
+    if (!cutDone && x.rank != null && x.rank > q) { cutDone = true; pre = `<tr class="cut"><td colspan="${nB + 5}">קו העלייה לסבב הבא · ${q} עולים (${ok.length} התחילו)</td></tr>`; }
+    return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b><small>${esc(x.club)}</small></td><td class="bib">${x.bib}</td>
+      ${x.rank == null ? `<td colspan="${nB}" class="muted small">לא התחיל (DNS)</td><td></td><td class="tt">–</td>` : x.bs.map(b => `<td>${cell(b)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b[0]).length}T ${x.bs.filter(b => b[0] || b[1]).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
+  }).join('');
+  patch($('#view-results'), `<div class="res">
+    <div class="res-head"><span class="muted small">מקור: ${esc(res.source)}</span>
+      <span class="legend"><span><i class="cell t lg">T</i> טופ</span><span><i class="cell z lg">Z</i> זון בלי טופ</span><span><i class="cell n lg">—</i> בלי זון</span><span class="muted">T2 = טופ בניסיון השני</span></span></div>
+    ${cards}
+    <div class="card bstats"><h3>הבולדרים בסבב: כמה הגיעו לטופ ולזון</h3>${stats}</div>
+    <div class="card"><div class="tbl-head"><b>כל המתחרים</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'הנבחרת של רועי' : 'שלי'}</span></div>
+      <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th>#</th><th class="n">מטפס</th><th>מס׳</th>${Array.from({ length: nB }, (_, j) => `<th>בולדר ${j + 1}</th>`).join('')}<th>T / Z</th><th>ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.</p>
+  </div>`);
 }
 
 function appealText(a) {
@@ -352,10 +437,11 @@ function renderHomeDetail(seg, fromList) {
   const card = r => {
     const ph = r.slots.length ? stateAt(r, t, off(r.id)).phase : 'wait';
     const badge = { live: '<span class="hb live">חי עכשיו</span>', before: '<span class="hb soon">בקרוב</span>', after: '<span class="hb done">הסתיים</span>', wait: '<span class="hb wait">ממתין לסדר עלייה</span>' }[ph];
-    const mine = mineOf(r.id).map(m => `<li><b>${esc(m.short)}</b> <span>#${r.slots[m.k].order} · ${fmtHM(slotStartMs(r, m.k, off(r.id)))}</span></li>`).join('');
+    const rk = rankedOf(r.id), rankOfK = k => rk?.find(x => x.bib === r.slots[k].bib)?.rank;
+    const mine = mineOf(r.id).map(m => `<li><b>${esc(m.short)}</b> <span>${rk ? (rankOfK(m.k) ? `מקום ${rankOfK(m.k)}` : 'לא התחיל') : `#${r.slots[m.k].order} · ${fmtHM(slotStartMs(r, m.k, off(r.id)))}`}</span></li>`).join('');
     const live = ph === 'live' ? (() => { const s = stateAt(r, t, off(r.id)); const b1 = s.boulders[0]; return `<p class="h-live">סבב ${s.n + 1} מתוך ${windowCount(r)} · בולדר 1: ${b1 ? `#${b1.order} ${esc(b1.name)}` : '—'}</p>`; })() : '';
     return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
-      <div class="h-top"><h3>${esc(r.title)}</h3>${badge}</div>
+      <div class="h-top"><h3>${esc(r.title)}</h3>${rk ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
       <p class="muted small">${fmtHM(roundStart(r) + off(r.id))}${r.slots.length ? `–${fmtHM(roundEndMs(r))}` : ''} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec * 1000)}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
       ${isoRow(r)}${live}${mine ? `<ul class="h-mine">${mine}</ul>` : `<p class="muted small">${r.slots.length ? 'אין ספורטאים שלי' : ''}</p>`}
       ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} סבבים של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
@@ -393,6 +479,9 @@ function render() {
   $('#event-title').textContent = evName(evOf(r));
   $('#round-sub').textContent = `${dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec * 1000)}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
   renderTabs(); renderBoard(r, s); renderTimer(r, s); renderNext(r, s);
+  $('[data-view="results"]').hidden = !resultsOf(r.id);
+  if (view === 'results' && !resultsOf(r.id)) { setView('mine'); return; }
+  if (view === 'results') renderResults(r);
   if (view === 'mine') renderMine(r);
   if (view === 'all') renderAll(r);
   if (view === 'log') renderLog();
@@ -614,7 +703,7 @@ function openAppeal(k) {
 function setView(v) {
   view = v;
   document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
-  for (const x of ['mine', 'all', 'log']) { const el = $('#view-' + x); el.hidden = x !== v; el._html = null; }
+  for (const x of ['mine', 'all', 'log', 'results']) { const el = $('#view-' + x); el.hidden = x !== v; el._html = null; }
   render();
 }
 
@@ -1056,9 +1145,9 @@ function start() {
     if (d.hv) { store.setSetting('homeView', d.hv); homeOpenEvent = null; render(); return; }
     if (d.ev != null) { homeOpenEvent = Number(d.ev); render(); return; }
     if (b.id === 'home-back') { homeOpenEvent = null; render(); return; }
-    if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; showScreen('round'); }
+    if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
     else if (b.id === 'home-btn') { homeOpenEvent = null; showScreen('home'); }
-    else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); }
+    else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
     else if (d.photo) openPhoto($('#photos-dlg').open ? gridRound : current, Number(d.photo));
     else if (b.id === 'photos-btn') openPhotos();
     else if (d.phAdd) { gridRound = current; upTarget = Number(d.phAdd); $('#photo-file').value = ''; $('#photo-file').click(); }

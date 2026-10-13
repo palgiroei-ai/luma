@@ -726,3 +726,74 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .iso-t.close b { color: var(--copper-text); }
 .iso-ar { color: var(--muted); }
 .iso-sep { width: 1px; align-self: stretch; background: var(--border); }
+
+/* ---- results (2.7.0) — Roei's pick 2026-10-13: personal cards + boulder stats + full table.
+   Top = filled green, zone = green outline, nothing = dashed; cells keep their own background so they read on any row. */
+.res { display: grid; gap: 16px; min-width: 0; }
+.res > * { min-width: 0; }
+.res-head { display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
+.res .legend { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 13px; }
+.res .legend > span { display: inline-flex; gap: 4px; align-items: center; }
+.hb.res { background: var(--ok-bg); color: var(--ok); }
+.res .cell { display: grid; gap: 1px; justify-items: center; border-radius: 8px; padding: 3px 2px; min-width: 72px; border: 2px solid transparent; font-style: normal; }
+.res .cell.t { background: var(--ok); color: var(--chalk); border-color: var(--ok); }
+.res .cell.z { background: var(--card); color: var(--ok); border-color: var(--ok); }
+.res .cell.n { background: var(--card); color: var(--muted); border: 2px dashed var(--border); }
+.res .cell.lg { min-width: 28px; padding: 0 6px; font-size: 12px; font-weight: 700; }
+.res .cell .a { font-size: 13px; font-weight: 700; direction: ltr; } .res .cell .p { font-size: 11px; opacity: .9; }
+.res .tag { font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 6px; background: var(--copper); color: #fff; vertical-align: 1px; }
+/* cards */
+.res .focus { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 640px) { .res .focus { grid-template-columns: minmax(0, 1fr); } }
+.fc { padding: 14px; display: grid; gap: 10px; align-content: start; border-top: 4px solid var(--copper); }
+.fc.added { border-top-color: var(--added); }
+.fc .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.fc .nm { font-weight: 700; font-size: 17px; } .fc .club { font-size: 13px; color: var(--muted); }
+.fc .rk { font-size: 34px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; } .fc .rk small { font-size: 14px; color: var(--muted); font-weight: 500; }
+.fc .sc { font-size: 15px; font-variant-numeric: tabular-nums; } .fc .sc b { font-size: 20px; }
+.fc .bars { display: grid; gap: 6px; align-items: end; height: 92px; }
+.fc .bar { display: grid; grid-template-rows: 1fr auto; gap: 3px; height: 100%; text-align: center; }
+.fc .bar .fill-wrap { background: var(--line); border-radius: 6px; display: flex; align-items: flex-end; overflow: hidden; }
+.fc .bar .fill { width: 100%; border-radius: 6px 6px 0 0; }
+.fc .bar .fill.t { background: var(--ok); } .fc .bar .fill.z { background: var(--card); border: 2px solid var(--ok); border-bottom: 0; box-sizing: border-box; }
+.fc .bar .lb { font-size: 11px; color: var(--muted); direction: ltr; }
+.fc .ins { font-size: 13px; display: grid; gap: 8px; }
+.fc .grp { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); row-gap: 6px; align-items: baseline; border-top: 1px solid var(--line); padding-top: 8px; }
+.fc .kv { display: contents; }
+.fc .kv > span { color: var(--muted); white-space: nowrap; padding-inline-end: 10px; }
+.fc .kv > b { padding-inline-start: 10px; border-inline-start: 1px solid var(--border); text-align: start; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 0; }
+.fc .kv > b small.d { font-weight: 400; font-size: 12px; color: var(--muted); margin-inline-start: 6px; }
+.fc .gh { grid-column: 1 / -1; font-weight: 700; }
+.fc .up { display: inline-block; margin-inline-start: 6px; font-size: 11px; font-weight: 700; color: var(--chalk); background: var(--ok); border-radius: 6px; padding: 0 6px; }
+.fc .yes { color: var(--ok); }
+/* boulder stats */
+.bstats { padding: 14px; display: grid; gap: 10px; } .bstats h3 { margin: 0; font-size: 16px; }
+.bs-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 130px; gap: 4px 10px; align-items: center; font-size: 14px; }
+.bs-row .stack { height: 16px; border-radius: 999px; background: var(--line); display: flex; overflow: hidden; }
+.bs-row .stack .t { background: var(--ok); } .bs-row .stack .z { background: repeating-linear-gradient(45deg, var(--ok) 0 2px, transparent 2px 6px); }
+.bs-row .c { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.mydots { display: flex; gap: 4px; flex-wrap: wrap; font-size: 12px; }
+.mydots span { border-radius: 6px; padding: 0 6px; border: 1px solid var(--copper); color: var(--copper-text); }
+.mydots span.avg { border-color: var(--border); color: var(--muted); }
+@media (max-width: 600px) { .bs-row { grid-template-columns: 52px minmax(0, 1fr); } .bs-row .c { grid-column: 2; } }
+/* table */
+.tbl-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.tbl-wrap { overflow-x: auto; }
+.res-tbl { border-collapse: collapse; width: 100%; min-width: 720px; font-variant-numeric: tabular-nums; }
+.res-tbl th { background: var(--card); font-size: 13px; color: var(--muted); font-weight: 600; text-align: center; padding: 10px 6px; border-bottom: 2px solid var(--border); }
+.res-tbl th.n, .res-tbl td.n { text-align: start; }
+.res-tbl td { padding: 6px; border-bottom: 1px solid var(--line); text-align: center; vertical-align: middle; }
+.res-tbl tr.mine td { background: color-mix(in srgb, var(--copper-bg) 60%, var(--card)); }
+.res-tbl tr.mine td:first-child { box-shadow: inset -4px 0 0 var(--copper); }
+.res-tbl tr.mine.added td { background: color-mix(in srgb, var(--added-bg) 60%, var(--card)); }
+.res-tbl tr.mine.added td:first-child { box-shadow: inset -4px 0 0 var(--added); }
+.res-tbl tr.mine.added .tag { background: var(--added); }
+.res-tbl tr.cut td { background: var(--line); color: var(--copper-text); font-weight: 700; font-size: 13px; padding: 4px; }
+.res-tbl td.rk { font-weight: 800; font-size: 17px; width: 44px; }
+.res-tbl td.n b { font-weight: 600; display: block; } .res-tbl td.n small { color: var(--muted); font-size: 12px; }
+.res-tbl td.bib { color: var(--muted); font-size: 13px; width: 44px; }
+.res-tbl td.tt { font-weight: 800; font-size: 17px; width: 70px; }
+.res-tbl td.tz { font-size: 13px; color: var(--muted); width: 60px; direction: ltr; }
+/* full start list: athletes added by hand = blue, like in settings (Roei's feedback 2026-10-13) */
+.full tr.mine.added td { background: var(--added-bg); }
+.full tr.mine.added td:first-child { box-shadow: inset -4px 0 0 var(--added); }
