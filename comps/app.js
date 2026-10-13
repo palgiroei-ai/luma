@@ -6,7 +6,7 @@ import { CHANGELOG } from './changelog.js';
 import { rankRows, analyze, boulderStats, pts, kind, r1 } from './results.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.7.1';
+export const APP_VERSION = '2.7.2';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -252,10 +252,10 @@ const resWord = b => (b[0] ? `טופ בניסיון ${b[0]}` : `זון בניס�
 const sgn = g => `<bdi dir="ltr">+${g.toFixed(1)}</bdi>`;
 const WHAT_IF = { topFromZone: 'טופ במקום זון', topFromEmpty: 'טופ בבולדר ריק', zoneFromEmpty: 'זון בבולדר ריק' };
 
-function resCard(ranked, row, who) {
+function resCard(ranked, row, who, final) {
   const a = analyze(ranked, row);
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
-  const what = o => row.rank === 1 ? `יתרון ${sgn(o.gain)}` : `${o.rank < row.rank ? 'מקום ' + o.rank : 'נשאר ' + row.rank}<small class="d">${sgn(o.gain)}</small>${o.advances ? '<span class="up">עולה</span>' : ''}`;
+  const what = o => row.rank === 1 ? `יתרון ${sgn(o.gain)}` : `${o.rank < row.rank ? 'מקום ' + o.rank : 'נשאר ' + row.rank}<small class="d">${sgn(o.gain)}</small>${o.advances && !final ? '<span class="up">עולה</span>' : ''}`;
   const bars = row.bs.map((b, j) => { const k = kind(b), p = pts(b);
     return `<div class="bar" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div></div><span class="lb">B${j + 1} ${cellTxt(b)}</span></div>`; }).join('');
   return `<article class="card fc${who.added ? ' added' : ''}">
@@ -264,7 +264,7 @@ function resCard(ranked, row, who) {
     <div class="bars" style="grid-template-columns:repeat(${row.bs.length},1fr)">${bars}</div>
     <div class="ins">
       <div class="grp">
-        ${kv('סבב הבא', a.advances ? '<span class="yes">עולה ✓</span>' : `חסרו ${a.missing.toFixed(1)} נק׳<small class="d">קו ${a.cutScore.toFixed(1)}</small>`)}
+        ${final ? '' : kv('סבב הבא', a.advances ? '<span class="yes">עולה ✓</span>' : `חסרו ${a.missing.toFixed(1)} נק׳<small class="d">קו ${a.cutScore.toFixed(1)}</small>`)}
         ${kv('פער מהמקום שמעל', a.above ? `${r1(a.above.score - row.score).toFixed(1)} נק׳<small class="d">מקום ${a.above.rank}</small>` : 'מקום ראשון')}
         ${a.below ? kv('יתרון על שמתחת', `${r1(row.score - a.below.score).toFixed(1)} נק׳<small class="d">מקום ${a.below.rank}</small>`) : ''}
       </div>
@@ -285,7 +285,7 @@ function renderResults(r) {
   for (const m of mineOf(r.id)) { const s = r.slots[m.k]; if (s) whoByBib[s.bib] = m; }
   const q = analyze(ranked, ok[0]).quota;
   const mine = ok.filter(x => whoByBib[x.bib]);
-  const cards = mine.length ? `<div class="focus">${mine.map(x => resCard(ranked, x, whoByBib[x.bib])).join('')}</div>`
+  const cards = mine.length ? `<div class="focus">${mine.map(x => resCard(ranked, x, whoByBib[x.bib], res.final)).join('')}</div>`
     : `<p class="muted">${VIEWER ? 'אין ספורטאים מהנבחרת של רועי בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
@@ -299,7 +299,7 @@ function renderResults(r) {
   const rows = ranked.map(x => {
     const w = whoByBib[x.bib], cls = w ? (w.added ? 'mine added' : 'mine') : '';
     let pre = '';
-    if (!cutDone && x.rank != null && x.rank > q) { cutDone = true; pre = `<tr class="cut"><td colspan="${nB + 5}">קו העלייה לסבב הבא · ${q} עולים (${ok.length} התחילו)</td></tr>`; }
+    if (!res.final && !cutDone && x.rank != null && x.rank > q) { cutDone = true; pre = `<tr class="cut"><td colspan="${nB + 5}">קו העלייה לסבב הבא · ${q} עולים (${ok.length} התחילו)</td></tr>`; }
     return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b><small>${esc(x.club)}</small></td><td class="bib">${x.bib}</td>
       ${x.rank == null ? `<td colspan="${nB}" class="muted small">לא התחיל (DNS)</td><td></td><td class="tt">–</td>` : x.bs.map(b => `<td>${cell(b)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b[0]).length}T ${x.bs.filter(b => b[0] || b[1]).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
@@ -310,7 +310,7 @@ function renderResults(r) {
     <div class="card bstats"><h3>הבולדרים בסבב: כמה הגיעו לטופ ולזון</h3>${stats}</div>
     <div class="card"><div class="tbl-head"><b>כל המתחרים</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'הנבחרת של רועי' : 'שלי'}</span></div>
       <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th>#</th><th class="n">מטפס</th><th>מס׳</th>${Array.from({ length: nB }, (_, j) => `<th>בולדר ${j + 1}</th>`).join('')}<th>T / Z</th><th>ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
-    <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.</p>
+    <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. ${res.final ? 'סבב יחיד — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
   </div>`);
 }
 
@@ -469,7 +469,8 @@ function render() {
     renderTabs(); renderHome(); checkAlerts();
     return;
   }
-  if (Date.now() - lastTabTap > 5 * 60000 && stateAt(round(current), now(), off(current)).phase === 'after') {
+  // (not while reading results: a finished round with results stays put — 2.7.2)
+  if (view !== 'results' && Date.now() - lastTabTap > 5 * 60000 && stateAt(round(current), now(), off(current)).phase === 'after') {
     const next = pickDefaultRound();
     if (next !== current) { current = next; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; }
   }
@@ -1138,6 +1139,7 @@ function start() {
   screen = params.get('round') || liveNow ? 'round' : 'home';
   $('#home').hidden = screen !== 'home'; $('#round-screen').hidden = screen !== 'round';
   $('#home-btn').setAttribute('aria-pressed', String(screen === 'home'));
+  if (screen === 'round') openRoundView(); // a link to a finished round with results opens on them
   document.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
