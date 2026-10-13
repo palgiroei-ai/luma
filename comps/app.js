@@ -6,7 +6,7 @@ import { CHANGELOG } from './changelog.js';
 import { rankRows, analyze, boulderStats, pts, kind, r1 } from './results.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.7.0';
+export const APP_VERSION = '2.7.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -148,8 +148,8 @@ function renderTabs() {
 function slotCard(r, s, cls, label) {
   const mk = mineK(r.id);
   if (!s) return `<div class="${cls} empty"><div class="lane-label">${label}</div><div class="who">—</div></div>`;
-  const mine = mk.has(s.k);
-  return `<div class="${cls}${mine ? ' mine' : ''}"><div class="lane-label">${label}</div>
+  const mine = mk.has(s.k), added = mine && mineOf(r.id).find(m => m.k === s.k)?.added;
+  return `<div class="${cls}${mine ? ' mine' : ''}${added ? ' added' : ''}"><div class="lane-label">${label}</div>
     <div class="ord">#${s.order}</div><div class="who">${esc(s.name)}</div>
     <div class="bib">גב ${s.bib}${mine ? ` · <b>${esc(shortOf(r.id, s.k))}</b>` : ''}</div></div>`;
 }
@@ -196,7 +196,7 @@ function renderTimer(r, s) {
 
 function renderNext(r, s) {
   const mk = mineK(r.id);
-  patch($('#next'), s.next.slice(0, 7).map(x => `<li class="${mk.has(x.k) ? 'mine' : ''}">
+  patch($('#next'), s.next.slice(0, 7).map(x => `<li class="${mk.has(x.k) ? 'mine' : ''}${mk.has(x.k) && mineOf(r.id).find(m => m.k === x.k)?.added ? ' added' : ''}">
       <span class="ord">#${x.order}</span><span class="who">${esc(x.name)}</span>
       <span class="at">${fmtClock(x.startMs)}</span><span class="cd" data-until="${x.startMs}"></span></li>`).join('')
     || '<li class="muted">אין</li>');

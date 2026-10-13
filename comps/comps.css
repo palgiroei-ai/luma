@@ -797,3 +797,10 @@ body:not(.viewer) .viewer-only { display: none !important; }
 /* full start list: athletes added by hand = blue, like in settings (Roei's feedback 2026-10-13) */
 .full tr.mine.added td { background: var(--added-bg); }
 .full tr.mine.added td:first-child { box-shadow: inset -4px 0 0 var(--added); }
+
+/* live board + "next up": athletes added by hand = blue, like the full list and settings (Roei 2026-10-13).
+   Fixed strong blue under white text in every theme (the dark themes' --added is a light text blue). */
+.lane.mine.added, .next li.mine.added { background: #2F5DA8; border-color: #2F5DA8; color: #fff; }
+.lane.rest.mine.added { background: var(--added-bg); color: var(--added); border: 2px solid var(--added); }
+.lane.rest.mine.added .lane-label, .lane.rest.mine.added .bib { color: var(--added); }
+.lane.mine.added .ph-add .plus { color: #2F5DA8; }
