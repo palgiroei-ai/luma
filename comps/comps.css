@@ -717,3 +717,12 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .ph-view::backdrop { background: rgba(0, 0, 0, .92); }
 .ph-view h2 { font-size: 17px; font-weight: 700; }
 .ph-view img { width: 100%; height: 100%; object-fit: contain; }
+
+/* federation schedule row in the home detail round card (2.4.0): isolation open → close (+ U17 route preview) */
+.iso { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; background: var(--line); border-radius: 10px; padding: 7px 10px; font-size: 13.5px; }
+.iso-k { font-weight: 700; color: var(--muted); font-size: 12.5px; letter-spacing: .02em; }
+.iso-t { color: var(--muted); white-space: nowrap; }
+.iso-t b { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--navy); }
+.iso-t.close b { color: var(--copper-text); }
+.iso-ar { color: var(--muted); }
+.iso-sep { width: 1px; align-self: stretch; background: var(--border); }

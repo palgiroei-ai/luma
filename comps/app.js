@@ -5,7 +5,7 @@ import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC
 import { CHANGELOG } from './changelog.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.3.0';
+export const APP_VERSION = '2.4.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -334,6 +334,11 @@ function renderHomeList(seg) {
   patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}</div><div class="ev-list">${rows}</div>`);
 }
 
+// isolation open/close (+ U17 route preview) from the federation info sheet (2.4.0); close time stressed = the deadline
+const hm = s => s.replace(/^0/, '');
+const isoRow = r => (r.iso ? `<div class="iso"><span class="iso-k">בידוד</span><span class="iso-t"><b>${hm(r.iso.open)}</b> נפתח</span><span class="iso-ar">←</span><span class="iso-t close"><b>${hm(r.iso.close)}</b> נסגר</span>${
+  r.iso.preview ? `<span class="iso-sep"></span><span class="iso-k">צפייה במסלולים</span><span class="iso-t"><b>${esc(r.iso.preview)}</b></span>` : ''}</div>` : '');
+
 function renderHomeDetail(seg, fromList) {
   const t = now();
   const evs = homeEvents(); const ei = homeOpenEvent ?? focusEventIdx(); const cur = evs[Math.min(ei, evs.length - 1)]; const { event: ev, rounds } = cur;
@@ -350,7 +355,7 @@ function renderHomeDetail(seg, fromList) {
     return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(r.title)}</h3>${badge}</div>
       <p class="muted small">${fmtHM(roundStart(r) + off(r.id))}${r.slots.length ? `–${fmtHM(roundEndMs(r))}` : ''} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec * 1000)}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
-      ${live}${mine ? `<ul class="h-mine">${mine}</ul>` : `<p class="muted small">${r.slots.length ? 'אין ספורטאים שלי' : ''}</p>`}
+      ${isoRow(r)}${live}${mine ? `<ul class="h-mine">${mine}</ul>` : `<p class="muted small">${r.slots.length ? 'אין ספורטאים שלי' : ''}</p>`}
       ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} סבבים של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
