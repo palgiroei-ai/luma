@@ -6,7 +6,7 @@ import { CHANGELOG } from './changelog.js';
 import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats } from './results.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.8.1';
+export const APP_VERSION = '2.9.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -256,18 +256,24 @@ function openRoundView() {
 const cellTxt = b => (b[0] ? `T${b[0]}` : b[1] ? `Z${b[1]}` : '–');
 const resWord = b => (b[0] ? `טופ בניסיון ${b[0]}` : `זון בניסיון ${b[1]}`);
 const sgn = g => `<bdi dir="ltr">+${g.toFixed(1)}</bdi>`;
+// star path bbox = x 2–22, y 2–21 → viewBox shifted by −0.5 so the shape sits exactly in the middle of its circle
+const STAR = '<svg viewBox="0 -0.5 24 24" aria-hidden="true"><path fill="currentColor" d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
+const SOLE = { t: 'הטופ היחיד', z: 'הזון היחיד' };
+const heList = xs => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} ו־${xs[xs.length - 1]}` : `${xs[0]}`);
 const WHAT_IF = { topFromZone: 'טופ במקום זון', topFromEmpty: 'טופ בבולדר ריק', zoneFromEmpty: 'זון בבולדר ריק' };
 
 function resCard(ranked, row, who, final, full) {
   const a = analyze(ranked, row, full), inCat = ranked !== full;
+  const soleJ = a.sole.flatMap((k, j) => (k ? [j] : [])), soleKinds = [...new Set(soleJ.map(j => a.sole[j]))];
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   const what = o => row.rank === 1 ? `יתרון ${sgn(o.gain)}` : `${o.rank < row.rank ? 'מקום ' + o.rank : 'נשאר ' + row.rank}<small class="d">${sgn(o.gain)}</small>${o.advances && !final ? '<span class="up">עולה</span>' : ''}`;
   const bars = row.bs.map((b, j) => { const k = kind(b), p = pts(b);
-    return `<div class="bar" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div></div><span class="lb">B${j + 1} ${cellTxt(b)}</span></div>`; }).join('');
+    return `<div class="bar" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div>${a.sole[j] ? `<span class="sole" title="${SOLE[a.sole[j]]}" aria-label="${SOLE[a.sole[j]]}">${STAR}</span>` : ''}</div><span class="lb">B${j + 1} ${cellTxt(b)}</span></div>`; }).join('');
   return `<article class="card fc${who.added ? ' added' : ''}">
     <div class="top"><div><div class="nm">${esc(row.name)}</div><div class="club">${esc(row.club)} · מס׳ ${row.bib}</div></div><div class="rk">${row.rank}<small>/${a.n}</small>${inCat ? `<span class="rk-all">כללי ${a.overallRank}</span>` : ''}</div></div>
     <div class="sc"><b>${row.score.toFixed(1)}</b> נק׳ · ${a.tops} טופים · ${a.zones} זונים</div>
     <div class="bars" style="grid-template-columns:repeat(${row.bs.length},1fr)">${bars}</div>
+    ${soleKinds.length ? `<div class="sole-key"><span class="sole-ic">${STAR}</span> = ${soleKinds.length > 1 ? 'הטופ/הזון היחיד' : SOLE[soleKinds[0]]}</div>` : ''}
     <div class="ins">
       <div class="grp">
         ${final ? '' : kv('סבב הבא', a.advances ? '<span class="yes">עולה ✓</span>' : `חסרו ${a.missing.toFixed(1)} נק׳<small class="d">קו ${a.cutScore.toFixed(1)}</small>`)}
@@ -276,7 +282,12 @@ function resCard(ranked, row, who, final, full) {
       </div>
       <div class="grp">
         ${kv('ירד על נפילות', `${a.lost.toFixed(1)} נק׳`)}
-        ${a.strong ? kv('הבולדר הטוב', `בולדר ${a.strong.boulder}<small class="d">${resWord(a.strong.b)} · מקום ${a.strong.place}</small>`) : ''}
+        ${a.strong ? kv('הבולדר הטוב', soleJ.length > 1
+          ? `בולדרים ${heList(soleJ.map(j => j + 1))}<small class="d">${soleKinds.length > 1 ? soleJ.map(j => `${a.sole[j] === 't' ? 'טופ' : 'זון'} יחיד ב־${j + 1}`).join(', ') : SOLE[soleKinds[0]]}</small>`
+          : `בולדר ${a.strong.boulder}<small class="d">${resWord(a.strong.b)} · ${a.sole[a.strong.boulder - 1] ? SOLE[a.sole[a.strong.boulder - 1]] : 'מקום ' + a.strong.place}</small>`) : ''}
+        ${a.weak ? kv('בולדר לשיפור', `בולדר ${a.weak.boulder}<small class="d">${a.weak.b[0] || a.weak.b[1] ? resWord(a.weak.b) : 'בלי זון'} · מקום ${a.weak.place} · ${a.weak.topN} מתוך ${a.n} עשו טופ</small>`) : ''}
+        ${kv('פלאשים', `${a.flashes}<small class="d">ממוצע ${a.flashAvg.toFixed(1)}</small>`)}
+        ${kv('פתיחה מול סיום', `מקום ${a.open} · מקום ${a.close}<small class="d">${a.close < a.open ? 'סיים טוב יותר' : a.close > a.open ? 'סיים חלש יותר' : 'יציב'}</small>`)}
       </div>
       <div class="grp"><span class="gh">מה היה קורה עם…</span>
         ${a.opts.length ? a.opts.map(o => kv(WHAT_IF[o.key], what(o))).join('') : kv('טופ נוסף', 'כבר טופ בכל הבולדרים')}

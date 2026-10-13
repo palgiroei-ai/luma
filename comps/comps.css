@@ -755,6 +755,12 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .fc .bar { display: grid; grid-template-rows: 1fr auto; gap: 3px; height: 100%; text-align: center; }
 .fc .bar .fill-wrap { background: var(--line); border-radius: 6px; display: flex; align-items: flex-end; overflow: hidden; }
 .fc .bar .fill { width: 100%; border-radius: 6px 6px 0 0; }
+.fc .bar .fill-wrap { position: relative; }
+.fc .sole-key { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.fc .sole-key .sole-ic { color: var(--ok); }
+.fc .sole-key .sole-ic svg { width: 13px; height: 13px; vertical-align: -2px; }
+.fc .bar .sole { position: absolute; top: 5px; inset-inline: 0; margin: auto; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--card); color: var(--ok); }
+.fc .bar .sole svg { width: 15px; height: 15px; display: block; }
 .fc .bar .fill.t { background: var(--ok); } .fc .bar .fill.z { background: var(--card); border: 2px solid var(--ok); border-bottom: 0; box-sizing: border-box; }
 .fc .bar .lb { font-size: 11px; color: var(--muted); direction: ltr; }
 .fc .ins { font-size: 13px; display: grid; gap: 8px; }

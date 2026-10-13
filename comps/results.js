@@ -49,6 +49,28 @@ export function analyze(ranked, row, full = ranked) {
     const shared = ok.filter(x => pts(x.bs[j]) === p).length;
     if (!strong || place < strong.place || (place === strong.place && shared < strong.shared)) strong = { boulder: j + 1, place, shared, b };
   });
+  // to improve = worst place among everyone on one boulder (0 points included); same place → the one more athletes
+  // topped (the clearer miss). None when he was 1st everywhere or the same place on every boulder (Roei 2026-10-14).
+  const placeOn = j => 1 + ok.filter(x => pts(x.bs[j]) > pts(row.bs[j])).length;
+  const places = row.bs.map((b, j) => placeOn(j));
+  let weak = null;
+  if (Math.max(...places) > Math.min(...places)) row.bs.forEach((b, j) => {
+    const topN = ok.filter(x => x.bs[j][0]).length;
+    if (!weak || places[j] > weak.place || (places[j] === weak.place && topN > weak.topN)) weak = { boulder: j + 1, place: places[j], topN, b };
+  });
+  // flashes = tops on the first attempt, vs the average of everyone in the ranking
+  const flashN = r => r.bs.filter(b => b[0] === 1).length;
+  const flashAvg = r1(ok.reduce((s, x) => s + flashN(x), 0) / n);
+  // opening vs closing: everyone climbs boulder 1 first and the last one last → place among everyone on each
+  // (place, not points — the last boulder may simply be harder)
+  const open = places[0], close = places[places.length - 1];
+  // ★ = the best result on a boulder, his alone (Roei 2026-10-14): 't' he alone topped it; 'z' nobody topped it and
+  // he alone reached the zone; otherwise false. Shown on the bar + in the best-boulder line.
+  const sole = row.bs.map((b, j) => {
+    const others = ok.filter(x => x !== row).map(x => x.bs[j]);
+    if (b[0]) return others.every(o => !o[0]) && 't';
+    return !!b[1] && others.every(o => !o[0] && !o[1]) && 'z';
+  });
   // what if — one more top / zone, if there was room for it (place by points; equal points = same place)
   const rankWith = s => 1 + ok.filter(x => x !== row && x.score > s).length;
   const zOnly = row.bs.filter(b => !b[0] && b[1]).sort((x, y) => x[1] - y[1]);
@@ -59,7 +81,7 @@ export function analyze(ranked, row, full = ranked) {
   const overallWith = s => 1 + all.filter(x => x.bib !== row.bib && x.score > s).length;
   for (const o of opts) { o.score = r1(row.score + o.gain); o.rank = rankWith(o.score); o.advances = overall.rank > q && overallWith(o.score) <= q; }
   return { n, quota: q, cutScore, overallRank: overall.rank, advances: overall.rank <= q, missing: overall.rank <= q ? 0 : r1(cutScore - row.score + 0.1),
-    above, below, lost, strong, opts, tops: tops(row.bs), zones: zones(row.bs) };
+    above, below, lost, strong, weak, flashes: flashN(row), flashAvg, open, close, sole, opts, tops: tops(row.bs), zones: zones(row.bs) };
 }
 
 // Per boulder: how many topped / reached only the zone, average attempts to top and to zone.
