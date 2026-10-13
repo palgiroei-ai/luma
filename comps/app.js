@@ -5,7 +5,7 @@ import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC
 import { CHANGELOG } from './changelog.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.1.1';
+export const APP_VERSION = '2.2.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -147,7 +147,8 @@ function renderBoard(r, s) {
   const cells = [];
   const thumb = b => { const u = photoUrl(r.id, b); return u ? `<button type="button" class="ph-thumb" data-photo="${b}" aria-label="תמונת בולדר ${b}"><img src="${u}" alt=""></button>` : ''; };
   for (let j = 0; j < r.boulders; j++) {
-    cells.push(slotCard(r, s.boulders[j], 'lane boulder', `${thumb(j + 1)}בולדר ${j + 1}`));
+    const th = thumb(j + 1);
+    cells.push(slotCard(r, s.boulders[j], `lane boulder${th ? ' has-ph' : ''}`, `${th}בולדר ${j + 1}`));
     if (j < r.boulders - 1) cells.push(slotCard(r, s.rests[j], 'lane rest', `מנוחה <span class="nw">${j + 1}–${j + 2}</span>`));
   }
   if (r.trailingRest) cells.push(slotCard(r, s.trailing, 'lane rest', 'מנוחת סיום'));
