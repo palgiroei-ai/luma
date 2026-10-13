@@ -40,12 +40,14 @@ export function analyze(ranked, row, full = ranked) {
   const above = ok.slice(0, i).reverse().find(x => x.score > row.score) || null;
   const below = ok.slice(i + 1).find(x => x.score < row.score) || null;
   const lost = r1(row.bs.reduce((s, [t, z]) => s + (t ? 0.1 * (t - 1) : z ? 0.1 * (z - 1) : 0), 0));
-  // best boulder = best place among everyone on one boulder, only where he scored
+  // best boulder = best place among everyone on one boulder, only where he scored;
+  // same place → the one fewer athletes shared (alone on a top beats a shared 1st; Roei 2026-10-14)
   let strong = null;
   row.bs.forEach((b, j) => {
     const p = pts(b); if (!p) return;
     const place = 1 + ok.filter(x => pts(x.bs[j]) > p).length;
-    if (!strong || place < strong.place) strong = { boulder: j + 1, place, b };
+    const shared = ok.filter(x => pts(x.bs[j]) === p).length;
+    if (!strong || place < strong.place || (place === strong.place && shared < strong.shared)) strong = { boulder: j + 1, place, shared, b };
   });
   // what if — one more top / zone, if there was room for it (place by points; equal points = same place)
   const rankWith = s => 1 + ok.filter(x => x !== row && x.score > s).length;
