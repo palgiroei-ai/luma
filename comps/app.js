@@ -1,11 +1,11 @@
 import { decryptJSON } from './decrypt.js';
 import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan, climbOverlaps } from './engine.js';
 import { store } from './store.js';
-import { startSync, startViewSync, syncNow, syncState, authHeaders, SYNC_URL } from './sync.js';
+import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.0.0';
+export const APP_VERSION = '2.1.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -145,8 +145,9 @@ function slotCard(r, s, cls, label) {
 function renderBoard(r, s) {
   if (!r.slots.length) { patch($('#board'), `<div class="board-msg">סדר העלייה לראונד הזה עוד לא התקבל.</div>`); return; }
   const cells = [];
+  const thumb = b => { const u = photoUrl(r.id, b); return u ? `<button type="button" class="ph-thumb" data-photo="${b}" aria-label="תמונת בולדר ${b}"><img src="${u}" alt=""></button>` : ''; };
   for (let j = 0; j < r.boulders; j++) {
-    cells.push(slotCard(r, s.boulders[j], 'lane boulder', `בולדר ${j + 1}`));
+    cells.push(slotCard(r, s.boulders[j], 'lane boulder', `${thumb(j + 1)}בולדר ${j + 1}`));
     if (j < r.boulders - 1) cells.push(slotCard(r, s.rests[j], 'lane rest', `מנוחה <span class="nw">${j + 1}–${j + 2}</span>`));
   }
   if (r.trailingRest) cells.push(slotCard(r, s.trailing, 'lane rest', 'מנוחת סיום'));
@@ -711,6 +712,7 @@ function renderSyncState() {
   const lg = $('#view-log .log-sync'); if (lg) lg.textContent = syncLabel();
 }
 function onRemote(ch) {
+  if (ch.photos?.length && $('#photos-dlg').open) renderPhotoGrid();
   for (const x of ['mine', 'all', 'log', 'home']) if ($('#view-' + x)) $('#view-' + x)._html = null;
   render(); renderSyncState();
   const other = ch.offsets.filter(o => o.dev && o.dev !== store.device);
@@ -718,6 +720,115 @@ function onRemote(ch) {
     const r = round(other[0].round);
     showToast(`הכיול${r ? ' של ' + r.title : ''} עודכן ממכשיר אחר${store.deviceName(other[0].dev) ? ' (' + store.deviceName(other[0].dev) + ')' : ''}`);
   }
+}
+
+// ---- boulder photos (2.1.0): one per boulder per round. The coach adds / replaces / deletes; coach + viewers see.
+// Versions arrive with the normal sync (store.photoV); simulation mode never syncs → reads /photo/list per round instead.
+// The bytes are fetched once per version (the server lets the browser cache a version for good).
+const photoCache = new Map(); // "round:b" → { v, url, fail }
+const phLocal = new Map();    // my own upload/delete until sync confirms it: "round:b" → { v, del }
+const simPhotos = {};         // simulation: round → { at, list: { b: v } }
+let gridRound = null, upTarget = null;
+const busyPh = new Set();
+const phQ = (rid, b) => `round=${encodeURIComponent(rid)}&b=${b}`;
+function photoV(rid, b) {
+  let sv;
+  if (SIM_AT == null) sv = store.photoV(rid, b);
+  else {
+    const sp = simPhotos[rid];
+    if (!sp || Date.now() - sp.at > 60000) loadPhotoList(rid);
+    sv = sp?.list[b] || 0;
+  }
+  const id = rid + ':' + b, mine = phLocal.get(id);
+  if (!mine) return sv;
+  if (mine.del ? !sv || sv > mine.v : sv >= mine.v) { phLocal.delete(id); return sv; } // sync caught up (or someone changed it since)
+  return mine.del ? 0 : mine.v;
+}
+async function loadPhotoList(rid) {
+  const sp = simPhotos[rid] = simPhotos[rid] || { at: 0, list: {} }; sp.at = Date.now();
+  try {
+    const res = await fetch(`${SYNC_URL}/photo/list?round=${encodeURIComponent(rid)}`, { headers: await authHeaders(VIEWER) });
+    if (res.ok) { sp.list = (await res.json()).photos || {}; if ($('#photos-dlg').open) renderPhotoGrid(); }
+  } catch { /* offline: try again in a minute */ }
+}
+function photoUrl(rid, b) {
+  const v = photoV(rid, b); if (!v) return null;
+  const id = rid + ':' + b, c = photoCache.get(id);
+  if (c && c.v === v && (c.url || !c.fail || Date.now() - c.fail < 15000)) return c.url;
+  photoCache.set(id, { v, url: null, fail: 0 });
+  (async () => {
+    let url = null;
+    try {
+      const res = await fetch(`${SYNC_URL}/photo?${phQ(rid, b)}&v=${v}`, { headers: await authHeaders(VIEWER) });
+      if (res.ok) url = URL.createObjectURL(await res.blob());
+    } catch { /* offline */ }
+    const cur = photoCache.get(id); if (cur?.v !== v) return;
+    if (url) cur.url = url; else cur.fail = Date.now();
+    if ($('#photos-dlg').open) renderPhotoGrid();
+  })();
+  return null;
+}
+function openPhotos() {
+  gridRound = current; renderPhotoGrid();
+  if (SIM_AT == null && !VIEWER) syncNow(); else if (SIM_AT != null) loadPhotoList(gridRound);
+  $('#photos-dlg').showModal();
+}
+function renderPhotoGrid() {
+  const r = round(gridRound); if (!r) return;
+  $('#photos-title').textContent = `תמונות בולדרים · ${r.title}`;
+  $('#photos-grid').innerHTML = Array.from({ length: r.boulders }, (_, j) => {
+    const b = j + 1, v = photoV(r.id, b), u = photoUrl(r.id, b), busy = busyPh.has(r.id + ':' + b), dis = busy ? ' disabled' : '';
+    const pic = u && !busy ? `<button type="button" class="ph-pic" data-photo="${b}" aria-label="הגדלת בולדר ${b}"><img src="${u}" alt="בולדר ${b}"></button>`
+      : `<div class="ph-empty">${busy ? 'מעלה…' : v ? 'טוען…' : 'אין תמונה'}</div>`;
+    const acts = VIEWER ? '' : v ? `<div class="ph-acts"><button type="button" class="btn btn-ghost btn-sm" data-ph-up="${b}"${dis}>החלף</button><button type="button" class="btn btn-ghost btn-sm danger" data-ph-del="${b}"${dis}>מחק</button></div>`
+      : `<button type="button" class="btn btn-primary btn-sm" data-ph-up="${b}"${dis}>📷 הוסף תמונה</button>`;
+    return `<div class="ph-cell"><b>בולדר ${b}</b>${pic}${acts}</div>`;
+  }).join('');
+}
+function openPhoto(rid, b) {
+  const u = photoUrl(rid, b); if (!u) return;
+  $('#photo-title').textContent = `בולדר ${b} · ${round(rid).title}`;
+  $('#photo-img').src = u;
+  $('#photo-dlg').showModal();
+}
+// iPad photos are big: draw onto a canvas ≤1600 px on the long side, JPEG ≤1 MB (usually ~250 KB)
+async function shrinkPhoto(file) {
+  const src = URL.createObjectURL(file);
+  try {
+    const img = new Image(); img.src = src; await img.decode();
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    for (const q of [0.82, 0.7, 0.55, 0.4]) {
+      const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', q));
+      if (blob && blob.size <= 1_000_000) return blob;
+    }
+    throw new Error('too big');
+  } finally { URL.revokeObjectURL(src); }
+}
+async function photoWrite(rid, b, blob) { // blob = upload, null = delete → the new version
+  const res = await fetch(`${SYNC_URL}/photo${blob ? '' : '/delete'}?device=${encodeURIComponent(store.device)}&${phQ(rid, b)}`,
+    { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'X-Comp-Key': await apiKey() }, body: blob });
+  if (!res.ok) throw new Error(String(res.status));
+  const { v } = await res.json(); const id = rid + ':' + b;
+  phLocal.set(id, { v, del: !blob });
+  if (blob) photoCache.set(id, { v, url: URL.createObjectURL(blob), fail: 0 }); // show it right away, no download
+  if (SIM_AT != null) { const sp = simPhotos[rid] = simPhotos[rid] || { at: Date.now(), list: {} }; if (blob) sp.list[b] = v; else delete sp.list[b]; }
+  else syncNow();
+}
+async function uploadPhoto(rid, b, file) {
+  const id = rid + ':' + b; busyPh.add(id); renderPhotoGrid();
+  try { await photoWrite(rid, b, await shrinkPhoto(file)); showToast('התמונה הועלתה'); }
+  catch { showToast('לא הועלה · בדוק חיבור ונסה שוב'); }
+  finally { busyPh.delete(id); renderPhotoGrid(); }
+}
+function deletePhoto(rid, b) {
+  askConfirm('מחיקת תמונה', `התמונה של בולדר ${b} תימחק מכל המכשירים ומהצופים.`, 'מחיקה', async () => {
+    const id = rid + ':' + b; busyPh.add(id); renderPhotoGrid();
+    try { await photoWrite(rid, b, null); showToast('התמונה נמחקה'); }
+    catch { showToast('לא נמחק · בדוק חיבור ונסה שוב'); }
+    finally { busyPh.delete(id); renderPhotoGrid(); }
+  });
 }
 
 // ---- feedback (like Wingate): everyone sends a bug / suggestion; Roei (coach code) sees all, sets status + reply ----
@@ -937,6 +1048,10 @@ function start() {
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all']) $('#view-' + x)._html = null; showScreen('round'); }
     else if (b.id === 'home-btn') { homeOpenEvent = null; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all']) $('#view-' + x)._html = null; render(); }
+    else if (d.photo) openPhoto($('#photos-dlg').open ? gridRound : current, Number(d.photo));
+    else if (b.id === 'photos-btn') openPhotos();
+    else if (d.phUp) { upTarget = Number(d.phUp); $('#photo-file').value = ''; $('#photo-file').click(); }
+    else if (d.phDel) deletePhoto(gridRound, Number(d.phDel));
     else if (d.adj) adjust(d.adj);
     else if (d.view) setView(d.view);
     else if (d.sync) syncFromSlot(Number(d.sync));
@@ -989,6 +1104,8 @@ function start() {
     store.setSetting(el.dataset.set, v);
     applySettings(); renderSettingsMain(); render();
   });
+  $('#photo-file').addEventListener('change', e => { const f = e.target.files?.[0]; if (f && upTarget != null && !VIEWER) uploadPhoto(gridRound, upTarget, f); });
+  $('#photo-dlg').addEventListener('click', () => $('#photo-dlg').close()); // tap anywhere closes the big photo
   $('#dev-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }); // Enter must not close the dialog
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applySettings);
   applySettings();

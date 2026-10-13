@@ -2,6 +2,7 @@
 // Add an entry with every code deploy — tests/changelog.test.mjs keeps the first versioned entry = APP_VERSION.
 // Start-list updates (data only, no code version) are entries with `data: true` instead of `v`.
 export const CHANGELOG = [
+  { v: '2.1.0', date: '2026-10-13', items: ['תמונות בולדרים: תמונה אחת לכל בולדר בכל סבב. רועי מצלם או בוחר מהגלריה ("📷 תמונות בולדרים" ליד הערות וערעורים), מחליף או מוחק; הצופים רואים. בלוח החי תמונה קטנה ליד "בולדר N", לחיצה מגדילה למסך מלא'] },
   { v: '2.0.0', date: '2026-10-12', items: ['מדריך הוספה למסך הבית (כמו בוינגייט): טלפון מצויר שמראה כל לחיצה, אייפד/אייפון ואנדרואיד (באנדרואיד "התקן עכשיו" בלחיצה אחת). נפתח ממסך הכניסה, מההגדרות ומ"התראות על מסך נעול"'] },
   { v: '1.9.1', date: '2026-10-12', items: ['לוגו: בלי השורה הקטנה "Climbing · Physio", והכיתוב PALGI TRAINING גדול יותר', 'קוד צפייה (הורים): בעדכונים רק גרסה ובדיקת עדכון, בלי היסטוריית הגרסאות'] },
   { v: '1.9.0', date: '2026-10-12', items: [

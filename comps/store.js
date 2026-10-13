@@ -16,7 +16,7 @@ export const DEFAULT_SETTINGS = {
 };
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const blank = () => ({ offsets: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {}, push: { on: false, device: null },
-  v: 0, device: null, devName: '', devices: {}, meta: {}, dirty: {}, rev: 0, lastSync: 0 });
+  v: 0, device: null, devName: '', devices: {}, meta: {}, dirty: {}, rev: 0, lastSync: 0, photos: {} });
 
 export function defaultDeviceName(ua = navigator.userAgent || '', touch = navigator.maxTouchPoints > 1) {
   if (/iPad/.test(ua) || (/Macintosh/.test(ua) && touch)) return 'אייפד';
@@ -107,6 +107,9 @@ export const store = {
   get fbIds() { return state.fbIds || []; },
   addFbId(id) { state.fbIds = [id, ...(state.fbIds || [])].slice(0, 100); save(); },
 
+  // boulder photos (2.1.0): version per "round:b" (0 = none). Set only by the server (upload goes straight to /photo).
+  photoV(roundId, b) { return state.photos?.[roundId + ':' + b] || 0; },
+
   // ---- sync ----
   get device() { return state.device; },
   get devName() { return state.devName; },
@@ -144,7 +147,7 @@ export const store = {
   },
   // rows from the server (newest wins). Returns what changed so the UI can re-render / tell the coach.
   applyRemote(items, rev) {
-    const changed = { any: false, offsets: [] };
+    const changed = { any: false, offsets: [], photos: [] };
     for (const r of items || []) {
       const key = r.kind + ':' + r.id;
       if (r.kind === 'note' || r.kind === 'appeal') {
@@ -160,6 +163,10 @@ export const store = {
         state.offsets[r.id] = Math.round(r.data?.v || 0);
       } else if (r.kind === 'mine') {
         state.mineAdd[r.id] = (r.data?.add || []).map(Number); state.mineDel[r.id] = (r.data?.del || []).map(Number);
+      } else if (r.kind === 'photo') {
+        state.photos = state.photos || {};
+        if (r.del) delete state.photos[r.id]; else state.photos[r.id] = r.data?.v || r.t;
+        changed.photos.push(r.id);
       } else if (r.kind === 'device') {
         if (r.id === state.device) state.devName = r.data?.name || state.devName;
         else state.devices[r.id] = String(r.data?.name || '');

@@ -124,10 +124,13 @@
     <section aria-labelledby="mine-h">
       <div class="sec-head">
         <h2 id="mine-h">הספורטאים שלי</h2>
-        <div class="seg" role="group" aria-label="תצוגה">
-          <button type="button" data-view="mine" aria-pressed="true">שלי</button>
-          <button type="button" data-view="all" aria-pressed="false">סדר עלייה מלא</button>
-          <button type="button" data-view="log" aria-pressed="false">הערות וערעורים</button>
+        <div class="sec-tools">
+          <div class="seg" role="group" aria-label="תצוגה">
+            <button type="button" data-view="mine" aria-pressed="true">שלי</button>
+            <button type="button" data-view="all" aria-pressed="false">סדר עלייה מלא</button>
+            <button type="button" data-view="log" aria-pressed="false">הערות וערעורים</button>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="photos-btn">📷 תמונות בולדרים</button>
         </div>
       </div>
       <div id="view-mine" class="mine-grid"></div>
@@ -296,6 +299,20 @@
       <div class="ios-group"><p class="ios-gtitle">היסטוריית גרסאות ועדכונים</p><div class="ios-box" id="changelog"></div></div>
     </div>
   </form>
+</dialog>
+
+<dialog id="photos-dlg" class="dlg dlg-wide">
+  <form method="dialog">
+    <div class="ph-head"><h2 id="photos-title"></h2><button class="ph-x" value="close" aria-label="סגירה">✕</button></div>
+    <p class="muted small coach-only">צילום או בחירה מהגלריה · תמונה אחת לכל בולדר · גם הצופים רואים</p>
+    <div id="photos-grid" class="ph-grid"></div>
+  </form>
+</dialog>
+<input type="file" id="photo-file" accept="image/*" hidden>
+
+<dialog id="photo-dlg" class="ph-view">
+  <div class="ph-head"><h2 id="photo-title"></h2><span class="ph-x" aria-hidden="true">✕</span></div>
+  <img id="photo-img" alt="">
 </dialog>
 
 <dialog id="confirm-dlg" class="dlg">

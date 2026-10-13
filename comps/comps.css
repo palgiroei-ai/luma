@@ -667,3 +667,23 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .gate-card .install-entry-btn { margin-top: 4px; }
 .ios-row.install-row { color: var(--copper-text); }
 .link-btn { background: none; border: none; padding: 0; font: inherit; color: var(--copper-text); font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+/* boulder photos (2.1.0): thumb inside the board's boulder label (no extra height), grid dialog, full-screen view */
+.lane.boulder .lane-label { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.ph-thumb { flex: none; width: 28px; height: 28px; margin-block: -4px; padding: 0; border: 0; border-radius: 6px; overflow: hidden; cursor: zoom-in; background: var(--line); box-shadow: 0 0 0 1.5px rgba(255,255,255,.9), 0 1px 3px rgba(0,0,0,.35); }
+.ph-thumb img, .ph-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sec-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ph-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ph-x { border: 0; background: none; font-size: 24px; line-height: 1; padding: 4px 8px; cursor: pointer; color: inherit; }
+.ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.ph-cell { display: grid; gap: 6px; align-content: start; }
+.ph-cell > .btn { width: 100%; }
+.ph-pic, .ph-empty { aspect-ratio: 4 / 3; width: 100%; border-radius: 10px; }
+.ph-pic { padding: 0; border: 0; overflow: hidden; cursor: zoom-in; background: var(--line); }
+.ph-empty { display: grid; place-items: center; border: 2px dashed var(--border); color: var(--muted); font-size: 14px; }
+.ph-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ph-view { border: 0; padding: 14px 16px; background: transparent; color: #fff; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; }
+.ph-view[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+.ph-view::backdrop { background: rgba(0, 0, 0, .92); }
+.ph-view h2 { font-size: 17px; font-weight: 700; }
+.ph-view img { width: 100%; height: 100%; object-fit: contain; }
