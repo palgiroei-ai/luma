@@ -39,6 +39,12 @@ if (state.v < 2) {
   state.meta['device:' + state.device] = Date.now(); state.dirty['device:' + state.device] = 1;
   state.v = 2; save();
 }
+// v3 (2.1.0 photos): 2.0.x ignored 'photo' rows but still moved rev past them and kept their t in meta → forget those
+// and pull everything again once (re-pulling is harmless: newest t wins, notes match by id).
+if (state.v < 3) {
+  for (const k of Object.keys(state.meta || {})) if (k.startsWith('photo:')) delete state.meta[k];
+  state.photos = {}; state.rev = 0; state.v = 3; save();
+}
 
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* ignore */ }
