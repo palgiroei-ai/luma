@@ -3,10 +3,10 @@ import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlo
 import { store } from './store.js';
 import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
-import { rankRows, analyze, boulderStats, pts, kind, r1 } from './results.js';
+import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats } from './results.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.7.2';
+export const APP_VERSION = '2.8.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -95,9 +95,15 @@ const rankCache = {};
 function rankedOf(id) {
   const res = resultsOf(id); if (!res) return null;
   if (rankCache[id]) return rankCache[id];
-  const prevId = id.replace(/-r2$/, '-r1'), prev = prevId !== id && resultsOf(prevId) ? rankedOf(prevId) : null;
-  return (rankCache[id] = rankRows(res.rows, prev && Object.fromEntries(prev.map(x => [x.bib, x.rank]))));
+  return (rankCache[id] = rankRows(res.rows, prevRankOf(id)));
 }
+// round 2 counts back to round 1's ranking (bib → place)
+function prevRankOf(id) {
+  const prevId = id.replace(/-r2$/, '-r1'), prev = prevId !== id && resultsOf(prevId) ? rankedOf(prevId) : null;
+  return prev && Object.fromEntries(prev.map(x => [x.bib, x.rank]));
+}
+const genderOf = id => (/-w(-|$)/.test(id) ? 'W' : 'M');
+const resCat = {}; // chosen category per round (this session)
 const roundsOf = ev => DATA.rounds.filter(r => (r.event || 'bl1') === ev.id && visible(r));
 const MINE_NAME = () => (VIEWER ? 'הנבחרת של רועי' : 'שלי');
 // Base = Hub matches from the build; the coach can add/remove athletes per round in settings.
@@ -252,14 +258,14 @@ const resWord = b => (b[0] ? `טופ בניסיון ${b[0]}` : `זון בניס�
 const sgn = g => `<bdi dir="ltr">+${g.toFixed(1)}</bdi>`;
 const WHAT_IF = { topFromZone: 'טופ במקום זון', topFromEmpty: 'טופ בבולדר ריק', zoneFromEmpty: 'זון בבולדר ריק' };
 
-function resCard(ranked, row, who, final) {
-  const a = analyze(ranked, row);
+function resCard(ranked, row, who, final, full) {
+  const a = analyze(ranked, row, full), inCat = ranked !== full;
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   const what = o => row.rank === 1 ? `יתרון ${sgn(o.gain)}` : `${o.rank < row.rank ? 'מקום ' + o.rank : 'נשאר ' + row.rank}<small class="d">${sgn(o.gain)}</small>${o.advances && !final ? '<span class="up">עולה</span>' : ''}`;
   const bars = row.bs.map((b, j) => { const k = kind(b), p = pts(b);
     return `<div class="bar" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div></div><span class="lb">B${j + 1} ${cellTxt(b)}</span></div>`; }).join('');
   return `<article class="card fc${who.added ? ' added' : ''}">
-    <div class="top"><div><div class="nm">${esc(row.name)}</div><div class="club">${esc(row.club)} · מס׳ ${row.bib}</div></div><div class="rk">${row.rank}<small>/${a.n}</small></div></div>
+    <div class="top"><div><div class="nm">${esc(row.name)}</div><div class="club">${esc(row.club)} · מס׳ ${row.bib}</div></div><div class="rk">${row.rank}<small>/${a.n}</small>${inCat ? `<span class="rk-all">כללי ${a.overallRank}</span>` : ''}</div></div>
     <div class="sc"><b>${row.score.toFixed(1)}</b> נק׳ · ${a.tops} טופים · ${a.zones} זונים</div>
     <div class="bars" style="grid-template-columns:repeat(${row.bs.length},1fr)">${bars}</div>
     <div class="ins">
@@ -279,13 +285,18 @@ function resCard(ranked, row, who, final) {
 }
 
 function renderResults(r) {
-  const res = resultsOf(r.id), ranked = rankedOf(r.id);
+  const res = resultsOf(r.id), full = rankedOf(r.id), g = genderOf(r.id);
+  const opts = catOptions(res.rows, g), opt = opts.find(o => o.key === resCat[r.id]) || opts[0];
+  const sub = opt?.cats ? rankInCats(res.rows, opt.cats, prevRankOf(r.id)) : full;
+  const ranked = sub.length === full.length ? full : sub; // a view of everyone = the overall ranking (no "כללי")
+  const overallOf = Object.fromEntries(full.map(x => [x.bib, x.rank]));
   const ok = ranked.filter(x => x.rank != null), nB = r.boulders;
+  const chips = opts.length > 1 ? `<div class="seg res-cats" role="group" aria-label="קטגוריה">${opts.map(o => `<button type="button" data-rescat="${o.key}" aria-pressed="${o === opt}">${esc(o.label)}</button>`).join('')}</div>` : '';
   const whoByBib = {};
   for (const m of mineOf(r.id)) { const s = r.slots[m.k]; if (s) whoByBib[s.bib] = m; }
-  const q = analyze(ranked, ok[0]).quota;
+  const q = analyze(full, full[0]).quota;
   const mine = ok.filter(x => whoByBib[x.bib]);
-  const cards = mine.length ? `<div class="focus">${mine.map(x => resCard(ranked, x, whoByBib[x.bib], res.final)).join('')}</div>`
+  const cards = mine.length ? `<div class="focus">${mine.map(x => resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
     : `<p class="muted">${VIEWER ? 'אין ספורטאים מהנבחרת של רועי בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
@@ -299,11 +310,12 @@ function renderResults(r) {
   const rows = ranked.map(x => {
     const w = whoByBib[x.bib], cls = w ? (w.added ? 'mine added' : 'mine') : '';
     let pre = '';
-    if (!res.final && !cutDone && x.rank != null && x.rank > q) { cutDone = true; pre = `<tr class="cut"><td colspan="${nB + 5}">קו העלייה לסבב הבא · ${q} עולים (${ok.length} התחילו)</td></tr>`; }
-    return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b><small>${esc(x.club)}</small></td><td class="bib">${x.bib}</td>
+    if (!res.final && !cutDone && x.rank != null && overallOf[x.bib] > q) { cutDone = true; pre = `<tr class="cut"><td colspan="${nB + 5}">קו העלייה לסבב הבא · ${q} עולים${ranked === full ? ` (${ok.length} התחילו)` : ' לפי הדירוג הכללי'}</td></tr>`; }
+    return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b><small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
       ${x.rank == null ? `<td colspan="${nB}" class="muted small">לא התחיל (DNS)</td><td></td><td class="tt">–</td>` : x.bs.map(b => `<td>${cell(b)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b[0]).length}T ${x.bs.filter(b => b[0] || b[1]).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
   patch($('#view-results'), `<div class="res">
+    ${chips}
     <div class="res-head"><span class="muted small">מקור: ${esc(res.source)}</span>
       <span class="legend"><span><i class="cell t lg">T</i> טופ</span><span><i class="cell z lg">Z</i> זון בלי טופ</span><span><i class="cell n lg">—</i> בלי זון</span><span class="muted">T2 = טופ בניסיון השני</span></span></div>
     ${cards}
@@ -1157,6 +1169,7 @@ function start() {
     else if (d.phDel) deletePhoto(gridRound, Number(d.phDel));
     else if (d.adj) adjust(d.adj);
     else if (d.view) setView(d.view);
+    else if (d.rescat) { resCat[current] = d.rescat; $('#view-results')._html = null; render(); }
     else if (d.sync) syncFromSlot(Number(d.sync));
     else if (d.note) openNote(Number(d.note));
     else if (d.appeal) openAppeal(Number(d.appeal));

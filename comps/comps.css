@@ -804,3 +804,8 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .lane.rest.mine.added { background: var(--added-bg); color: var(--added); border: 2px solid var(--added); }
 .lane.rest.mine.added .lane-label, .lane.rest.mine.added .bib { color: var(--added); }
 .lane.mine.added .ph-add .plus { color: #2F5DA8; }
+
+/* results category filter (2.8.0) */
+.res-cats { flex-wrap: wrap; justify-self: start; }
+.fc .rk { text-align: end; } .fc .rk .rk-all { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+.res-tbl td.rk .rk-all { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }

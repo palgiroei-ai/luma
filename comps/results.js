@@ -30,10 +30,12 @@ export function rankRows(rows, prevRank = null) {
   return [...started, ...rows.filter(dns).map(r => ({ ...r, score: null, rank: null }))];
 }
 
-// Everything the athlete card shows. ranked = rankRows() output, row = one of its started rows.
-export function analyze(ranked, row) {
-  const ok = ranked.filter(r => r.rank != null), n = ok.length, q = quota(n);
-  const cutScore = ok[q - 1].score;
+// Everything the athlete card shows. ranked = rankRows() output (the whole round or one category), row = one of its
+// started rows. full = the whole round's ranking: advancing to the next round is always by the overall ranking.
+export function analyze(ranked, row, full = ranked) {
+  const ok = ranked.filter(r => r.rank != null), n = ok.length;
+  const all = full.filter(r => r.rank != null), q = quota(all.length), cutScore = all[q - 1].score;
+  const overall = all.find(x => x.bib === row.bib) || row;
   const i = ok.indexOf(row);
   const above = ok.slice(0, i).reverse().find(x => x.score > row.score) || null;
   const below = ok.slice(i + 1).find(x => x.score < row.score) || null;
@@ -52,8 +54,9 @@ export function analyze(ranked, row) {
   const opts = [];
   if (zOnly.length) opts.push({ key: 'topFromZone', gain: r1(25 - 0.1 * (zOnly[0][1] - 1) - pts(zOnly[0])) });
   if (empty) opts.push({ key: 'topFromEmpty', gain: 25 }, { key: 'zoneFromEmpty', gain: 10 });
-  for (const o of opts) { o.score = r1(row.score + o.gain); o.rank = rankWith(o.score); o.advances = row.rank > q && o.rank <= q; }
-  return { n, quota: q, cutScore, advances: row.rank <= q, missing: row.rank <= q ? 0 : r1(cutScore - row.score + 0.1),
+  const overallWith = s => 1 + all.filter(x => x.bib !== row.bib && x.score > s).length;
+  for (const o of opts) { o.score = r1(row.score + o.gain); o.rank = rankWith(o.score); o.advances = overall.rank > q && overallWith(o.score) <= q; }
+  return { n, quota: q, cutScore, overallRank: overall.rank, advances: overall.rank <= q, missing: overall.rank <= q ? 0 : r1(cutScore - row.score + 0.1),
     above, below, lost, strong, opts, tops: tops(row.bs), zones: zones(row.bs) };
 }
 
@@ -66,4 +69,22 @@ export function boulderStats(ranked, nBoulders) {
     return { boulder: j + 1, n: ok.length, tops: cells.filter(b => b[0]).length, zoneOnly: cells.filter(b => !b[0] && b[1]).length,
       avgTop: avg(cells.filter(b => b[0]).map(b => b[0])), avgZone: avg(cells.filter(b => b[1]).map(b => b[1])) };
   });
+}
+
+// Category filter (Roei 2026-10-13). cat codes in the data: S = open seniors, U21, U19 | U17, U15.
+// Seniors rounds: everyone (default) | U21 | U19 — no chip for open seniors alone. U17 rounds: U17 alone (default) |
+// U15 alone | both. Labels = U<age> + M/W.
+export function catOptions(rows, gender) {
+  const has = c => rows.some(r => r.cat === c);
+  if (has('U15') || has('U17')) return [
+    { key: 'U17', label: `U17${gender}`, cats: ['U17'] }, { key: 'U15', label: `U15${gender}`, cats: ['U15'] },
+    { key: 'U17+U15', label: `U17${gender} + U15${gender}`, cats: ['U17', 'U15'] }].filter(o => o.cats.some(has));
+  if (!rows.some(r => r.cat)) return [];
+  return [{ key: 'all', label: gender === 'W' ? 'בוגרות' : 'בוגרים', cats: null },
+    ...['U21', 'U19'].filter(has).map(c => ({ key: c, label: c + gender, cats: [c] }))];
+}
+export const catLabel = (cat, gender) => (!cat ? '' : cat === 'S' ? (gender === 'W' ? 'בוגרות' : 'בוגרים') : cat + gender);
+// the round's ranking inside one option (places re-numbered, ties + count-back as in the whole round)
+export function rankInCats(rows, cats, prevRank = null) {
+  return rankRows(cats ? rows.filter(r => cats.includes(r.cat)) : rows, prevRank);
 }
