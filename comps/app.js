@@ -6,7 +6,7 @@ import { CHANGELOG } from './changelog.js';
 import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats } from './results.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.9.1';
+export const APP_VERSION = '2.9.2';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -268,7 +268,7 @@ function resCard(ranked, row, who, final, full) {
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   const what = o => row.rank === 1 ? `יתרון ${sgn(o.gain)}` : `${o.rank < row.rank ? 'מקום ' + o.rank : 'נשאר ' + row.rank}<small class="d">${sgn(o.gain)}</small>${o.advances && !final ? '<span class="up">עולה</span>' : ''}`;
   const bars = row.bs.map((b, j) => { const k = kind(b), p = pts(b);
-    return `<div class="bar" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div>${a.sole[j] ? `<span class="sole" title="${SOLE[a.sole[j]]}" aria-label="${SOLE[a.sole[j]]}">${STAR}</span>` : ''}</div><span class="lb">B${j + 1} ${cellTxt(b)}</span></div>`; }).join('');
+    return `<div class="bar" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div>${a.sole[j] ? `<span class="sole" title="${SOLE[a.sole[j]]}" aria-label="${SOLE[a.sole[j]]}">${STAR}</span>` : ''}</div><span class="lb">B${j + 1} (T${b[0] || 0}Z${b[1] || 0})</span></div>`; }).join('');
   return `<article class="card fc${who.added ? ' added' : ''}">
     <div class="top"><div><div class="nm">${esc(row.name)}</div><div class="club">${esc(row.club)} · מס׳ ${row.bib}</div></div><div class="rk">${row.rank}<small>/${a.n}</small>${inCat ? `<span class="rk-all">כללי ${a.overallRank}</span>` : ''}</div></div>
     <div class="sc"><b>${row.score.toFixed(1)}</b> נק׳ · ${a.tops} טופים · ${a.zones} זונים</div>
@@ -280,7 +280,7 @@ function resCard(ranked, row, who, final, full) {
         ${kv('פער מהמקום שמעל', a.above ? `${r1(a.above.score - row.score).toFixed(1)} נק׳<small class="d">מקום ${a.above.rank}</small>` : 'מקום ראשון')}
         ${a.below ? kv('יתרון על שמתחת', `${r1(row.score - a.below.score).toFixed(1)} נק׳<small class="d">מקום ${a.below.rank}</small>`) : ''}
       </div>
-      <div class="grp"><span class="gh">בולדרים</span>
+      <div class="grp"><span class="gh">מסלולים</span>
         ${a.strong ? kv('הבולדר הטוב', soleJ.length > 1
           ? `בולדרים ${heList(soleJ.map(j => j + 1))}<small class="d">${soleKinds.length > 1 ? soleJ.map(j => `${a.sole[j] === 't' ? 'טופ' : 'זון'} יחיד ב־${j + 1}`).join(', ') : SOLE[soleKinds[0]]}</small>`
           : `בולדר ${a.strong.boulder}<small class="d">${resWord(a.strong.b)} · ${a.sole[a.strong.boulder - 1] ? SOLE[a.sole[a.strong.boulder - 1]] : 'מקום ' + a.strong.place}</small>`) : ''}
