@@ -5,7 +5,7 @@ import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC
 import { CHANGELOG } from './changelog.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.4.0';
+export const APP_VERSION = '2.5.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -82,6 +82,8 @@ async function boot() {
 const round = id => DATA.rounds.find(r => r.id === id);
 // several competitions (Super League 1–3…): each round names its event; old data had a single DATA.event
 const EVENTS = () => DATA.events || [{ id: 'bl1', ...DATA.event }];
+// competition name as shown: championships get a trophy before the name (Roei 2026-10-13)
+const evName = e => (e?.champ ? '🏆 ' : '') + (e?.title || '');
 const evOf = r => EVENTS().find(e => e.id === (r?.event || 'bl1')) || EVENTS()[0];
 // viewer: only rounds still ahead (or running now)
 const todayStr = () => { const d = new Date(now()); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -328,7 +330,7 @@ function renderHomeList(seg) {
     const people = new Set(ev.rounds.flatMap(r => mineOf(r.id).map(m => r.slots[m.k].name)));
     const ovl = ev.rounds.reduce((n, r) => n + (mineOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
     return `<button type="button" class="ev-row card ph-${ph}" data-ev="${i}">
-      <span class="ev-main"><b>${esc(ev.event.title)}</b><span class="muted small">${meta}</span></span>
+      <span class="ev-main"><b>${esc(evName(ev.event))}</b><span class="muted small">${meta}</span></span>
       <span class="ev-side">${badge}<span class="small">${!ev.rounds.length || !people.size ? '' : `${people.size} ${VIEWER ? 'מהנבחרת' : 'שלי'}`}${ovl ? `${people.size ? ' · ' : ''}<span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>`;
   }).join('');
   patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}</div><div class="ev-list">${rows}</div>`);
@@ -345,7 +347,7 @@ function renderHomeDetail(seg, fromList) {
   const days = [...new Set(rounds.map(r => r.date))];
   const chips = !fromList && evs.length > 1 ? `<div class="ev-chips" role="group" aria-label="תחרות">${evs.map((e, i) => {
     const d0 = new Date(e.dates[0] + 'T12:00:00');
-    return `<button type="button" data-ev="${i}" aria-pressed="${i === ei}">${esc(e.event.title.replace('ליגת העל ', ''))} <span class="muted">${d0.getDate()}/${d0.getMonth() + 1}</span></button>`;
+    return `<button type="button" data-ev="${i}" aria-pressed="${i === ei}">${esc(evName(e.event).replace('ליגת העל ', ''))} <span class="muted">${d0.getDate()}/${d0.getMonth() + 1}</span></button>`;
   }).join('')}</div>` : '';
   const card = r => {
     const ph = r.slots.length ? stateAt(r, t, off(r.id)).phase : 'wait';
@@ -359,7 +361,7 @@ function renderHomeDetail(seg, fromList) {
       ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} סבבים של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
-  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(ev.title)} <span class="muted">· ${ev.place ? esc(ev.place) + ' · ' : ''}${rangeLabel(cur.dates)}</span></h2>${seg}</div>${chips}` +
+  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + ' · ' : ''}${rangeLabel(cur.dates)}</span></h2>${seg}</div>${chips}` +
     (rounds.length ? '' : `<div class="card h-empty"><p><b>${evBadge(cur, evs)}</b></p><p class="muted">הראונדים וסדרי העלייה יתווספו כשיתפרסמו.${ev.place ? '' : ' המיקום עוד לא פורסם.'}</p></div>`) +
     days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
 }
@@ -376,7 +378,7 @@ function showScreen(sc) {
 function render() {
   if (screen === 'home') {
     $('#clock').textContent = fmtClock(now());
-    $('#event-title').textContent = homeEvents()[homeOpenEvent ?? focusEventIdx()].event.title;
+    $('#event-title').textContent = evName(homeEvents()[homeOpenEvent ?? focusEventIdx()].event);
     $('#round-sub').textContent = `מסך ראשי${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
     renderTabs(); renderHome(); checkAlerts();
     return;
@@ -388,7 +390,7 @@ function render() {
   const r = round(current);
   const s = stateAt(r, now(), off(r.id));
   $('#clock').textContent = fmtClock(now());
-  $('#event-title').textContent = evOf(r).title;
+  $('#event-title').textContent = evName(evOf(r));
   $('#round-sub').textContent = `${dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec * 1000)}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
   renderTabs(); renderBoard(r, s); renderTimer(r, s); renderNext(r, s);
   if (view === 'mine') renderMine(r);
