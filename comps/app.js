@@ -8,7 +8,7 @@ import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive } from './live.js';
 import { quota } from './results.js';
 
-export const APP_VERSION = '3.4.0';
+export const APP_VERSION = '3.4.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
