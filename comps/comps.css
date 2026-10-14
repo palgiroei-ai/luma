@@ -763,6 +763,7 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .seg button.lv:not([aria-pressed="true"]) { color: var(--live); font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--live); }
 @keyframes live-pulse { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .ltag i { animation: none; } }
+.lock-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 14px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--border); font-size: 14px; }
 .res-line.live { background: var(--live-bg); } .res-line.live b, .res-line.live .yes { color: var(--live); } .res-line.live .out { color: var(--navy); }
 .full td.c-res.live b { color: var(--live); }
 .fc .rk em { display: block; font-style: normal; font-size: 11px; font-weight: 700; color: var(--live); text-align: left; }

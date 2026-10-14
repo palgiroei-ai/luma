@@ -8,7 +8,7 @@ import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive } from './live.js';
 import { quota } from './results.js';
 
-export const APP_VERSION = '3.4.1';
+export const APP_VERSION = '3.5.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -95,7 +95,39 @@ const todayStr = () => { const d = zoneParts(now()); return `${d.y}-${pad(d.mo)}
 const visible = r => !VIEWER || !!resultsOf(r.id) || (r.slots.length ? roundEndMs(r) > now() : r.date >= todayStr());
 // results (2.7.0): DATA.results[roundId] = { source, rows } from src/results.mjs; round 2 counts back to round 1
 // live (3.4.0): a round without an official file shows the federation's live data while it runs (see live.js)
-const resultsOf = id => (LIVE_FORCE && liveOf(id)) || DATA.results?.[id] || liveOf(id) || null;
+const resultsOf = id => (LIVE_FORCE && liveOf(id)) || DATA.results?.[id] || LOCKED[id] || liveOf(id) || null;
+
+// ---- locked results (3.5.0): at the end of a live round the coach taps "קבע כתוצאות רשמיות" → the final live state is
+// saved on our server and becomes the round's official results for everyone (green), even after the federation's
+// database moves on to the next round. A results file from src/results.mjs still wins over it.
+let LOCKED = {};
+async function loadLocked() {
+  try {
+    const { items } = await fbCall('/locked');
+    const next = {};
+    for (const [id, v] of Object.entries(items || {})) {
+      const old = LOCKED[id];
+      next[id] = old && old.at === v.at ? old : { source: `${v.source || 'תוצאות חיות'} · נקבע כרשמי ${fbDate(v.at)}`, at: v.at, locked: true, final: !/-r\d$/.test(id),
+        rows: v.rows.map(r => ({ ...r, bs: r.bs.some(Boolean) ? r.bs : [] })) }; // nothing entered = did not start (DNS)
+    }
+    LOCKED = next; render();
+  } catch { /* offline / no server: keep what we have */ }
+}
+function lockResults(id) {
+  const res = resultsOf(id); if (!res?.live) return;
+  const miss = res.total - res.done;
+  askConfirm('קביעה כתוצאות רשמיות', `${round(id).title}: התוצאות החיות כפי שהן עכשיו (${res.done}/${res.total} בולדרים${miss ? `, ${miss} חסרים — יירשמו בלי תוצאה` : ''}) יישמרו כתוצאות הסבב ויוצגו לכולם בירוק. אפשר לבטל אחר כך.`, 'קבע כרשמי', async () => {
+    try {
+      await fbCall('/locked', { round: id, source: `תוצאות חיות מההתאחדות, עודכן ${fmtClock(res.updated)}`, rows: res.rows.map(({ bib, name, club, cat, bs }) => ({ bib, name, club, cat, bs })) });
+      await loadLocked(); showToast('נקבע כתוצאות רשמיות ✓');
+    } catch { showToast('לא נשמר — אין חיבור לשרת. נסה שוב.'); }
+  });
+}
+function unlockResults(id) {
+  askConfirm('ביטול התוצאות הרשמיות', `${round(id).title}: לחזור לתוצאות החיות (אם ההתאחדות עוד מציגה את הסבב)?`, 'בטל', async () => {
+    try { await fbCall('/locked/delete', { round: id }); await loadLocked(); showToast('בוטל'); } catch { showToast('לא בוטל — אין חיבור לשרת.'); }
+  });
+}
 const rankCache = {};
 function rankedOf(id) {
   const res = resultsOf(id); if (!res) return null;
@@ -128,7 +160,7 @@ function liveWanted() {
   if (screen !== 'round') return false;
   const r = round(current); if (!r?.slots.length || !liveGroup(r.id)) return false;
   if (LIVE_FORCE) return true;
-  if (DATA.results?.[r.id]) return false;
+  if (DATA.results?.[r.id] || LOCKED[r.id]) return false;
   const t = now(), st = roundStart(r) + off(r.id);
   return t > st - 10 * 60000 && t < roundEndMs(r) + 3 * 3600000;
 }
@@ -429,6 +461,14 @@ function liveCard(ranked, row, who, q, final, full) {
     </div></div></article>`;
 }
 
+// coach only (not from a simulation, which must never write the real results): lock when the round is done, or undo
+function lockBar(r, res) {
+  if (VIEWER || (SIM_AT != null && location.hostname !== 'localhost')) return '';
+  if (res.locked) return `<div class="lock-bar"><span>✓ נקבע כתוצאות רשמיות מהתוצאות החיות</span><button type="button" class="btn btn-sm btn-ghost" data-unlock="${r.id}">ביטול</button></div>`;
+  if (!res.live || !(res.complete || stateAt(r, now(), off(r.id)).phase === 'after')) return '';
+  return `<div class="lock-bar"><span>${res.complete ? 'כל הבולדרים הוזנו.' : `הסבב נגמר · ${res.done}/${res.total} בולדרים הוזנו.`} לשמור את המצב הזה כתוצאות הרשמיות של הסבב?</span><button type="button" class="btn btn-sm btn-primary" data-lock="${r.id}">קבע כתוצאות רשמיות</button></div>`;
+}
+
 function renderResults(r) {
   const res = resultsOf(r.id), full = rankedOf(r.id), g = genderOf(r.id);
   const opts = catOptions(res.rows, g), opt = opts.find(o => o.key === resCat[r.id]) || opts[0];
@@ -464,6 +504,7 @@ function renderResults(r) {
   patch($('#view-results'), `<div class="res${res.live ? ' is-live' : ''}">
     ${chips}
     ${res.live ? `<div class="live-bar${live.err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל הבולדרים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} בולדרים הוזנו · ${res.started} התחילו</span>${live.err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · לא רשמי</span></div>` : ''}
+    ${lockBar(r, res)}
     <div class="res-head"><span class="muted small">מקור: ${esc(res.source)}</span>
       <span class="legend"><span><i class="cell t lg">T</i> טופ</span><span><i class="cell z lg">Z</i> זון בלי טופ</span><span><i class="cell n lg">—</i> בלי זון</span><span class="muted">T2 = טופ בניסיון השני</span></span></div>
     ${cards}
@@ -1491,6 +1532,8 @@ function start() {
     else if (d.adj) adjust(d.adj);
     else if (d.view) setView(d.view);
     else if (d.rescat) { resCat[current] = d.rescat; $('#view-results')._html = null; render(); }
+    else if (d.lock) lockResults(d.lock);
+    else if (d.unlock) unlockResults(d.unlock);
     else if (d.sync) syncFromSlot(Number(d.sync));
     else if (d.note) openNote(Number(d.note), d.nr);
     else if (d.appeal) openAppeal(Number(d.appeal), d.nr);
@@ -1571,6 +1614,7 @@ function start() {
   render();
   setInterval(render, 250);
   setInterval(() => pollLive(), 5000);
+  loadLocked(); setInterval(loadLocked, 120000);
   setInterval(() => syncPush(), 5000); syncPush(true);
   addEventListener('online', () => syncPush(true));
   if (SIM_AT == null && VIEWER) viewPull = startViewSync(onRemote);
