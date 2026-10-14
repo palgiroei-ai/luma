@@ -898,7 +898,12 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .sc-time { font-size: clamp(96px, 30vw, 420px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; direction: ltr; }
 .sc-time.warn { color: var(--danger); }
 .sc-ctrl { display: flex; gap: 10px; }
-.sc-logos { display: flex; align-items: center; gap: 28px; }
-.sc-palgi { height: clamp(32px, 5vw, 56px); width: auto; }
-.sc-luma { display: grid; justify-items: center; gap: 2px; }
+.sc-logos { display: flex; align-items: center; gap: clamp(18px, 6vw, 72px); flex-wrap: wrap; justify-content: center; max-width: 100%; margin-top: clamp(4px, 1.5vh, 16px); }
+.sc-palgi { height: clamp(40px, 10vw, 120px); width: auto; }
+.sc-luma { display: grid; justify-items: center; gap: clamp(2px, .6vw, 6px); }
+.sc-luma .powered-by { font-size: clamp(10px, 1.5vw, 17px); }
+.sc-luma .brand-row { gap: clamp(6px, 1vw, 12px); }
+.sc-luma .mark { width: clamp(22px, 4.4vw, 52px); height: clamp(22px, 4.4vw, 52px); }
+.sc-luma .wordmark { font-size: clamp(15px, 3vw, 36px); }
+.sc-field .seg { justify-self: start; }
 .h-head .clock-btn { margin-inline-start: auto; }

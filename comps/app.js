@@ -6,7 +6,7 @@ import { CHANGELOG } from './changelog.js';
 import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats } from './results.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '3.3.1';
+export const APP_VERSION = '3.3.2';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
