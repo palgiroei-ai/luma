@@ -6,7 +6,7 @@ import { CHANGELOG } from './changelog.js';
 import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats } from './results.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '3.3.0';
+export const APP_VERSION = '3.3.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -210,7 +210,7 @@ function calibParts(r, n) {
 }
 function renderDelayBtn(r) {
   const b = $('#delay-btn'), d = store.delay(r.id);
-  b.querySelector('span').textContent = d ? `השהיה ${d}ש׳` : 'ללא השהיה';
+  b.querySelector('span').textContent = d ? `השהיה ${d}ש׳` : 'השהיה 0';
   b.classList.toggle('on', d > 0);
   b.setAttribute('aria-label', d ? `השהיה של ${d} שניות בכל מעבר סבב · לחץ לשינוי` : 'ללא השהיה בין סבבים · לחץ להוספה');
 }
@@ -277,7 +277,7 @@ function renderAll(r) {
       const added = mk.has(k) && mineOf(r.id).find(m => m.k === k)?.added;
       const now_ = st.kind === 'boulder' || st.kind === 'rest';
       const tg = VIEWER || base.has(k) ? '' : `<button type="button" class="mine-tg" data-mine-tg="${k}" aria-pressed="${mk.has(k)}" aria-label="${mk.has(k) ? 'הסרה מהספורטאים שלי' : 'הוספה לספורטאים שלי'} · ${esc(s.name)}"></button>`;
-      return pre + `<tr class="${mk.has(k) ? 'mine' : ''}${added ? ' added' : ''}${now_ ? ' now' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td class="c-name">${tg}${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</td>
+      return pre + `<tr class="${mk.has(k) ? 'mine' : ''}${added ? ' added' : ''}${now_ ? ' now' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td class="c-name"><span class="nm-in">${tg}<span>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</span></span></td>
         <td>${fmtClock(st.startMs)}</td><td class="c-st">${statusText(r, st)}</td>
         <td class="row-actions"><button type="button" class="sync-btn" data-sync="${k}">מתחיל עכשיו</button>
           <button type="button" class="sync-btn appeal-btn" data-appeal="${k}">ערעור</button></td></tr>`;
@@ -691,22 +691,41 @@ function swipeToast(seq, i) {
 // finger moving left → right = next round (Roei 2026-10-14). Only a long, clearly sideways swipe; never on areas that
 // scroll sideways (full list, results, chips, tabs), in a dialog or a text field, or from the screen edge (Safari back).
 function setupSwipe() {
+  // 3.3.1: the round screen follows the finger, then slides out and the next round slides in from the other side
   let st = null;
+  const main = $('#round-screen'), still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const put = (x, ms) => { main.style.transition = ms ? `transform ${ms}ms ease, opacity ${ms}ms ease` : 'none'; main.style.transform = x ? `translateX(${x}px)` : ''; main.style.opacity = x ? String(Math.max(.35, 1 - Math.abs(x) / innerWidth)) : ''; };
   addEventListener('touchstart', e => {
     st = null;
     if (screen !== 'round' || e.touches.length !== 1 || document.querySelector('dialog[open]')) return;
     const t = e.touches[0], tg = e.target;
     if (t.clientX < 28 || t.clientX > innerWidth - 28) return;
     if (tg.closest('.full-wrap, .tbl-wrap, .seg, #round-tabs, input, textarea, select')) return;
-    st = { x: t.clientX, y: t.clientY, at: Date.now() };
+    st = { x: t.clientX, y: t.clientY, at: Date.now(), drag: false };
   }, { passive: true });
+  addEventListener('touchmove', e => {
+    if (!st || still()) return;
+    const t = e.touches[0], dx = t.clientX - st.x, dy = t.clientY - st.y;
+    if (!st.drag && Math.abs(dx) > 14 && Math.abs(dx) > 1.6 * Math.abs(dy)) st.drag = true;
+    if (st.drag) put(dx * .55, 0);
+  }, { passive: true });
+  const back = () => { if (main.style.transform) put(0, 180); };
+  addEventListener('touchcancel', () => { st = null; back(); }, { passive: true });
   addEventListener('touchend', e => {
     if (!st) return;
     const t = e.changedTouches[0], dx = t.clientX - st.x, dy = t.clientY - st.y, ms = Date.now() - st.at; st = null;
-    if (Math.abs(dx) < 90 || Math.abs(dx) < 2.2 * Math.abs(dy) || ms > 700) return;
+    if (Math.abs(dx) < 90 || Math.abs(dx) < 2.2 * Math.abs(dy) || ms > 700) { back(); return; }
     const seq = swipeSeq(), i = seq.findIndex(x => x.id === current), j = i + (dx > 0 ? 1 : -1);
-    if (i < 0 || j < 0 || j >= seq.length) { showToast(dx > 0 ? 'זה הסבב האחרון' : 'זה הסבב הראשון'); return; }
-    goRound(seq[j].id); swipeToast(seq, j);
+    if (i < 0 || j < 0 || j >= seq.length) { back(); showToast(dx > 0 ? 'זה הסבב האחרון' : 'זה הסבב הראשון'); return; }
+    if (still()) { put(0, 0); goRound(seq[j].id); swipeToast(seq, j); return; }
+    const w = Math.sign(dx) * innerWidth * .6;
+    put(w, 160);
+    setTimeout(() => {
+      goRound(seq[j].id); swipeToast(seq, j);
+      put(-w, 0); main.getBoundingClientRect(); // jump to the other side, then slide in
+      put(0, 220);
+      setTimeout(() => { main.style.transition = ''; }, 240);
+    }, 160);
   }, { passive: true });
 }
 
