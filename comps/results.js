@@ -8,20 +8,21 @@
 // Anyone tied on the last qualifying place advances (Event Regulations §2.4).
 
 export const r1 = x => Math.round(x * 10) / 10;
-export const pts = ([t, z]) => t ? Math.max(0, 25 - 0.1 * (t - 1)) : z ? Math.max(0, 10 - 0.1 * (z - 1)) : 0;
+// b = [top attempt, zone attempt]; null = not climbed yet (live results, 3.4.0) → 0 points, counts nowhere
+export const pts = b => { if (!b) return 0; const [t, z] = b; return t ? Math.max(0, 25 - 0.1 * (t - 1)) : z ? Math.max(0, 10 - 0.1 * (z - 1)) : 0; };
 export const score = bs => r1(bs.reduce((s, b) => s + pts(b), 0));
-export const topAttempts = bs => bs.reduce((s, [t]) => s + (t || 0), 0);
-export const zoneAttempts = bs => bs.reduce((s, [, z]) => s + (z || 0), 0);
-export const tops = bs => bs.filter(b => b[0]).length;
-export const zones = bs => bs.filter(b => b[0] || b[1]).length;
-export const kind = ([t, z]) => (t ? 't' : z ? 'z' : 'n');
+export const topAttempts = bs => bs.reduce((s, b) => s + ((b && b[0]) || 0), 0);
+export const zoneAttempts = bs => bs.reduce((s, b) => s + ((b && b[1]) || 0), 0);
+export const tops = bs => bs.filter(b => b && b[0]).length;
+export const zones = bs => bs.filter(b => b && (b[0] || b[1])).length;
+export const kind = b => (!b ? 'w' : b[0] ? 't' : b[1] ? 'z' : 'n');
 
 export function quota(n) { return n >= 30 ? 24 : n >= 8 ? Math.max(8, Math.ceil(n / 2)) : n; }
 
 // rows: [{ bib, bs, total:'DNS'|… }]; prevRank: optional { bib: rank } of the preceding round (count-back).
 // → started rows sorted best first with { score, rank } (ties share a rank), then DNS rows (rank null).
 export function rankRows(rows, prevRank = null) {
-  const dns = r => r.total === 'DNS' || !r.bs.length;
+  const dns = r => r.total === 'DNS' || !r.bs.some(Boolean);
   const started = rows.filter(r => !dns(r)).map(r => ({ ...r, score: score(r.bs), ta: topAttempts(r.bs), za: zoneAttempts(r.bs) }));
   const cb = r => (prevRank && prevRank[r.bib] != null ? prevRank[r.bib] : Infinity);
   const cmp = (a, b) => (b.score - a.score) || (prevRank ? cb(a) - cb(b) : 0) || (a.ta - b.ta) || (a.za - b.za);
@@ -89,8 +90,8 @@ export function boulderStats(ranked, nBoulders) {
   const ok = ranked.filter(r => r.rank != null);
   const avg = a => (a.length ? r1(a.reduce((s, x) => s + x, 0) / a.length) : null);
   return Array.from({ length: nBoulders }, (_, j) => {
-    const cells = ok.map(r => r.bs[j]);
-    return { boulder: j + 1, n: ok.length, tops: cells.filter(b => b[0]).length, zoneOnly: cells.filter(b => !b[0] && b[1]).length,
+    const cells = ok.map(r => r.bs[j]).filter(Boolean);
+    return { boulder: j + 1, n: cells.length, tops: cells.filter(b => b[0]).length, zoneOnly: cells.filter(b => !b[0] && b[1]).length,
       avgTop: avg(cells.filter(b => b[0]).map(b => b[0])), avgZone: avg(cells.filter(b => b[1]).map(b => b[1])) };
   });
 }

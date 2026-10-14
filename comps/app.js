@@ -5,8 +5,10 @@ import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC
 import { CHANGELOG } from './changelog.js';
 import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats } from './results.js';
 import { setupInstall } from './install.js';
+import { liveRows, liveGroup, fetchLive } from './live.js';
+import { quota } from './results.js';
 
-export const APP_VERSION = '3.3.2';
+export const APP_VERSION = '3.4.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -92,12 +94,49 @@ const evOf = r => EVENTS().find(e => e.id === (r?.event || 'bl1')) || EVENTS()[0
 const todayStr = () => { const d = zoneParts(now()); return `${d.y}-${pad(d.mo)}-${pad(d.d)}`; };
 const visible = r => !VIEWER || !!resultsOf(r.id) || (r.slots.length ? roundEndMs(r) > now() : r.date >= todayStr());
 // results (2.7.0): DATA.results[roundId] = { source, rows } from src/results.mjs; round 2 counts back to round 1
-const resultsOf = id => DATA.results?.[id] || null;
+// live (3.4.0): a round without an official file shows the federation's live data while it runs (see live.js)
+const resultsOf = id => (LIVE_FORCE && liveOf(id)) || DATA.results?.[id] || liveOf(id) || null;
 const rankCache = {};
 function rankedOf(id) {
   const res = resultsOf(id); if (!res) return null;
-  if (rankCache[id]) return rankCache[id];
-  return (rankCache[id] = rankRows(res.rows, prevRankOf(id)));
+  if (rankCache[id]?.res === res) return rankCache[id].v;
+  return (rankCache[id] = { res, v: rankRows(res.rows, prevRankOf(id)) }).v;
+}
+
+// ---- live results (3.4.0, trial): polled every 15 s while a round with a start list and no official results runs ----
+const LIVE_FORCE = SIM_AT != null && params.get('live') === 'force'; // testing only: replay the live data over a finished round
+const live = { data: null, at: 0, err: false, busy: false };
+const liveCache = {};
+function liveOf(id) {
+  const r = round(id); if (!live.data || !r) return null;
+  const key = `${live.at}:${Math.floor(now() / 15000)}`;
+  if (liveCache[id]?.key === key) return liveCache[id].v;
+  const lr = liveRows(r, live.data.cfg, live.data.results, now());
+  let v = null;
+  if (lr) {
+    // an athlete who has not climbed yet: category from round 1 (for the category chips)
+    const prev = DATA.results?.[id.replace(/-r2$/, '-r1')], catOf = Object.fromEntries((prev?.rows || []).map(x => [x.bib, x.cat]));
+    // (club: our short name from round 1 first — the judging app has the long official one)
+    lr.rows.forEach(x => { if (!x.cat) x.cat = catOf[x.bib] || null; x.club = prev?.rows.find(y => y.bib === x.bib)?.club || x.club; });
+    v = { ...lr, live: true, final: !/-r\d$/.test(id), source: `תוצאות חיות מההתאחדות · ניסיון, לא רשמי · עודכן ${fmtClock(lr.updated)}` };
+  }
+  liveCache[id] = { key, v };
+  return v;
+}
+function liveWanted() {
+  if (screen !== 'round') return false;
+  const r = round(current); if (!r?.slots.length || !liveGroup(r.id)) return false;
+  if (LIVE_FORCE) return true;
+  if (DATA.results?.[r.id]) return false;
+  const t = now(), st = roundStart(r) + off(r.id);
+  return t > st - 10 * 60000 && t < roundEndMs(r) + 3 * 3600000;
+}
+async function pollLive(force = false) {
+  if (live.busy || !liveWanted() || (document.hidden && !force)) return;
+  if (!force && Date.now() - live.at < 14000) return;
+  live.busy = true;
+  try { live.data = await fetchLive(); live.at = Date.now(); live.err = false; } catch { live.err = true; }
+  live.busy = false; render();
 }
 // round 2 counts back to round 1's ranking (bib → place)
 function prevRankOf(id) {
@@ -239,8 +278,21 @@ function renderMine(r) {
   }
   mineCards(r, t, $('#view-mine'));
 }
+// 3.4.0: each athlete's result so far (live or official) on the management views — "שלי" cards + full-list column
+function resByBib(r) {
+  const res = resultsOf(r.id); if (!res) return null;
+  const full = rankedOf(r.id), ok = full.filter(x => x.rank != null);
+  return { res, q: quota(res.live ? res.rows.length : ok.length), by: Object.fromEntries(full.map(x => [x.bib, x])) };
+}
+const bsTxt = bs => bs.map((b, j) => (b ? `B${j + 1} ${cellTxt(b)}` : null)).filter(Boolean).join(' · ');
+const provisional = R => (R.res.live && !R.res.complete ? ' (זמני)' : '');
+function resLine(R, bib) {
+  const x = R?.by[bib]; if (!x || x.rank == null) return '';
+  const cut = R.res.final ? '' : x.rank <= R.q ? ' · <span class="yes">בפנים</span>' : ' · <span class="out">בחוץ</span>';
+  return `<p class="res-line"><b>מקום ${x.rank}${provisional(R)}</b> · ${x.score.toFixed(1)} נק׳ · <bdi dir="ltr">${bsTxt(x.bs)}</bdi>${cut}</p>`;
+}
 function mineCards(r, t, el) {
-  const list = mineOf(r.id);
+  const list = mineOf(r.id), R = resByBib(r);
   if (!list.length) { patch(el, `<p class="muted">${r.slots.length ? (VIEWER ? 'אין ספורטאים מהפלגיה בראונד הזה.' : 'אין ספורטאים שלי בראונד הזה.') : 'סדר העלייה עוד לא התקבל.'}</p>`); return; }
   patch(el, (VIEWER ? '<p class="muted small viewer-hint">מודגשים: הספורטאים של רועי פלגי</p>' : overlapHtml(r, t)) + list.map(m => {
     const s = r.slots[m.k];
@@ -253,6 +305,7 @@ function mineCards(r, t, el) {
       <div class="ath-status">${big}</div>
       <dl class="ath-meta"><div><dt>סדר</dt><dd>#${s.order}</dd></div><div><dt>גב</dt><dd>${s.bib}</dd></div>
         <div><dt>עלייה</dt><dd>${fmtClock(st.startMs)}</dd></div><div><dt>מעבר לנורמן</dt><dd>${fmtHM(s.transfer ? zonedMs(`${r.date}T${s.transfer.padStart(8, '0')}`) + off(r.id) : st.startMs - 80 * 60000)}</dd></div></dl>
+      ${resLine(R, s.bib)}
       ${notes.length ? `<p class="last-note">📝 ${esc(notes[notes.length - 1].text)}${notes.length > 1 ? ` <span class="muted">(+${notes.length - 1})</span>` : ''}</p>` : ''}
       ${appeals.length ? `<p class="last-note appeal-tag">⚑ ${appeals.length} ערעור${appeals.length > 1 ? 'ים' : ''}</p>` : ''}
       <div class="ath-actions"><button type="button" class="btn btn-sm btn-ghost" data-note="${m.k}" data-nr="${r.id}">הערה</button>
@@ -266,19 +319,21 @@ function renderAll(r) {
   if (!r.slots.length) { patch($('#view-all'), '<p class="muted">סדר העלייה עוד לא התקבל.</p>'); return; }
   const live = stateAt(r, t, off(r.id)).phase === 'live';
   let nextDone = !live;
+  const R = resByBib(r), nc = R ? 7 : 6; // results column (3.4.0) only when the round has results / live results
+  const resTd = s => !R ? '' : `<td class="c-res">${R.by[s.bib]?.rank != null ? `<b>${R.by[s.bib].rank}</b> · ${R.by[s.bib].score.toFixed(1)}` : ''}</td>`;
   // 3.0.0: band on whoever is on a boulder / resting between boulders now + a "הבא בתור" line before the first one waiting;
   // circle next to the name adds / removes a not-mine athlete for this round (Hub athletes have none)
-  patch($('#view-all'), `<p class="muted small hint">סנכרון לפי מי שמטפס: לחץ "מתחיל עכשיו" ליד המתחרה שעולה עכשיו לבולדר 1. ערעור אפשר על כל מתחרה.${VIEWER ? '' : ' ○ ליד שם = הוספה לספורטאים שלי בסבב הזה.'}</p><div class="full-wrap"><table class="full"><thead><tr><th>סדר</th><th class="c-bib">גב</th><th>שם</th><th>עלייה</th><th>מצב</th><th></th></tr></thead><tbody>${
+  patch($('#view-all'), `<p class="muted small hint">סנכרון לפי מי שמטפס: לחץ "מתחיל עכשיו" ליד המתחרה שעולה עכשיו לבולדר 1. ערעור אפשר על כל מתחרה.${VIEWER ? '' : ' ○ ליד שם = הוספה לספורטאים שלי בסבב הזה.'}</p><div class="full-wrap"><table class="full"><thead><tr><th>סדר</th><th class="c-bib">גב</th><th>שם</th><th>עלייה</th><th>מצב</th>${R ? `<th>תוצאה${provisional(R)}</th>` : ''}<th></th></tr></thead><tbody>${
     r.slots.map((s, k) => {
       const st = s ? athleteStatus(r, k, t, off(r.id)) : null;
       let pre = '';
-      if (!nextDone && (st ? st.kind === 'waiting' : slotStartMs(r, k, off(r.id)) > t)) { nextDone = true; pre = '<tr class="next-line"><td colspan="6"><span>הבא בתור</span></td></tr>'; }
-      if (!s) return pre + `<tr class="empty-row"><td colspan="3">סבב ריק</td><td>${fmtClock(slotStartMs(r, k, off(r.id)))}</td><td></td><td></td></tr>`;
+      if (!nextDone && (st ? st.kind === 'waiting' : slotStartMs(r, k, off(r.id)) > t)) { nextDone = true; pre = `<tr class="next-line"><td colspan="${nc}"><span>הבא בתור</span></td></tr>`; }
+      if (!s) return pre + `<tr class="empty-row"><td colspan="3">סבב ריק</td><td>${fmtClock(slotStartMs(r, k, off(r.id)))}</td><td></td>${R ? '<td></td>' : ''}<td></td></tr>`;
       const added = mk.has(k) && mineOf(r.id).find(m => m.k === k)?.added;
       const now_ = st.kind === 'boulder' || st.kind === 'rest';
       const tg = VIEWER || base.has(k) ? '' : `<button type="button" class="mine-tg" data-mine-tg="${k}" aria-pressed="${mk.has(k)}" aria-label="${mk.has(k) ? 'הסרה מהספורטאים שלי' : 'הוספה לספורטאים שלי'} · ${esc(s.name)}"></button>`;
       return pre + `<tr class="${mk.has(k) ? 'mine' : ''}${added ? ' added' : ''}${now_ ? ' now' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td class="c-name"><span class="nm-in">${tg}<span>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</span></span></td>
-        <td>${fmtClock(st.startMs)}</td><td class="c-st">${statusText(r, st)}</td>
+        <td>${fmtClock(st.startMs)}</td><td class="c-st">${statusText(r, st)}</td>${resTd(s)}
         <td class="row-actions"><button type="button" class="sync-btn" data-sync="${k}">מתחיל עכשיו</button>
           <button type="button" class="sync-btn appeal-btn" data-appeal="${k}">ערעור</button></td></tr>`;
     }).join('')}</tbody></table></div>`);
@@ -294,11 +349,12 @@ let scrollAll = false; // once per opening of the full list (Roei: then it must 
 // ---- results (2.7.0): my athletes' cards + boulder stats + full table (design picked by Roei 2026-10-13) ----
 // a finished round with results opens on its results; otherwise leave the results tab
 function openRoundView() {
+  pollLive(true);
   const r = round(current);
   if (resultsOf(r.id) && (!r.slots.length || stateAt(r, now(), off(r.id)).phase === 'after')) setView('results');
   else if (view === 'results') setView('mine');
 }
-const cellTxt = b => (b[0] ? `T${b[0]}` : b[1] ? `Z${b[1]}` : '–');
+const cellTxt = b => (!b ? '·' : b[0] ? `T${b[0]}` : b[1] ? `Z${b[1]}` : '–');
 const resWord = b => (b[0] ? `טופ בניסיון ${b[0]}` : `זון בניסיון ${b[1]}`);
 const sgn = g => `<bdi dir="ltr">+${g.toFixed(1)}</bdi>`;
 // star path bbox = x 2–22, y 2–21 → viewBox shifted by −0.5 so the shape sits exactly in the middle of its circle
@@ -342,6 +398,32 @@ function resCard(ranked, row, who, final, full) {
     </div></article>`;
 }
 
+// live, round still running (3.4.0): place so far, points, the cut line now; boulders not climbed yet = dashed
+function liveCard(ranked, row, who, q, final, full) {
+  const head = rk => `<div class="top"><div><div class="nm">${esc(row.name)}</div><div class="club">${row.club ? esc(row.club) + ' · ' : ''}מס׳ ${row.bib}</div></div><div class="rk">${rk}</div></div>`;
+  if (row.rank == null) return `<article class="card fc live${who.added ? ' added' : ''}">${head('–')}<p class="muted small">עדיין בלי תוצאה — יופיע כאן אחרי הבולדר הראשון.</p></article>`;
+  const ok = ranked.filter(x => x.rank != null), all = full.filter(x => x.rank != null), i = ok.indexOf(row);
+  const overall = all.find(x => x.bib === row.bib)?.rank ?? row.rank, nDone = row.bs.filter(Boolean).length;
+  const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
+  const above = ok.slice(0, i).reverse().find(x => x.score > row.score), below = ok.slice(i + 1).find(x => x.score < row.score);
+  const bars = row.bs.map((b, j) => b ? `<div class="bar"><div class="fill-wrap"><div class="fill ${kind(b)}" style="height:${pts(b) / 25 * 100}%"></div></div><span class="lb">B${j + 1} (T${b[0] || 0}Z${b[1] || 0})</span></div>`
+    : `<div class="bar wait"><div class="fill-wrap"></div><span class="lb">B${j + 1} · עוד לא</span></div>`).join('');
+  let cut = '';
+  if (!final) {
+    const lastIn = all[Math.min(q, all.length) - 1], firstOut = all[q];
+    cut = overall <= q ? kv('קו העלייה כרגע', `<span class="yes">בפנים</span>${firstOut ? `<small class="d">יתרון ${r1(row.score - firstOut.score).toFixed(1)} על מקום ${firstOut.rank}</small>` : ''}`)
+      : kv('קו העלייה כרגע', `חסרות ${r1(lastIn.score - row.score + 0.1).toFixed(1)} נק׳<small class="d">מקום ${q} · ${lastIn.score.toFixed(1)}</small>`);
+  }
+  return `<article class="card fc live${who.added ? ' added' : ''}">${head(`${row.rank}<small>/${ok.length}</small>${ranked !== full ? `<span class="rk-all">כללי ${overall}</span>` : ''}`)}
+    <div class="sc"><b>${row.score.toFixed(1)}</b> נק׳ · ${row.bs.filter(b => b && b[0]).length} טופים · ${row.bs.filter(b => b && (b[0] || b[1])).length} זונים · ${nDone}/${row.bs.length} בולדרים</div>
+    <div class="bars" style="grid-template-columns:repeat(${row.bs.length},1fr)">${bars}</div>
+    <div class="ins"><div class="grp"><span class="gh">מיקום זמני · מתוך ${ok.length} שהתחילו</span>
+      ${cut}
+      ${kv('פער מהמקום שמעל', above ? `${r1(above.score - row.score).toFixed(1)} נק׳<small class="d">מקום ${above.rank}</small>` : 'מקום ראשון')}
+      ${below ? kv('יתרון על שמתחת', `${r1(row.score - below.score).toFixed(1)} נק׳<small class="d">מקום ${below.rank}</small>`) : ''}
+    </div></div></article>`;
+}
+
 function renderResults(r) {
   const res = resultsOf(r.id), full = rankedOf(r.id), g = genderOf(r.id);
   const opts = catOptions(res.rows, g), opt = opts.find(o => o.key === resCat[r.id]) || opts[0];
@@ -352,9 +434,10 @@ function renderResults(r) {
   const chips = opts.length > 1 ? `<div class="seg res-cats" role="group" aria-label="קטגוריה">${opts.map(o => `<button type="button" data-rescat="${o.key}" aria-pressed="${o === opt}">${esc(o.label)}</button>`).join('')}</div>` : '';
   const whoByBib = {};
   for (const m of mineOf(r.id)) { const s = r.slots[m.k]; if (s) whoByBib[s.bib] = m; }
-  const q = analyze(full, full[0]).quota;
-  const mine = ok.filter(x => whoByBib[x.bib]);
-  const cards = mine.length ? `<div class="focus">${mine.map(x => resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
+  const running = res.live && !res.complete;
+  const q = res.live ? quota(res.rows.length) : analyze(full, full[0]).quota;
+  const mine = (running ? ranked : ok).filter(x => whoByBib[x.bib]);
+  const cards = mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
     : `<p class="muted">${VIEWER ? 'אין ספורטאים מהפלגיה בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
@@ -363,6 +446,7 @@ function renderResults(r) {
       <div class="mydots">${md}<span class="avg">ממוצע ניסיונות לטופ ${b.avgTop ?? '–'}</span><span class="avg">ממוצע ניסיונות לזון ${b.avgZone ?? '–'}</span></div></div>`;
   }).join('');
   const cell = b => { const k = kind(b);
+    if (k === 'w') return '<div class="cell w"><span class="a">·</span><span class="p"></span></div>';
     return `<div class="cell ${k}"><span class="a">${k === 'n' ? '—' : (b[0] ? 'T' + b[0] + ' ' : '') + 'Z' + b[1]}</span><span class="p">${k === 'n' ? '0' : pts(b).toFixed(1)}</span></div>`; };
   let cutDone = false;
   const rows = ranked.map(x => {
@@ -370,10 +454,11 @@ function renderResults(r) {
     let pre = '';
     if (!res.final && !cutDone && x.rank != null && overallOf[x.bib] > q) { cutDone = true; pre = `<tr class="cut"><td colspan="${nB + 5}">קו העלייה לסבב הבא · ${q} עולים${ranked === full ? ` (${ok.length} התחילו)` : ' לפי הדירוג הכללי'}</td></tr>`; }
     return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b><small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
-      ${x.rank == null ? `<td colspan="${nB}" class="muted small">לא התחיל (DNS)</td><td></td><td class="tt">–</td>` : x.bs.map(b => `<td>${cell(b)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b[0]).length}T ${x.bs.filter(b => b[0] || b[1]).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
+      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live ? 'עדיין בלי תוצאה' : 'לא התחיל (DNS)'}</td><td></td><td class="tt">–</td>` : x.bs.map(b => `<td>${cell(b)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
   patch($('#view-results'), `<div class="res">
     ${chips}
+    ${res.live ? `<div class="live-bar${live.err ? ' err' : ''}"><span class="dot" aria-hidden="true"></span><b>${res.complete ? 'כל הבולדרים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} בולדרים הוזנו · ${res.started} התחילו</span>${live.err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · לא רשמי</span></div>` : ''}
     <div class="res-head"><span class="muted small">מקור: ${esc(res.source)}</span>
       <span class="legend"><span><i class="cell t lg">T</i> טופ</span><span><i class="cell z lg">Z</i> זון בלי טופ</span><span><i class="cell n lg">—</i> בלי זון</span><span class="muted">T2 = טופ בניסיון השני</span></span></div>
     ${cards}
@@ -1478,6 +1563,7 @@ function start() {
   });
   render();
   setInterval(render, 250);
+  setInterval(() => pollLive(), 5000);
   setInterval(() => syncPush(), 5000); syncPush(true);
   addEventListener('online', () => syncPush(true));
   if (SIM_AT == null && VIEWER) viewPull = startViewSync(onRemote);
