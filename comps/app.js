@@ -1,19 +1,19 @@
 import { decryptJSON } from './decrypt.js';
-import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan, climbOverlaps } from './engine.js';
+import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan, climbOverlaps, zonedMs, zoneParts, deviceOffZone } from './engine.js';
 import { store } from './store.js';
 import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
 import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats } from './results.js';
 import { setupInstall } from './install.js';
 
-export const APP_VERSION = '2.9.2';
+export const APP_VERSION = '3.3.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // ---- clock (?at=2026-10-13T10:30:00&speed=10 → simulated clock for previews) ----
 const params = new URLSearchParams(location.search);
-const SIM_AT = params.get('at') ? new Date(params.get('at')).getTime() : null;
+const SIM_AT = params.get('at') ? zonedMs(params.get('at')) : null; // venue (Israel) time
 const SIM_SPEED = Number(params.get('speed')) || 1;
 const T_LOAD = Date.now();
 const now = () => (SIM_AT == null ? Date.now() : SIM_AT + (Date.now() - T_LOAD) * SIM_SPEED);
@@ -21,7 +21,8 @@ const simFired = new Set();
 const fired = { was: k => (SIM_AT == null ? store.wasFired(k) : simFired.has(k)), mark: k => (SIM_AT == null ? store.markFired(k) : simFired.add(k)) };
 
 const pad = n => String(n).padStart(2, '0');
-const fmtClock = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+// every time on screen is venue (Israel) time, on any device in any zone (3.0.0)
+const fmtClock = ms => { const d = zoneParts(ms); return `${pad(d.h)}:${pad(d.mi)}:${pad(d.s)}`; };
 const fmtHM = ms => fmtClock(ms).slice(0, 5);
 const fmtDur = ms => {
   const t = Math.max(0, Math.ceil(ms / 1000)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
@@ -36,6 +37,7 @@ let current = null; // round id
 let view = 'mine';
 let lastTabTap = 0;
 let screen = 'round'; // 'home' | 'round'
+const OFF_ZONE = deviceOffZone(); // device not on Israel time → small "שעון ישראל" tag by the clock
 
 // ---- gate ----
 // → payload, null (wrong code) or 'nodata' (no network and nothing cached / server error).
@@ -87,7 +89,7 @@ const EVENTS = () => DATA.events || [{ id: 'bl1', ...DATA.event }];
 const evName = e => (e?.champ ? '🏆 ' : '') + (e?.title || '');
 const evOf = r => EVENTS().find(e => e.id === (r?.event || 'bl1')) || EVENTS()[0];
 // viewer: only rounds still ahead (or running now)
-const todayStr = () => { const d = new Date(now()); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const todayStr = () => { const d = zoneParts(now()); return `${d.y}-${pad(d.mo)}-${pad(d.d)}`; };
 const visible = r => !VIEWER || !!resultsOf(r.id) || (r.slots.length ? roundEndMs(r) > now() : r.date >= todayStr());
 // results (2.7.0): DATA.results[roundId] = { source, rows } from src/results.mjs; round 2 counts back to round 1
 const resultsOf = id => DATA.results?.[id] || null;
@@ -105,7 +107,7 @@ function prevRankOf(id) {
 const genderOf = id => (/-w(-|$)/.test(id) ? 'W' : 'M');
 const resCat = {}; // chosen category per round (this session)
 const roundsOf = ev => DATA.rounds.filter(r => (r.event || 'bl1') === ev.id && visible(r));
-const MINE_NAME = () => (VIEWER ? 'הנבחרת של רועי' : 'שלי');
+const MINE_NAME = () => (VIEWER ? 'הפלגיה' : 'שלי');
 // Base = Hub matches from the build; the coach can add/remove athletes per round in settings.
 const mineOf = id => {
   const r = round(id); const del = new Set(store.mineDel(id));
@@ -160,8 +162,8 @@ function slotCard(r, s, cls, label) {
     <div class="bib">גב ${s.bib}${mine ? ` · <b>${esc(shortOf(r.id, s.k))}</b>` : ''}</div></div>`;
 }
 
-function renderBoard(r, s) {
-  if (!r.slots.length) { patch($('#board'), `<div class="board-msg">סדר העלייה לראונד הזה עוד לא התקבל.</div>`); return; }
+function renderBoard(r, s, el = $('#board')) {
+  if (!r.slots.length) { patch(el, `<div class="board-msg">סדר העלייה לראונד הזה עוד לא התקבל.</div>`); return; }
   const cells = [];
   const thumb = b => { const u = photoUrl(r.id, b); return u ? `<button type="button" class="ph-thumb" data-photo="${b}" aria-label="תמונת בולדר ${b}"><img src="${u}" alt=""></button>` : ''; };
   // no photo yet → coach gets an empty photo spot with "+" right on the board (2.3.0, Roei picked option A); viewers see the plain card
@@ -174,19 +176,21 @@ function renderBoard(r, s) {
   }
   if (r.trailingRest) cells.push(slotCard(r, s.trailing, 'lane rest', 'מנוחת סיום'));
   const cols = Array.from({ length: cells.length }, (_, i) => (i % 2 === 0 && !(r.trailingRest && i === cells.length - 1) ? 'minmax(0,1.45fr)' : 'minmax(0,1fr)')).join(' ');
-  patch($('#board'), `<div class="lanes" style="grid-template-columns:${cols}">${cells.join('')}</div>`);
+  patch(el, `<div class="lanes" style="grid-template-columns:${cols}">${cells.join('')}</div>`);
 }
 
 function renderTimer(r, s) {
   const t = now();
   const label = $('#timer-label'), timer = $('#timer'), sub = $('#timer-sub');
+  $('#tz-tag').hidden = !OFF_ZONE;
+  renderDelayBtn(r);
   if (!r.slots.length) { label.textContent = ''; timer.textContent = '--:--'; sub.textContent = `התחלה מתוכננת ${fmtHM(roundStart(r))}`; return; }
   const total = windowCount(r);
   if (s.phase === 'before') {
     const startMs = roundStart(r) + off(r.id);
     label.textContent = 'הראונד מתחיל בעוד';
     timer.textContent = fmtDur(startMs - t);
-    sub.textContent = `התחלה ${fmtClock(startMs)}` + (r.preview ? ` · צפייה במסלולים ${r.preview.from}–${r.preview.to}` : '');
+    sub.innerHTML = [`התחלה ${fmtClock(startMs)}`, r.preview && esc(`צפייה במסלולים ${r.preview.from}–${r.preview.to}`), ...calibParts(r, 0)].filter(Boolean).join(' · ');
     timer.className = 'timer';
   } else if (s.phase === 'after') {
     label.textContent = 'הראונד הסתיים'; timer.textContent = '0:00'; sub.textContent = ''; timer.className = 'timer done';
@@ -194,10 +198,25 @@ function renderTimer(r, s) {
     label.textContent = `סבב ${s.n + 1} מתוך ${total} · נותר`;
     timer.textContent = fmtDur(s.slotLeftMs);
     timer.className = 'timer' + (s.slotLeftMs <= 60000 ? ' warn' : '');
-    sub.textContent = `הסבב הבא ${fmtClock(s.slotEndMs)}`;
+    sub.innerHTML = [`הסבב הבא ${fmtClock(s.slotEndMs)}`, ...calibParts(r, s.n + 1)].join(' · ');
   }
-  const o = off(r.id);
-  $('#offset-label').textContent = o === 0 ? 'שעון לפי סדר העלייה' : `כיול: ${o > 0 ? 'מאחר' : 'מקדים'} ${fmtDur(Math.abs(o))}`;
+}
+// calibration + delay, merged into the line under the clock (3.0.0); n = window changes so far
+function calibParts(r, n) {
+  const o = off(r.id), d = store.delay(r.id), out = [];
+  if (o) out.push(`כיול ${o > 0 ? 'מאחר' : 'מקדים'} ${Math.abs(o) < 60000 ? Math.round(Math.abs(o) / 1000) + 'ש׳' : fmtDur(Math.abs(o))}`);
+  if (d) out.push(`השהיה ${d}ש׳${n > 0 ? ` (<bdi dir="ltr">+${d * n}</bdi>ש׳)` : ''}`);
+  return out;
+}
+function renderDelayBtn(r) {
+  const b = $('#delay-btn'), d = store.delay(r.id);
+  b.querySelector('span').textContent = d ? `השהיה ${d}ש׳` : 'ללא השהיה';
+  b.classList.toggle('on', d > 0);
+  b.setAttribute('aria-label', d ? `השהיה של ${d} שניות בכל מעבר סבב · לחץ לשינוי` : 'ללא השהיה בין סבבים · לחץ להוספה');
+}
+// "השהיה": the federation clock adds 0–2 s at every window change → each window lasts slotSec + delay (shared, per round)
+function applyDelays() {
+  for (const r of DATA.rounds) { if (r.slotSec0 == null) r.slotSec0 = r.slotSec; r.slotSec = r.slotSec0 + store.delay(r.id); }
 }
 
 function renderNext(r, s) {
@@ -210,9 +229,20 @@ function renderNext(r, s) {
 
 function renderMine(r) {
   const t = now();
+  const par = parRound(r);
   const list = mineOf(r.id);
-  if (!list.length) { patch($('#view-mine'), `<p class="muted">${r.slots.length ? (VIEWER ? 'אין ספורטאים מהנבחרת של רועי בראונד הזה.' : 'אין ספורטאים שלי בראונד הזה.') : 'סדר העלייה עוד לא התקבל.'}</p>`); return; }
-  patch($('#view-mine'), (VIEWER ? '<p class="muted small viewer-hint">מודגשים: הספורטאים של רועי פלגי</p>' : overlapHtml(r, t)) + list.map(m => {
+  if (par) { // 3.2.0: two rounds at the same time → my athletes of both, each round under its own title
+    const tmp = $('#view-mine-tmp') || Object.assign(document.createElement('div'), { id: 'view-mine-tmp' });
+    const cards = rr => { tmp._html = null; mineCards(rr, t, tmp); return tmp.innerHTML; };
+    patch($('#view-mine'), `<h3 class="par-h">${esc(r.title)}</h3>${cards(r)}<h3 class="par-h">${esc(par.title)} · במקביל</h3>${cards(par)}`);
+    return;
+  }
+  mineCards(r, t, $('#view-mine'));
+}
+function mineCards(r, t, el) {
+  const list = mineOf(r.id);
+  if (!list.length) { patch(el, `<p class="muted">${r.slots.length ? (VIEWER ? 'אין ספורטאים מהפלגיה בראונד הזה.' : 'אין ספורטאים שלי בראונד הזה.') : 'סדר העלייה עוד לא התקבל.'}</p>`); return; }
+  patch(el, (VIEWER ? '<p class="muted small viewer-hint">מודגשים: הספורטאים של רועי פלגי</p>' : overlapHtml(r, t)) + list.map(m => {
     const s = r.slots[m.k];
     const st = athleteStatus(r, m.k, t, off(r.id));
     const notes = store.notes(n => n.round === r.id && n.k === m.k);
@@ -222,29 +252,44 @@ function renderMine(r) {
       <header><h3>${esc(m.short)}</h3><span class="muted small">${esc(s.name)} · ${esc(m.cat)}</span></header>
       <div class="ath-status">${big}</div>
       <dl class="ath-meta"><div><dt>סדר</dt><dd>#${s.order}</dd></div><div><dt>גב</dt><dd>${s.bib}</dd></div>
-        <div><dt>עלייה</dt><dd>${fmtClock(st.startMs)}</dd></div><div><dt>מעבר לנורמן</dt><dd>${fmtHM(s.transfer ? new Date(`${r.date}T${s.transfer.padStart(8, '0')}`).getTime() + off(r.id) : st.startMs - 80 * 60000)}</dd></div></dl>
+        <div><dt>עלייה</dt><dd>${fmtClock(st.startMs)}</dd></div><div><dt>מעבר לנורמן</dt><dd>${fmtHM(s.transfer ? zonedMs(`${r.date}T${s.transfer.padStart(8, '0')}`) + off(r.id) : st.startMs - 80 * 60000)}</dd></div></dl>
       ${notes.length ? `<p class="last-note">📝 ${esc(notes[notes.length - 1].text)}${notes.length > 1 ? ` <span class="muted">(+${notes.length - 1})</span>` : ''}</p>` : ''}
       ${appeals.length ? `<p class="last-note appeal-tag">⚑ ${appeals.length} ערעור${appeals.length > 1 ? 'ים' : ''}</p>` : ''}
-      <div class="ath-actions"><button type="button" class="btn btn-sm btn-ghost" data-note="${m.k}">הערה</button>
-        <button type="button" class="btn btn-sm btn-appeal" data-appeal="${m.k}">ערעור</button></div>
+      <div class="ath-actions"><button type="button" class="btn btn-sm btn-ghost" data-note="${m.k}" data-nr="${r.id}">הערה</button>
+        <button type="button" class="btn btn-sm btn-appeal" data-appeal="${m.k}" data-nr="${r.id}">ערעור</button></div>
     </article>`;
   }).join(''));
 }
 
 function renderAll(r) {
-  const t = now(); const mk = mineK(r.id);
+  const t = now(); const mk = mineK(r.id); const base = new Set((DATA.mine[r.id] || []).map(m => m.k));
   if (!r.slots.length) { patch($('#view-all'), '<p class="muted">סדר העלייה עוד לא התקבל.</p>'); return; }
-  patch($('#view-all'), `<p class="muted small hint">סנכרון לפי מי שמטפס: לחץ "מתחיל עכשיו" ליד המתחרה שעולה עכשיו לבולדר 1. ערעור אפשר על כל מתחרה.</p><div class="full-wrap"><table class="full"><thead><tr><th>סדר</th><th class="c-bib">גב</th><th>שם</th><th>עלייה</th><th>מצב</th><th></th></tr></thead><tbody>${
+  const live = stateAt(r, t, off(r.id)).phase === 'live';
+  let nextDone = !live;
+  // 3.0.0: band on whoever is on a boulder / resting between boulders now + a "הבא בתור" line before the first one waiting;
+  // circle next to the name adds / removes a not-mine athlete for this round (Hub athletes have none)
+  patch($('#view-all'), `<p class="muted small hint">סנכרון לפי מי שמטפס: לחץ "מתחיל עכשיו" ליד המתחרה שעולה עכשיו לבולדר 1. ערעור אפשר על כל מתחרה.${VIEWER ? '' : ' ○ ליד שם = הוספה לספורטאים שלי בסבב הזה.'}</p><div class="full-wrap"><table class="full"><thead><tr><th>סדר</th><th class="c-bib">גב</th><th>שם</th><th>עלייה</th><th>מצב</th><th></th></tr></thead><tbody>${
     r.slots.map((s, k) => {
-      if (!s) return `<tr class="empty-row"><td colspan="3">סבב ריק</td><td>${fmtClock(slotStartMs(r, k, off(r.id)))}</td><td></td><td></td></tr>`;
-      const st = athleteStatus(r, k, t, off(r.id));
+      const st = s ? athleteStatus(r, k, t, off(r.id)) : null;
+      let pre = '';
+      if (!nextDone && (st ? st.kind === 'waiting' : slotStartMs(r, k, off(r.id)) > t)) { nextDone = true; pre = '<tr class="next-line"><td colspan="6"><span>הבא בתור</span></td></tr>'; }
+      if (!s) return pre + `<tr class="empty-row"><td colspan="3">סבב ריק</td><td>${fmtClock(slotStartMs(r, k, off(r.id)))}</td><td></td><td></td></tr>`;
       const added = mk.has(k) && mineOf(r.id).find(m => m.k === k)?.added;
-      return `<tr class="${mk.has(k) ? 'mine' : ''}${added ? ' added' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</td>
-        <td>${fmtClock(st.startMs)}</td><td>${statusText(r, st)}</td>
+      const now_ = st.kind === 'boulder' || st.kind === 'rest';
+      const tg = VIEWER || base.has(k) ? '' : `<button type="button" class="mine-tg" data-mine-tg="${k}" aria-pressed="${mk.has(k)}" aria-label="${mk.has(k) ? 'הסרה מהספורטאים שלי' : 'הוספה לספורטאים שלי'} · ${esc(s.name)}"></button>`;
+      return pre + `<tr class="${mk.has(k) ? 'mine' : ''}${added ? ' added' : ''}${now_ ? ' now' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td class="c-name">${tg}${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</td>
+        <td>${fmtClock(st.startMs)}</td><td class="c-st">${statusText(r, st)}</td>
         <td class="row-actions"><button type="button" class="sync-btn" data-sync="${k}">מתחיל עכשיו</button>
           <button type="button" class="sync-btn appeal-btn" data-appeal="${k}">ערעור</button></td></tr>`;
     }).join('')}</tbody></table></div>`);
+  if (scrollAll) {
+    scrollAll = false;
+    const row = $('#view-all tr.now') || $('#view-all tr.next-line');
+    const rc = row?.getBoundingClientRect();
+    if (rc && (rc.top < 0 || rc.bottom > innerHeight)) scrollTo({ top: scrollY + rc.top - innerHeight / 2, behavior: 'smooth' });
+  }
 }
+let scrollAll = false; // once per opening of the full list (Roei: then it must not move under the finger)
 
 // ---- results (2.7.0): my athletes' cards + boulder stats + full table (design picked by Roei 2026-10-13) ----
 // a finished round with results opens on its results; otherwise leave the results tab
@@ -310,7 +355,7 @@ function renderResults(r) {
   const q = analyze(full, full[0]).quota;
   const mine = ok.filter(x => whoByBib[x.bib]);
   const cards = mine.length ? `<div class="focus">${mine.map(x => resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
-    : `<p class="muted">${VIEWER ? 'אין ספורטאים מהנבחרת של רועי בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
+    : `<p class="muted">${VIEWER ? 'אין ספורטאים מהפלגיה בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
     return `<div class="bs-row"><b>בולדר ${b.boulder}</b><div class="stack"><span class="t" style="width:${b.tops / b.n * 100}%"></span><span class="z" style="width:${b.zoneOnly / b.n * 100}%"></span></div>
@@ -333,7 +378,7 @@ function renderResults(r) {
       <span class="legend"><span><i class="cell t lg">T</i> טופ</span><span><i class="cell z lg">Z</i> זון בלי טופ</span><span><i class="cell n lg">—</i> בלי זון</span><span class="muted">T2 = טופ בניסיון השני</span></span></div>
     ${cards}
     <div class="card bstats"><h3>הבולדרים בסבב: כמה הגיעו לטופ ולזון</h3>${stats}</div>
-    <div class="card"><div class="tbl-head"><b>כל המתחרים</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'הנבחרת של רועי' : 'שלי'}</span></div>
+    <div class="card"><div class="tbl-head"><b>כל המתחרים</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'הפלגיה' : 'שלי'}</span></div>
       <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th>#</th><th class="n">מטפס</th><th>מס׳</th>${Array.from({ length: nB }, (_, j) => `<th>בולדר ${j + 1}</th>`).join('')}<th>T / Z</th><th>ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
     <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. ${res.final ? 'סבב יחיד — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
   </div>`);
@@ -345,21 +390,58 @@ function appealText(a) {
     `בולדר: ${a.boulder}`, `שעה: ${a.time}`, `תיאור: ${a.text}`].join('\n');
 }
 
-function renderLog() {
-  const notes = store.notes().map(n => ({ ...n, type: 'note' }));
-  const appeals = store.appeals().map(a => ({ ...a, type: 'appeal' }));
-  const items = [...notes, ...appeals].sort((a, b) => b.at - a.at);
-  const from = i => (store.deviceCount > 1 && store.deviceName(i.dev) ? ` · ${esc(store.deviceName(i.dev))}` : '');
-  patch($('#view-log'), `<div class="log-actions"><button type="button" class="btn btn-sm btn-ghost" id="export-btn">ייצוא קובץ</button>
-    <button type="button" class="btn btn-sm btn-ghost" id="copy-all-btn">העתק הכל</button><span class="muted small log-sync">${esc(syncLabel())}</span></div>` + (items.length ? items.map(i => {
-    const r = round(i.round);
-    if (i.type === 'appeal') return `<article class="log card appeal"><header><b>⚑ ערעור · ${esc(i.short)}</b><span class="muted small">${esc(r?.title)} · ${esc(i.time)}${from(i)}</span></header>
-      <pre>${esc(appealText(i))}</pre><div class="ath-actions"><button type="button" class="btn btn-sm btn-ghost" data-copy="${i.id}">העתק</button>
+// ---- notes & appeals (3.1.0): this round or all rounds, filter by name, edit notes, appeal status ----
+let logAll = false, logName = null, editId = null;
+const APPEAL_ST = [['pending', 'ממתין'], ['ok', 'התקבל ✓'], ['no', 'נדחה ✗']];
+function logItems() {
+  const inScope = i => logAll || i.round === current;
+  const all = [...store.notes(inScope).map(n => ({ ...n, type: 'note' })), ...store.appeals(inScope).map(a => ({ ...a, type: 'appeal' }))];
+  return { all, shown: (logName ? all.filter(i => i.short === logName) : all).sort((a, b) => b.at - a.at) };
+}
+const noteText = n => `${n.short} · ${round(n.round)?.title} · ${fmtClock(n.at)} · ${n.ctx}${n.edited ? ` · נערך ${fmtHM(n.edited)}` : ''}\n${n.text}`;
+const appealFull = a => appealText(a) + (a.status && a.status !== 'pending' ? `\nסטטוס: ${APPEAL_ST.find(x => x[0] === a.status)[1]}${a.outcome ? ' · ' + a.outcome : ''}` : '');
+function logCard(i) {
+  const r = round(i.round);
+  const from = store.deviceCount > 1 && store.deviceName(i.dev) ? ` · ${esc(store.deviceName(i.dev))}` : '';
+  if (i.type === 'appeal') {
+    const st = i.status || 'pending';
+    return `<article class="log card appeal st-${st}"><header><b>⚑ ערעור · ${esc(i.short)}</b><span class="muted small">${esc(r?.title)} · ${esc(i.time)}${from}</span></header>
+      <pre>${esc(appealText(i))}</pre>
+      <div class="seg ap-st" role="group" aria-label="סטטוס הערעור">${APPEAL_ST.map(([k, l]) => `<button type="button" data-ap-st="${k}" data-ap="${i.id}" aria-pressed="${st === k}">${l}</button>`).join('')}</div>
+      ${st !== 'pending' ? `<input type="text" class="ap-out" id="out-${i.id}" data-ap-out="${i.id}" maxlength="120" placeholder="מה הוחלט? (רשות) למשל: קיבלו טופ, עלה למקום 12" value="${esc(i.outcome || '')}">` : ''}
+      <div class="ath-actions"><button type="button" class="btn btn-sm btn-ghost" data-copy="${i.id}">העתק</button>
       ${navigator.share ? `<button type="button" class="btn btn-sm btn-ghost" data-share="${i.id}">שתף</button>` : ''}
-      <button type="button" class="link" data-del-appeal="${i.id}">מחיקה</button></div></article>`;
-    return `<article class="log card"><header><b>📝 ${esc(i.short)}</b><span class="muted small">${esc(r?.title)} · ${fmtClock(i.at)} · ${esc(i.ctx)}${from(i)}</span></header>
-      <p>${esc(i.text)}</p><button type="button" class="link" data-del-note="${i.id}">מחיקה</button></article>`;
-  }).join('') : '<p class="muted">עוד אין הערות או ערעורים.</p>'));
+      <button type="button" class="btn btn-sm btn-ghost btn-del" data-del-appeal="${i.id}">מחיקה</button></div></article>`;
+  }
+  const editing = editId === i.id;
+  return `<article class="log card"><header><b>📝 ${esc(i.short)}</b><span class="muted small">${esc(r?.title)} · ${fmtClock(i.at)} · ${esc(i.ctx)}${i.edited ? ` · נערך ${fmtHM(i.edited)}` : ''}${from}</span></header>
+    ${editing ? `<textarea class="note-edit" id="edit-${i.id}" rows="3" aria-label="עריכת ההערה">${esc(i.text)}</textarea>
+      <div class="ath-actions"><button type="button" class="btn btn-sm btn-primary" data-edit-save="${i.id}">שמירה</button><button type="button" class="btn btn-sm btn-ghost" data-edit-cancel>ביטול</button></div>`
+    : `<p>${esc(i.text)}</p><div class="ath-actions"><button type="button" class="btn btn-sm btn-ghost" data-edit="${i.id}">עריכה</button><button type="button" class="btn btn-sm btn-ghost btn-del" data-del-note="${i.id}">מחיקה</button></div>`}</article>`;
+}
+function renderLog() {
+  const { all, shown } = logItems();
+  const names = [...new Set(all.map(i => i.short))].sort((a, b) => a.localeCompare(b, 'he'));
+  if (logName && !names.includes(logName)) logName = null;
+  const cnt = n => all.filter(i => i.short === n).length;
+  let body;
+  if (!shown.length) body = `<p class="muted">${logAll ? 'עוד אין הערות או ערעורים.' : 'אין עדיין הערות או ערעורים בסבב הזה.'}</p>`;
+  else if (!logAll) body = shown.map(logCard).join('');
+  else { // all rounds: grouped by round, the round with the newest item first
+    const groups = [];
+    for (const i of shown) { let g = groups.find(x => x.id === i.round); if (!g) groups.push(g = { id: i.round, items: [] }); g.items.push(i); }
+    body = groups.map(g => { const r = round(g.id); return `<h3 class="log-round">${r ? `${esc(evOf(r).title)} · ${dayLabel(r.date)} · ${esc(r.title)}` : 'סבב'}</h3>${g.items.map(logCard).join('')}`; }).join('');
+  }
+  const pend = shown.filter(i => i.type === 'appeal' && (i.status || 'pending') === 'pending').length;
+  // keep what the coach is typing (the list re-renders on sync / every second)
+  const ae = document.activeElement, keep = ae?.closest?.('#view-log') && ae.id ? { id: ae.id, v: ae.value, a: ae.selectionStart, b: ae.selectionEnd } : null;
+  patch($('#view-log'), `<div class="log-filters">
+      <div class="seg" role="group" aria-label="איזה סבבים"><button type="button" data-log-all="0" aria-pressed="${!logAll}">הסבב הזה</button><button type="button" data-log-all="1" aria-pressed="${logAll}">כל הסבבים</button></div>
+      ${names.length > 1 ? `<div class="seg log-names" role="group" aria-label="סינון לפי שם"><button type="button" data-log-name="" aria-pressed="${!logName}">הכל</button>${names.map(n => `<button type="button" data-log-name="${esc(n)}" aria-pressed="${logName === n}">${esc(n)} <span class="n">${cnt(n)}</span></button>`).join('')}</div>` : ''}
+    </div>
+    <div class="log-actions"><button type="button" class="btn btn-sm btn-ghost" id="export-btn">ייצוא קובץ</button>
+    <button type="button" class="btn btn-sm btn-ghost" id="copy-all-btn">העתק הכל</button>${pend ? `<span class="pend-count">⚑ ${pend} ממתין${pend > 1 ? 'ים' : ''} להחלטה</span>` : ''}<span class="muted small log-sync">${esc(syncLabel())}</span></div>` + body);
+  if (keep) { const el = document.getElementById(keep.id); if (el && el !== document.activeElement) { el.value = keep.v; el.focus(); try { el.setSelectionRange(keep.a, keep.b); } catch { /* ignore */ } } }
 }
 
 // ---- home: all rounds by event / day, tap to open ----
@@ -441,9 +523,9 @@ function renderHomeList(seg) {
     const ovl = ev.rounds.reduce((n, r) => n + (mineOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
     return `<button type="button" class="ev-row card ph-${ph}" data-ev="${i}">
       <span class="ev-main"><b>${esc(evName(ev.event))}</b><span class="muted small">${meta}</span></span>
-      <span class="ev-side">${badge}<span class="small">${!ev.rounds.length || !people.size ? '' : `${people.size} ${VIEWER ? 'מהנבחרת' : 'שלי'}`}${ovl ? `${people.size ? ' · ' : ''}<span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>`;
+      <span class="ev-side">${badge}<span class="small">${!ev.rounds.length || !people.size ? '' : `${people.size} ${VIEWER ? 'מהפלגיה' : 'שלי'}`}${ovl ? `${people.size ? ' · ' : ''}<span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>`;
   }).join('');
-  patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}</div><div class="ev-list">${rows}</div>`);
+  patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}${VIEWER ? '' : '<button type="button" class="btn btn-sm btn-ghost clock-btn" id="clock-btn">⏱ שעון סימולציה</button>'}</div><div class="ev-list">${rows}</div>`);
 }
 
 // isolation open/close (+ U17 route preview) from the federation info sheet (2.4.0); close time stressed = the deadline
@@ -467,12 +549,12 @@ function renderHomeDetail(seg, fromList) {
     const live = ph === 'live' ? (() => { const s = stateAt(r, t, off(r.id)); const b1 = s.boulders[0]; return `<p class="h-live">סבב ${s.n + 1} מתוך ${windowCount(r)} · בולדר 1: ${b1 ? `#${b1.order} ${esc(b1.name)}` : '—'}</p>`; })() : '';
     return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(r.title)}</h3>${rk ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
-      <p class="muted small">${fmtHM(roundStart(r) + off(r.id))}${r.slots.length ? `–${fmtHM(roundEndMs(r))}` : ''} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec * 1000)}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
+      <p class="muted small">${fmtHM(roundStart(r) + off(r.id))}${r.slots.length ? `–${fmtHM(roundEndMs(r))}` : ''} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec0 * 1000)}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
       ${isoRow(r)}${live}${mine ? `<ul class="h-mine">${mine}</ul>` : `<p class="muted small">${r.slots.length ? 'אין ספורטאים שלי' : ''}</p>`}
       ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} סבבים של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
-  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + ' · ' : ''}${rangeLabel(cur.dates)}</span></h2>${seg}</div>${chips}` +
+  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + ' · ' : ''}${rangeLabel(cur.dates)}</span></h2>${seg}${VIEWER ? '' : '<button type="button" class="btn btn-sm btn-ghost clock-btn" id="clock-btn">⏱ שעון סימולציה</button>'}</div>${chips}` +
     (rounds.length ? '' : `<div class="card h-empty"><p><b>${evBadge(cur, evs)}</b></p><p class="muted">הראונדים וסדרי העלייה יתווספו כשיתפרסמו.${ev.place ? '' : ' המיקום עוד לא פורסם.'}</p></div>`) +
     days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
 }
@@ -487,6 +569,7 @@ function showScreen(sc) {
 }
 
 function render() {
+  applyDelays();
   if (screen === 'home') {
     $('#clock').textContent = fmtClock(now());
     $('#event-title').textContent = evName(homeEvents()[homeOpenEvent ?? focusEventIdx()].event);
@@ -503,8 +586,8 @@ function render() {
   const s = stateAt(r, now(), off(r.id));
   $('#clock').textContent = fmtClock(now());
   $('#event-title').textContent = evName(evOf(r));
-  $('#round-sub').textContent = `${dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec * 1000)}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
-  renderTabs(); renderBoard(r, s); renderTimer(r, s); renderNext(r, s);
+  $('#round-sub').textContent = `${dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec0 * 1000)}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
+  renderTabs(); renderBoard(r, s); renderTimer(r, s); renderNext(r, s); renderPar(r);
   $('[data-view="results"]').hidden = !resultsOf(r.id);
   if (view === 'results' && !resultsOf(r.id)) { setView('mine'); return; }
   if (view === 'results') renderResults(r);
@@ -514,6 +597,117 @@ function render() {
   const t = now();
   document.querySelectorAll('[data-until]').forEach(el => { el.textContent = fmtDur(Number(el.dataset.until) - t); });
   checkAlerts();
+}
+
+// ---- 3.3.0 training simulation clock (boulder only): windows of 4/5 min (or custom), World Climbing signals ----
+const sc = { len: 300, n: 10, t0: 0, paused: 0, timer: null, last: null };
+function beep(freq, dur, at = 0) {
+  ensureAudio(); if (!audio) return;
+  const t0 = audio.currentTime + at, o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'square'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.35, t0 + 0.01); g.gain.setValueAtTime(0.35, t0 + dur - 0.03); g.gain.linearRampToValueAtTime(0, t0 + dur);
+  o.connect(g).connect(audio.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+}
+const LONG = () => beep(880, 1.1), SHORT = () => beep(1320, 0.18), MIN = () => beep(1100, 0.45);
+function openClock() {
+  $('#sc-setup').hidden = false; $('#sc-run').hidden = true;
+  $('#clock-dlg').showModal();
+}
+function scState(t = performance.now()) {
+  const el = (sc.paused || t) - sc.t0; // ms since the first window started (negative = countdown)
+  if (el < 0) return { phase: 'count', left: -el };
+  const w = Math.floor(el / (sc.len * 1000));
+  if (w >= sc.n) return { phase: 'done' };
+  return { phase: 'run', w, left: (w + 1) * sc.len * 1000 - el };
+}
+function scTick() {
+  const s = scState();
+  const secs = s.left != null ? Math.ceil(s.left / 1000) : 0;
+  const key = s.phase === 'done' ? 'done' : `${s.phase}:${s.w ?? -1}:${secs}`;
+  if (key !== sc.last && !sc.paused) { // signals, once per second change
+    if (s.phase === 'run' && secs === sc.len) LONG();               // window starts
+    else if (s.phase === 'run' && secs === 60 && sc.len > 60) MIN(); // one minute left
+    else if ((s.phase === 'run' || s.phase === 'count') && secs >= 1 && secs <= 5) SHORT(); // last 5 seconds
+    else if (s.phase === 'done' && sc.last !== 'done') LONG();       // end of the last window
+    sc.last = key;
+  }
+  $('#sc-time').textContent = s.phase === 'done' ? '0:00' : fmtDur(s.left);
+  $('#sc-time').classList.toggle('warn', s.phase === 'run' && s.left <= 60000);
+  $('#sc-round').textContent = s.phase === 'count' ? 'מתחילים בעוד' : s.phase === 'done' ? 'הסימולציה הסתיימה' : `סבב ${s.w + 1} מתוך ${sc.n}`;
+  if (s.phase === 'done') { clearInterval(sc.timer); sc.timer = null; $('#sc-pause').hidden = true; }
+}
+function startClock() {
+  const pick = document.querySelector('[data-sc-len][aria-pressed="true"]').dataset.scLen;
+  if (pick === 'custom') { const [m, sec = '0'] = $('#sc-len').value.split(':'); sc.len = Math.max(30, (+m || 0) * 60 + (+sec || 0)); }
+  else sc.len = Number(pick);
+  sc.n = Math.min(60, Math.max(1, Number($('#sc-n').value) || 10));
+  ensureAudio(); keepAwake();
+  sc.t0 = performance.now() + 10000; sc.paused = 0; sc.last = null;
+  $('#sc-setup').hidden = true; $('#sc-run').hidden = false; $('#sc-pause').hidden = false; $('#sc-pause').textContent = 'עצירה';
+  clearInterval(sc.timer); sc.timer = setInterval(scTick, 100); scTick();
+}
+function pauseClock() {
+  if (sc.paused) { sc.t0 += performance.now() - sc.paused; sc.paused = 0; $('#sc-pause').textContent = 'עצירה'; }
+  else { sc.paused = performance.now(); $('#sc-pause').textContent = 'המשך'; }
+}
+function stopClock() { clearInterval(sc.timer); sc.timer = null; $('#clock-dlg').close(); }
+
+// ---- 3.2.0: rounds at the same time + swipe between rounds ----
+// another round whose climbing overlaps this one, both with my athletes (happens sometimes in the schedule — Roei)
+function parRound(r) {
+  if (!r.slots.length || !mineOf(r.id).length) return null;
+  const a0 = roundStart(r) + off(r.id), a1 = roundEndMs(r);
+  return DATA.rounds.find(x => x.id !== r.id && x.slots.length && x.date === r.date && mineOf(x.id).length
+    && roundStart(x) + off(x.id) < a1 && roundEndMs(x) > a0) || null;
+}
+function renderPar(r) {
+  const par = parRound(r), el = $('#par');
+  el.hidden = !par; if (!par) return;
+  const s = stateAt(par, now(), off(par.id));
+  const head = s.phase === 'live' ? `סבב ${s.n + 1} · נותר <b class="par-t${s.slotLeftMs <= 60000 ? ' warn' : ''}">${fmtDur(s.slotLeftMs)}</b>`
+    : s.phase === 'before' ? `מתחיל בעוד <b class="par-t">${fmtDur(roundStart(par) + off(par.id) - now())}</b>` : 'הסתיים';
+  if (!el.querySelector('.par-board')) el.innerHTML = '<div class="par-top"></div><div class="par-board board"></div>';
+  patch(el.querySelector('.par-top'), `<b>במקביל: ${esc(par.title)}</b><span class="par-clock">${head}</span><button type="button" class="btn btn-sm btn-ghost" data-go-round="${par.id}">לעבור לסבב</button>`);
+  renderBoard(par, s, el.querySelector('.par-board'));
+}
+// the rounds a swipe steps through: the open competition, by start time; by default only rounds with my athletes
+function swipeSeq() {
+  const r = round(current);
+  return roundsOf(evOf(r)).filter(x => x.id === current || !store.settings.swipeMine || mineOf(x.id).length)
+    .sort((a, b) => roundStart(a) - roundStart(b));
+}
+function goRound(id) {
+  lastTabTap = Date.now(); current = id;
+  for (const x of ['mine', 'all', 'results', 'log']) $('#view-' + x)._html = null;
+  $('#par').innerHTML = ''; editId = null;
+  openRoundView(); render();
+}
+function swipeToast(seq, i) {
+  document.querySelectorAll('.toast.swipe').forEach(x => x.remove());
+  const el = document.createElement('div'); el.className = 'toast swipe';
+  el.innerHTML = `<b>${esc(seq[i].title)}</b> <span class="muted-on-dark">${dayLabel(seq[i].date)}</span><span class="dots" aria-hidden="true">${seq.map((_, j) => `<i class="${j === i ? 'on' : ''}"></i>`).join('')}</span>`;
+  document.body.append(el); setTimeout(() => el.remove(), 1600);
+}
+// finger moving left → right = next round (Roei 2026-10-14). Only a long, clearly sideways swipe; never on areas that
+// scroll sideways (full list, results, chips, tabs), in a dialog or a text field, or from the screen edge (Safari back).
+function setupSwipe() {
+  let st = null;
+  addEventListener('touchstart', e => {
+    st = null;
+    if (screen !== 'round' || e.touches.length !== 1 || document.querySelector('dialog[open]')) return;
+    const t = e.touches[0], tg = e.target;
+    if (t.clientX < 28 || t.clientX > innerWidth - 28) return;
+    if (tg.closest('.full-wrap, .tbl-wrap, .seg, #round-tabs, input, textarea, select')) return;
+    st = { x: t.clientX, y: t.clientY, at: Date.now() };
+  }, { passive: true });
+  addEventListener('touchend', e => {
+    if (!st) return;
+    const t = e.changedTouches[0], dx = t.clientX - st.x, dy = t.clientY - st.y, ms = Date.now() - st.at; st = null;
+    if (Math.abs(dx) < 90 || Math.abs(dx) < 2.2 * Math.abs(dy) || ms > 700) return;
+    const seq = swipeSeq(), i = seq.findIndex(x => x.id === current), j = i + (dx > 0 ? 1 : -1);
+    if (i < 0 || j < 0 || j >= seq.length) { showToast(dx > 0 ? 'זה הסבב האחרון' : 'זה הסבב הראשון'); return; }
+    goRound(seq[j].id); swipeToast(seq, j);
+  }, { passive: true });
 }
 
 // ---- alerts: one window before my athlete starts, and 1 minute before ----
@@ -527,7 +721,7 @@ function chime(force = false) {
   const snd = store.settings.sound;
   if (!audio || (!snd.on && !force)) return;
   if (audio.state !== 'running') audio.resume().catch(() => {});
-  const t0 = audio.currentTime; const tone = TONES[snd.tone] || TONES.chime; const peak = 0.6 * snd.vol;
+  const t0 = audio.currentTime; const tone = TONES[snd.tone] || TONES.chime; const peak = 0.5; // loudness = the device volume (3.0.0)
   tone.notes.forEach(([f, d, len]) => {
     const o = audio.createOscillator(), g = audio.createGain();
     o.frequency.value = f; o.type = tone.type;
@@ -556,12 +750,13 @@ function showAlert(text, cls, group = '') {
 // Every alert for my athletes in all rounds (same list drives the in-app banner and the lock-screen push).
 const ALERT_LBL = { w2: '2 סבבים', w1: 'סבב אחד', m2: '2 דקות', m1: 'דקה', s10: '10 שניות' };
 function alertEntries() {
+  applyDelays();
   const out = [];
   for (const r of DATA.rounds) {
     for (const m of mineOf(r.id)) {
       const startMs = slotStartMs(r, m.k, off(r.id));
       const s = r.slots[m.k];
-      const transferMs = s.transfer ? new Date(`${r.date}T${s.transfer.padStart(8, '0')}`).getTime() : null;
+      const transferMs = s.transfer ? zonedMs(`${r.date}T${s.transfer.padStart(8, '0')}`) : null;
       // Each alert stays due until the next chosen one (late alerts still useful: app was backgrounded /
       // clock recalibrated); a recalibration by ≥ half a window re-arms it at the new time.
       for (const a of alertPlan(r, m.k, off(r.id), store.settings.alerts, transferMs)) {
@@ -672,7 +867,7 @@ async function renderPushState() {
     unsupported: 'המכשיר לא תומך בהתראות (צריך iPadOS 16.4 ומעלה).',
     denied: 'ההתראות חסומות: הגדרות האייפד ← התראות ← פורטל התחרויות ← אפשר.',
   }[env];
-  if (msg) { box.textContent = msg; if (env === 'ios-install') box.insertAdjacentHTML('beforeend', '<button type="button" class="link-btn" data-install-open>איך מוסיפים?</button>'); return; }
+  if (msg) { box.textContent = msg; if (env === 'ios-install') box.insertAdjacentHTML('beforeend', '<button type="button" class="btn btn-sm btn-ghost" data-install-open>איך מוסיפים?</button>'); return; }
   if (!on) { box.textContent = 'כבוי · ההתראות מופיעות רק כשהאפליקציה פתוחה.'; return; }
   box.textContent = pushSent ? 'פעיל ✓ · בודק בשרת…' : 'פעיל · ממתין לחיבור לשרת…';
   try {
@@ -693,8 +888,8 @@ function currentCtx(r, k) {
   return statusText(r, athleteStatus(r, k, now(), off(r.id)));
 }
 
-function openNote(k) {
-  const r = round(current); const s = r.slots[k];
+function openNote(k, rid = current) {
+  const r = round(rid); const s = r.slots[k];
   $('#note-title').textContent = `הערה · ${shortOf(r.id, k)}`;
   $('#note-ctx').textContent = `${r.title} · ${fmtClock(now())} · ${currentCtx(r, k)}`;
   $('#note-text').value = '';
@@ -707,8 +902,8 @@ function openNote(k) {
   dlg.showModal();
 }
 
-function openAppeal(k) {
-  const r = round(current); const s = r.slots[k];
+function openAppeal(k, rid = current) {
+  const r = round(rid); const s = r.slots[k];
   const st = athleteStatus(r, k, now(), off(r.id));
   const def = st.kind === 'boulder' ? st.boulder : st.kind === 'rest' ? st.from : st.kind === 'waiting' ? 1 : r.boulders;
   const who = shortOf(r.id, k) || s.name;
@@ -727,7 +922,7 @@ function openAppeal(k) {
 }
 
 function setView(v) {
-  view = v;
+  view = v; if (v === 'all') scrollAll = true;
   document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
   for (const x of ['mine', 'all', 'log', 'results']) { const el = $('#view-' + x); el.hidden = x !== v; el._html = null; }
   render();
@@ -738,6 +933,7 @@ function adjust(kind) {
   if (store.settings.lock) { showToast('הכיול נעול · אפשר לפתוח בהגדרות או ב"פתח נעילה"'); return; }
   const step = store.settings.step * 1000;
   if (kind === '+step') o += step; else if (kind === '-step') o -= step;
+  else if (kind === '+1') o += 1000; else if (kind === '-1') o -= 1000;
   else if (kind === '+slot') o += S; else if (kind === '-slot') o -= S;
   else if (kind === 'now') {
     const t = now(); const o2 = syncWindowNow(r, t, o); const d = o2 - o;
@@ -788,8 +984,7 @@ function openManual() {
     const v = $('#manual-time').value;
     if (dlg.returnValue !== 'save' || !v) return;
     const [h, m, sec = '0'] = v.split(':');
-    const d = new Date(roundStart(r)); d.setHours(+h, +m, +sec, 0);
-    store.setOffset(r.id, syncManualStart(r, d.getTime()));
+    store.setOffset(r.id, syncManualStart(r, zonedMs(`${r.start.slice(0, 10)}T${pad(+h)}:${pad(+m)}:${pad(+sec)}`)));
     render();
   };
   dlg.showModal();
@@ -807,8 +1002,8 @@ function openSim() {
     const firstMine = mineOf(r.id)[0];
     const at = from === 'mine' && firstMine ? T0 + (firstMine.k - 1) * S - 5000
       : from === 'mid' ? T0 + span / 2 : from === 'end' ? T0 + span - 15 * 60000 : T0 - 120000;
-    const d = new Date(at);
-    const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${fmtClock(at)}`;
+    const d = zoneParts(at);
+    const iso = `${d.y}-${pad(d.mo)}-${pad(d.d)}T${fmtClock(at)}`;
     location.href = `./?at=${iso}&speed=${$('#sim-speed').value}&round=${r.id}`;
   };
   dlg.showModal();
@@ -1012,8 +1207,8 @@ function applySettings() {
   const theme = isDark ? dark : 'light';
   document.documentElement.dataset.theme = theme;
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_BG[theme]);
-  $('#adj-minus').textContent = `מקדים ${st.step}ש׳`;
-  $('#adj-plus').textContent = `מאחר ${st.step}ש׳`;
+  $('#adj-minus').innerHTML = `<bdi dir="ltr">−${st.step}</bdi>`; $('#adj-minus').setAttribute('aria-label', `מקדים ${st.step} שניות`);
+  $('#adj-plus').innerHTML = `<bdi dir="ltr">+${st.step}</bdi>`; $('#adj-plus').setAttribute('aria-label', `מאחר ${st.step} שניות`);
   document.querySelectorAll('.cbtn').forEach(b => { b.disabled = st.lock; });
   // segmented bar (Roei chose option B, 2026-10-12): locked = highlighted segment
   const lb = $('#lock-btn');
@@ -1146,9 +1341,11 @@ function setupPullRefresh() {
   });
 }
 
-function exportFile() {
+// list = the notes/appeals on screen (log filter, 3.1.0); none = everything (settings)
+function exportFile(list) {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([store.exportAll()], { type: 'application/json' }));
+  const json = list ? JSON.stringify({ device: store.devName, notes: list.filter(i => i.type === 'note'), appeals: list.filter(i => i.type === 'appeal') }, null, 2) : store.exportAll();
+  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
   a.download = `comp-notes-${new Date(now()).toISOString().slice(0, 10)}.json`; a.click();
 }
 
@@ -1184,13 +1381,26 @@ function start() {
     else if (d.view) setView(d.view);
     else if (d.rescat) { resCat[current] = d.rescat; $('#view-results')._html = null; render(); }
     else if (d.sync) syncFromSlot(Number(d.sync));
-    else if (d.note) openNote(Number(d.note));
-    else if (d.appeal) openAppeal(Number(d.appeal));
-    else if (d.copy) copy(appealText(store.appeals(a => a.id === d.copy)[0]));
-    else if (d.share) navigator.share({ text: appealText(store.appeals(a => a.id === d.share)[0]) }).catch(() => {});
-    else if (d.delNote) { store.deleteNote(d.delNote); render(); }
-    else if (d.delAppeal) { store.deleteAppeal(d.delAppeal); render(); }
-    else if (b.id === 'export-btn' || b.id === 'export-btn2') exportFile();
+    else if (d.note) openNote(Number(d.note), d.nr);
+    else if (d.appeal) openAppeal(Number(d.appeal), d.nr);
+    else if (d.goRound) goRound(d.goRound);
+    else if (b.id === 'clock-btn') openClock();
+    else if (d.scLen) { document.querySelectorAll('[data-sc-len]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $('#sc-custom').hidden = d.scLen !== 'custom'; }
+    else if (b.id === 'sc-start') startClock();
+    else if (b.id === 'sc-pause') pauseClock();
+    else if (b.id === 'sc-stop' || b.id === 'sc-close') stopClock();
+    else if (d.copy) copy(appealFull(store.appeals(a => a.id === d.copy)[0]));
+    else if (d.share) navigator.share({ text: appealFull(store.appeals(a => a.id === d.share)[0]) }).catch(() => {});
+    else if (d.delNote) askConfirm('מחיקת הערה', 'ההערה תימחק מכל המכשירים.', 'מחיקה', () => { store.deleteNote(d.delNote); render(); });
+    else if (d.delAppeal) askConfirm('מחיקת ערעור', 'הערעור יימחק מכל המכשירים.', 'מחיקה', () => { store.deleteAppeal(d.delAppeal); render(); });
+    else if (d.logAll != null) { logAll = d.logAll === '1'; logName = null; editId = null; render(); }
+    else if (d.logName != null) { logName = d.logName || null; render(); }
+    else if (d.edit) { editId = d.edit; render(); const ta = document.getElementById('edit-' + d.edit); ta?.focus(); ta?.setSelectionRange(ta.value.length, ta.value.length); }
+    else if (d.editCancel != null) { editId = null; render(); }
+    else if (d.editSave) { const v = document.getElementById('edit-' + d.editSave)?.value.trim(); if (v) store.editNote(d.editSave, v, now()); editId = null; render(); }
+    else if (d.apSt) { store.setAppeal(d.ap, { status: d.apSt }); render(); }
+    else if (b.id === 'export-btn') exportFile(logItems().shown);
+    else if (b.id === 'export-btn2') exportFile();
     else if (b.id === 'settings-btn') openSettings();
     else if (b.id === 'test-sound') { ensureAudio(); chime(true); }
     else if (b.id === 'lock-btn') { store.setSetting('lock', !store.settings.lock); applySettings(); }
@@ -1206,11 +1416,14 @@ function start() {
     else if (b.id === 'push-toggle') { if (store.push.on && pushEnv() === 'ready') pushDisable(); else pushEnable(); }
     else if (b.id === 'push-test') pushCall('/test', {}).then(r => showToast(r.ok ? 'נשלחה התראת ניסיון · נעל את האייפד ובדוק' : 'השליחה נכשלה')).catch(() => showToast('אין חיבור לשרת ההתראות'));
     else if (b.id === 'reset-all') askConfirm('איפוס כיול', 'הכיול יתאפס בכל הראונדים ובכל המכשירים, והשעון יחזור לזמנים שבסדר העלייה.', 'איפוס', () => { store.resetOffsets(); render(); showToast('הכיול אופס'); });
-    else if (b.id === 'clear-notes') askConfirm('מחיקת הערות וערעורים', 'כל ההערות והערעורים יימחקו מכל המכשירים. כדאי לייצא קודם.', 'מחיקה', () => { store.clearNotesAppeals(); render(); showToast('נמחק'); });
-    else if (b.id === 'logout-btn') askConfirm('יציאה', 'בכניסה הבאה תצטרך להזין את הקוד שוב. ההערות והכיולים נשארים באייפד.', 'יציאה', () => { store.logout(); location.href = './'; }); else if (b.id === 'copy-all-btn') {
-      copy([...store.appeals().map(appealText), ...store.notes().map(n => `${n.short} · ${round(n.round)?.title} · ${fmtClock(n.at)} · ${n.ctx}\n${n.text}`)].join('\n\n'));
+    else if (b.id === 'logout-btn') askConfirm('יציאה', 'בכניסה הבאה תצטרך להזין את הקוד שוב. ההערות והכיולים נשארים באייפד.', 'יציאה', () => { store.logout(); location.href = './'; });
+    else if (b.id === 'copy-all-btn') copy(logItems().shown.map(i => (i.type === 'appeal' ? appealFull(i) : noteText(i))).join('\n\n')); // what is on screen (3.1.0)
+    else if (b.id === 'reset-btn') { store.setOffset(current, 0); if (store.delay(current)) store.setDelay(current, 0); render(); }
+    else if (b.id === 'delay-btn') {
+      if (store.settings.lock) showToast('הכיול נעול · אפשר לפתוח בהגדרות או ב"נעול"');
+      else { const d = (store.delay(current) + 1) % 3; store.setDelay(current, d); render(); showToast(d ? `השהיה ${d}ש׳ בכל מעבר סבב` : 'ללא השהיה'); }
     }
-    else if (b.id === 'reset-btn') { store.setOffset(current, 0); render(); }
+    else if (d.mineTg != null) { const k = Number(d.mineTg); store.toggleMine(current, k, mineK(current).has(k), false); $('#view-all')._html = null; $('#view-mine')._html = null; render(); }
     else if (b.id === 'manual-btn') openManual();
     else if (b.id === 'sim-btn') openSim();
     else if (b.id === 'start-btn') {
@@ -1233,6 +1446,7 @@ function start() {
     store.setSetting(el.dataset.set, v);
     applySettings(); renderSettingsMain(); render();
   });
+  $('#view-log').addEventListener('change', e => { const id = e.target.dataset?.apOut; if (id) { store.setAppeal(id, { outcome: e.target.value.trim() }); render(); } });
   $('#photo-file').addEventListener('change', e => { const f = e.target.files?.[0]; if (f && upTarget != null && !VIEWER) uploadPhoto(gridRound, upTarget, f); });
   $('#photo-dlg').addEventListener('click', () => $('#photo-dlg').close()); // tap anywhere closes the big photo
   $('#dev-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }); // Enter must not close the dialog
@@ -1250,6 +1464,7 @@ function start() {
   if (SIM_AT == null && VIEWER) viewPull = startViewSync(onRemote);
   else if (SIM_AT == null) startSync({ onRemote, onStatus: renderSyncState });
   if (SIM_AT == null) setupPullRefresh();
+  setupSwipe();
   if ('serviceWorker' in navigator && SIM_AT == null) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 

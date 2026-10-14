@@ -12,10 +12,11 @@ export const DEFAULT_SETTINGS = {
   lock: true,        // calibration locked by default (Roei 2026-10-12); unlock in settings or the board
   theme: 'light',    // light | dark | auto
   dark: 'plum',      // dark style like Wingate: plum | charcoal | black
+  swipeMine: true,   // swipe between rounds: only rounds with my athletes (3.2.0, Roei); off = every round of the competition
   homeView: 'list',  // home screen: list (one row per competition, default — Roei 2026-10-12) | detail
 };
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
-const blank = () => ({ offsets: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {}, push: { on: false, device: null },
+const blank = () => ({ offsets: {}, delays: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {}, push: { on: false, device: null },
   v: 0, device: null, devName: '', devices: {}, meta: {}, dirty: {}, rev: 0, lastSync: 0, photos: {} });
 
 export function defaultDeviceName(ua = navigator.userAgent || '', touch = navigator.maxTouchPoints > 1) {
@@ -63,6 +64,11 @@ function addItem(kind, x) {
   const item = { id: t + Math.random().toString(36).slice(2, 6), ...x, t, dev: state.device };
   listOf(kind).push(item); touch(kind, item.id, t);
 }
+// 3.1.0: notes can be edited, appeals get a status (+ outcome line) — a newer version of the same item (newest t wins)
+function editItem(kind, id, patch) {
+  const x = listOf(kind).find(n => n.id === id); if (!x || x.del) return;
+  Object.assign(x, patch); x.t = Math.max(Date.now(), x.t + 1); touch(kind, id, x.t);
+}
 function delItem(kind, id) {
   const x = listOf(kind).find(n => n.id === id); if (!x || x.del) return;
   x.del = 1; x.t = Math.max(Date.now(), x.t + 1); touch(kind, id, x.t);
@@ -73,12 +79,17 @@ export const store = {
   set code(v) { try { localStorage.setItem(CODE_KEY, v); } catch { /* ignore */ } },
   offset(roundId) { return state.offsets[roundId] || 0; },
   setOffset(roundId, ms) { state.offsets[roundId] = Math.round(ms); touch('offset', roundId); },
+  // extra seconds the federation clock adds at every window change (3.0.0, 0/1/2) — shared with the offset (same item)
+  delay(roundId) { return state.delays?.[roundId] || 0; },
+  setDelay(roundId, sec) { state.delays = state.delays || {}; state.delays[roundId] = sec; touch('offset', roundId); },
   notes(filter = () => true) { return live(state.notes).filter(filter); },
   addNote(n) { addItem('note', n); },
   deleteNote(id) { delItem('note', id); },
+  editNote(id, text, at = Date.now()) { editItem('note', id, { text, edited: at }); }, // at = the app clock (simulation)
   appeals(filter = () => true) { return live(state.appeals).filter(filter); },
   addAppeal(a) { addItem('appeal', a); },
   deleteAppeal(id) { delItem('appeal', id); },
+  setAppeal(id, patch) { editItem('appeal', id, patch); }, // { status: 'pending' | 'ok' | 'no', outcome }
   wasFired(key) { return !!state.fired[key]; },
   markFired(key) { state.fired[key] = Date.now(); save(); },
   get settings() {
@@ -102,11 +113,14 @@ export const store = {
   // lock-screen alerts (Web Push): this device's id + whether the coach turned it on
   get push() { return state.push || { on: false, device: null }; },
   setPush(on) { state.push = { on, device: state.push?.device || state.device }; save(); },
-  resetOffsets() { for (const r of Object.keys(state.offsets)) if (state.offsets[r]) this.setOffset(r, 0); },
-  clearNotesAppeals() { for (const n of [...state.notes]) delItem('note', n.id); for (const a of [...state.appeals]) delItem('appeal', a.id); },
+  resetOffsets() {
+    for (const r of new Set([...Object.keys(state.offsets), ...Object.keys(state.delays || {})])) {
+      if (state.offsets[r] || this.delay(r)) { state.offsets[r] = 0; if (state.delays) state.delays[r] = 0; touch('offset', r); }
+    }
+  },
   logout() { try { localStorage.removeItem(CODE_KEY); } catch { /* ignore */ } state.code = null; save(); },
   exportAll() {
-    return JSON.stringify({ device: state.devName, notes: this.notes(), appeals: this.appeals(), offsets: state.offsets, mineAdd: state.mineAdd, mineDel: state.mineDel }, null, 2);
+    return JSON.stringify({ device: state.devName, notes: this.notes(), appeals: this.appeals(), offsets: state.offsets, delays: state.delays, mineAdd: state.mineAdd, mineDel: state.mineDel }, null, 2);
   },
 
   // feedback this device sent (ids) → "המשובים שלי"
@@ -136,7 +150,7 @@ export const store = {
         const x = listOf(kind).find(n => n.id === id);
         if (x) out.push({ kind, id, t: x.t, del: x.del ? 1 : 0, data: STRIP(x) }); else delete state.dirty[key];
       } else {
-        const data = kind === 'offset' ? { v: state.offsets[id] || 0 } : kind === 'mine' ? { add: this.mineAdd(id), del: this.mineDel(id) } : { name: state.devName };
+        const data = kind === 'offset' ? { v: state.offsets[id] || 0, d: this.delay(id) } : kind === 'mine' ? { add: this.mineAdd(id), del: this.mineDel(id) } : { name: state.devName };
         out.push({ kind, id, t: state.meta[key] || 1, del: 0, data });
       }
     }
@@ -160,13 +174,15 @@ export const store = {
         const list = listOf(r.kind); const x = list.find(n => n.id === r.id);
         if (!x) { if (!r.del) { list.push({ ...r.data, id: r.id, t: r.t, dev: r.dev }); changed.any = true; } }
         else if (r.del && !x.del) { x.del = 1; x.t = r.t; delete state.dirty[key]; changed.any = true; }
+        else if (!r.del && !x.del && r.t > x.t) { Object.assign(x, r.data, { t: r.t, dev: x.dev }); delete state.dirty[key]; changed.any = true; } // edited elsewhere
         continue;
       }
       if (r.t <= (state.meta[key] || 0)) continue; // ours is newer (or the same change echoed back)
       state.meta[key] = r.t; delete state.dirty[key]; changed.any = true;
       if (r.kind === 'offset') {
-        if ((state.offsets[r.id] || 0) !== (r.data?.v || 0)) changed.offsets.push({ round: r.id, dev: r.dev });
+        if ((state.offsets[r.id] || 0) !== (r.data?.v || 0) || this.delay(r.id) !== (r.data?.d || 0)) changed.offsets.push({ round: r.id, dev: r.dev });
         state.offsets[r.id] = Math.round(r.data?.v || 0);
+        state.delays = state.delays || {}; state.delays[r.id] = Number(r.data?.d) || 0;
       } else if (r.kind === 'mine') {
         state.mineAdd[r.id] = (r.data?.add || []).map(Number); state.mineDel[r.id] = (r.data?.del || []).map(Number);
       } else if (r.kind === 'photo') {

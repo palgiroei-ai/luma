@@ -86,30 +86,36 @@
 
   <main class="main" id="round-screen">
     <section class="board" id="board" aria-label="מסלולים"></section>
+    <!-- 3.2.0: a round running at the same time (both with my athletes) — compact board + its clock -->
+    <section class="par card" id="par" hidden aria-label="סבב במקביל"></section>
 
     <section class="mid">
       <div class="timer-card card">
-        <div class="timer-label" id="timer-label"></div>
-        <div class="timer" id="timer">--:--</div>
+        <div class="timer-label"><span id="timer-label"></span><span class="tz-tag" id="tz-tag" hidden>שעון ישראל</span></div>
+        <!-- 3.0.0 (Roei picked from the mock): ±סבב beside the clock, fine calibration in one row, offset text under the clock -->
+        <div class="clock-row">
+          <button type="button" class="cbtn side" data-adj="-slot" aria-label="מקדים סבב"><bdi>−סבב</bdi></button>
+          <div class="timer" id="timer">--:--</div>
+          <button type="button" class="cbtn side" data-adj="+slot" aria-label="מאחר סבב"><bdi>+סבב</bdi></button>
+        </div>
         <div class="timer-sub muted" id="timer-sub"></div>
         <div class="calib" aria-label="כיול שעון">
           <div class="calib-row">
-            <button type="button" class="cbtn" data-adj="-slot">מקדים סבב</button>
-            <button type="button" class="cbtn" data-adj="-step" id="adj-minus">מקדים 15ש׳</button>
+            <div class="mini"><button type="button" class="cbtn" data-adj="-step" id="adj-minus"><bdi dir="ltr">−15</bdi></button><button type="button" class="cbtn fine" data-adj="-1" aria-label="מקדים שנייה"><bdi dir="ltr">−1</bdi></button></div>
             <button type="button" class="cbtn cbtn-main" data-adj="now">הסבב מתחיל עכשיו</button>
-            <button type="button" class="cbtn" data-adj="+step" id="adj-plus">מאחר 15ש׳</button>
-            <button type="button" class="cbtn" data-adj="+slot">מאחר סבב</button>
+            <div class="mini"><button type="button" class="cbtn fine" data-adj="+1" aria-label="מאחר שנייה"><bdi dir="ltr">+1</bdi></button><button type="button" class="cbtn" data-adj="+step" id="adj-plus"><bdi dir="ltr">+15</bdi></button></div>
           </div>
-          <div class="muted small calib-stat" id="offset-label"></div>
           <svg width="0" height="0" class="svg-defs" aria-hidden="true">
             <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
             <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></symbol>
             <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></symbol>
             <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+            <symbol id="i-delay" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/></symbol>
             <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></symbol>
           </svg>
           <div class="cseg" role="group" aria-label="כלי כיול">
             <button type="button" id="manual-btn" aria-label="שעת התחלה ידנית"><svg class="ci" aria-hidden="true"><use href="#i-edit"/></svg><span>שעה ידנית</span></button>
+            <button type="button" id="delay-btn"><svg class="ci" aria-hidden="true"><use href="#i-delay"/></svg><span></span></button>
             <button type="button" id="reset-btn" class="danger" aria-label="איפוס כיול"><svg class="ci" aria-hidden="true"><use href="#i-reset"/></svg><span>איפוס</span></button>
             <button type="button" id="lock-btn"><svg class="ci" aria-hidden="true"><use href="#i-lock"/></svg><span></span></button>
           </div>
@@ -213,7 +219,6 @@
     <div class="ios-page" data-pg="sound" hidden>
       <div class="ios-group"><div class="ios-box">
         <label class="ios-row"><span class="lbl">צליל בהתראות</span><input type="checkbox" class="ios-sw" data-set="sound.on"></label>
-        <label class="ios-row"><span class="lbl">עוצמה</span><input type="range" min="0.1" max="1" step="0.1" data-set="sound.vol"></label>
       </div></div>
       <div class="ios-group"><p class="ios-gtitle">סוג צליל</p><div class="ios-box">
         <label class="ios-row check"><span class="lbl">פעמון</span><input type="radio" name="tone" value="chime" data-set="sound.tone"><span class="tick">✓</span></label>
@@ -222,7 +227,7 @@
       </div></div>
       <div class="ios-group"><div class="ios-box">
         <button type="button" class="ios-row link" id="test-sound">בדיקת צליל</button>
-      </div><p class="ios-foot">באייפד: מתג השקט ועוצמת המכשיר משפיעים. אחרי פתיחה לחץ "התחל מעקב".</p></div>
+      </div><p class="ios-foot">העוצמה לפי עוצמת המכשיר (כפתורי הווליום). באייפד גם מתג השקט משפיע. אחרי פתיחה לחץ "התחל מעקב".</p></div>
     </div>
 
     <div class="ios-page" data-pg="calib" hidden>
@@ -248,6 +253,9 @@
     </div>
 
     <div class="ios-page" data-pg="look" hidden>
+      <div class="ios-group"><p class="ios-gtitle">החלקה בין סבבים</p><div class="ios-box">
+        <label class="ios-row"><span class="lbl">רק סבבים עם ספורטאים שלי</span><input type="checkbox" class="ios-sw" data-set="swipeMine"></label>
+      </div><p class="ios-foot">החלקה עם האצבע משמאל לימין עוברת לסבב הבא באותה תחרות, ומימין לשמאל לסבב הקודם.</p></div>
       <div class="ios-group"><p class="ios-gtitle">מצב</p><div class="ios-box">
         <label class="ios-row check"><span class="lbl">בהיר</span><input type="radio" name="theme" value="light" data-set="theme"><span class="tick">✓</span></label>
         <label class="ios-row check"><span class="lbl">כהה</span><input type="radio" name="theme" value="dark" data-set="theme"><span class="tick">✓</span></label>
@@ -263,8 +271,7 @@
     <div class="ios-page" data-pg="data" hidden>
       <div class="ios-group"><div class="ios-box">
         <button type="button" class="ios-row link" id="export-btn2">ייצוא הערות וערעורים</button>
-        <button type="button" class="ios-row danger center" id="clear-notes">מחיקת כל ההערות והערעורים</button>
-      </div><p class="ios-foot">ההערות והערעורים משותפים לכל המכשירים שנכנסו עם הקוד (ונשמרים בגיבוי יומי). מחיקה מוחקת מכולם.</p></div>
+      </div><p class="ios-foot">ההערות והערעורים משותפים לכל המכשירים שנכנסו עם הקוד ונשמרים בגיבוי יומי.</p></div>
     </div>
 
     <div class="ios-page" data-pg="sync" hidden>
@@ -380,6 +387,25 @@
       <button class="btn btn-primary" value="save">שמירה</button>
     </div>
   </form>
+</dialog>
+
+<!-- 3.3.0 training simulation clock (coach): boulder windows with World Climbing beeps, full screen -->
+<dialog id="clock-dlg" class="sc">
+  <div class="sc-setup" id="sc-setup">
+    <h2>שעון סימולציה · בולדר</h2>
+    <div class="sc-field"><span class="sc-lbl">אורך סבב</span>
+      <div class="seg" role="group" aria-label="אורך סבב"><button type="button" data-sc-len="240" aria-pressed="false">4 דק׳</button><button type="button" data-sc-len="300" aria-pressed="true">5 דק׳</button><button type="button" data-sc-len="custom" aria-pressed="false">אחר</button></div>
+      <label class="sc-custom" id="sc-custom" hidden>דקות:שניות <input id="sc-len" type="text" inputmode="numeric" dir="ltr" value="4:30" maxlength="5"></label></div>
+    <label class="sc-field"><span class="sc-lbl">מספר סבבים</span><input id="sc-n" type="number" min="1" max="60" value="10" inputmode="numeric"></label>
+    <p class="muted small">ביפים כמו בתחרות: ארוך בתחילת סבב, אחד כשנשארת דקה, 5 קצרים ב-5 השניות האחרונות. העוצמה לפי המכשיר.</p>
+    <div class="dlg-actions"><button type="button" class="btn btn-ghost" id="sc-close">סגירה</button><button type="button" class="btn btn-primary" id="sc-start">התחל · 10 שניות</button></div>
+  </div>
+  <div class="sc-run" id="sc-run" hidden>
+    <div class="sc-round" id="sc-round"></div>
+    <div class="sc-time" id="sc-time">5:00</div>
+    <div class="sc-ctrl"><button type="button" class="btn btn-ghost" id="sc-pause">עצירה</button><button type="button" class="btn btn-ghost" id="sc-stop">סיום</button></div>
+    <div class="sc-logos"><img src="logo-palgitraining.svg" alt="PalgiTraining" class="sc-palgi"><span class="sc-luma"><span class="powered-by" lang="en">Powered by</span><span class="brand-row"><img class="mark" src="mark.svg" alt=""><span class="wordmark">LUMA</span></span></span></div>
+  </div>
 </dialog>
 
 </body>

@@ -2,8 +2,41 @@
 // Slot k starts boulder 1 at window k; boulder j (0-based) at window k+2j; rests in between.
 // n = windows elapsed since T0 (after calibration offset).
 
+// ---- time zone (3.0.0): every competition time is venue wall-clock time (Israel), whatever zone the device is in.
+// Before, a viewer abroad parsed "10:00" as HIS 10:00 and saw the round hours late (feedback 2026-10-14).
+export const TZ = 'Asia/Jerusalem';
+const fmts = {};
+const dtf = tz => (fmts[tz] = fmts[tz] || new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23',
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+// wall-clock parts of an instant in the zone
+export function zoneParts(ms, tz = TZ) {
+  const o = {};
+  for (const p of dtf(tz).formatToParts(ms)) o[p.type] = p.value;
+  return { y: +o.year, mo: +o.month, d: +o.day, h: +o.hour % 24, mi: +o.minute, s: +o.second };
+}
+// zone offset from UTC at that instant (ms; Israel +2 h / +3 h)
+export function zoneOffset(ms, tz = TZ) {
+  const p = zoneParts(ms, tz);
+  return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(ms / 1000) * 1000;
+}
+// 'YYYY-MM-DDTHH:MM[:SS]' venue wall-clock → epoch ms (second pass fixes the hour around a DST change)
+const zcache = new Map();
+export function zonedMs(str, tz = TZ) {
+  const key = tz + '|' + str;
+  if (zcache.has(key)) return zcache.get(key);
+  const [date, time = '00:00:00'] = str.split('T');
+  const [y, mo, d] = date.split('-').map(Number), [h, mi, s = 0] = time.split(':').map(Number);
+  const guess = Date.UTC(y, mo - 1, d, h, mi, s);
+  let ms = guess - zoneOffset(guess, tz);
+  ms = guess - zoneOffset(ms, tz);
+  zcache.set(key, ms);
+  return ms;
+}
+// true when this device's clock is not on venue time (→ the app shows a small "שעון ישראל" label)
+export const deviceOffZone = (ms = Date.now(), tz = TZ) => zoneOffset(ms, tz) !== -new Date(ms).getTimezoneOffset() * 60000;
+
 export function roundStart(round) {
-  return new Date(round.start).getTime(); // local wall-clock string → device local time
+  return zonedMs(round.start);
 }
 
 const lastIndex = slots => {
