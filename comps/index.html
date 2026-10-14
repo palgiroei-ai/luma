@@ -61,6 +61,7 @@
       <p class="muted" id="round-sub"></p>
     </div>
     <div class="clock" id="clock" aria-label="שעה"></div>
+    <button type="button" class="gear bell" id="arm-btn" aria-pressed="false" aria-label="צליל ומסך דלוק · כבוי"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><i class="bell-dot"></i></button>
     <button type="button" class="gear" id="settings-btn" aria-label="הגדרות">⚙︎</button>
     <a class="powered" href="https://luma.palgitraining.com/" target="_blank" rel="noopener" aria-label="Powered by LUMA">
       <span class="powered-by" lang="en">Powered by</span>
@@ -70,11 +71,6 @@
 
   <nav class="tabs" aria-label="ראונדים"><button type="button" class="home-tab" id="home-btn" aria-pressed="false">⌂ ראשי</button><div class="tabs-scroll" id="round-tabs"></div></nav>
 
-  <div class="start-bar" id="start-bar">
-    <button class="btn btn-primary" type="button" id="start-btn">התחל מעקב (צליל + מסך דלוק)</button>
-    <span class="muted small">באייפד: לחיצה אחת מפעילה את הצליל של ההתראות.</span>
-    <button class="btn btn-sm btn-ghost sim-open" type="button" id="sim-btn">הדמיית ראונד</button>
-  </div>
   <div class="sim-bar" id="sim-bar" hidden>
     <b>מצב הדמיה</b> · השעון מדומה, הערות וכיולים כאן לא נשמרים בתחרות האמיתית.
     <a class="btn btn-sm btn-light" href="./">יציאה מההדמיה</a>
@@ -219,7 +215,8 @@
     <div class="ios-page" data-pg="sound" hidden>
       <div class="ios-group"><div class="ios-box">
         <label class="ios-row"><span class="lbl">צליל בהתראות</span><input type="checkbox" class="ios-sw" data-set="sound.on"></label>
-      </div></div>
+        <label class="ios-row"><span class="lbl">צליל + מסך דלוק אוטומטית</span><input type="checkbox" class="ios-sw" data-set="autoArm"></label>
+      </div><p class="ios-foot">באייפד הצליל והמסך הדלוק נדלקים בנגיעה הראשונה באפליקציה (הדפדפן לא מרשה לפני נגיעה). הפעמון בכותרת מראה את המצב — לחיצה עליו מדליקה או מכבה.</p></div>
       <div class="ios-group"><p class="ios-gtitle">סוג צליל</p><div class="ios-box">
         <label class="ios-row check"><span class="lbl">פעמון</span><input type="radio" name="tone" value="chime" data-set="sound.tone"><span class="tick">✓</span></label>
         <label class="ios-row check"><span class="lbl">ביפים</span><input type="radio" name="tone" value="beep" data-set="sound.tone"><span class="tick">✓</span></label>
@@ -227,7 +224,7 @@
       </div></div>
       <div class="ios-group"><div class="ios-box">
         <button type="button" class="ios-row link" id="test-sound">בדיקת צליל</button>
-      </div><p class="ios-foot">העוצמה לפי עוצמת המכשיר (כפתורי הווליום). באייפד גם מתג השקט משפיע. אחרי פתיחה לחץ "התחל מעקב".</p></div>
+      </div><p class="ios-foot">העוצמה לפי עוצמת המכשיר (כפתורי הווליום). באייפד גם מתג השקט משפיע.</p></div>
     </div>
 
     <div class="ios-page" data-pg="calib" hidden>

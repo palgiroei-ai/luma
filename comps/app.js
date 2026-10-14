@@ -8,7 +8,7 @@ import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive } from './live.js';
 import { quota } from './results.js';
 
-export const APP_VERSION = '3.5.0';
+export const APP_VERSION = '3.6.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -656,7 +656,7 @@ function renderHomeList(seg) {
       <span class="ev-main"><b>${esc(evName(ev.event))}</b><span class="muted small">${meta}</span></span>
       <span class="ev-side">${badge}<span class="small">${!ev.rounds.length || !people.size ? '' : `${people.size} ${VIEWER ? 'מהפלגיה' : 'שלי'}`}${ovl ? `${people.size ? ' · ' : ''}<span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>`;
   }).join('');
-  patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}${VIEWER ? '' : '<button type="button" class="btn btn-sm btn-ghost clock-btn" id="clock-btn">⏱ שעון סימולציה</button>'}</div><div class="ev-list">${rows}</div>`);
+  patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}${VIEWER ? '' : `<span class="h-tools">${SIM_AT == null ? '<button type="button" class="btn btn-sm btn-ghost" id="sim-btn">▶ הדמיה</button>' : ''}<button type="button" class="btn btn-sm btn-ghost" id="clock-btn">⏱ שעון סימולציה</button></span>`}</div><div class="ev-list">${rows}</div>`);
 }
 
 // isolation open/close (+ U17 route preview) from the federation info sheet (2.4.0); close time stressed = the deadline
@@ -685,7 +685,7 @@ function renderHomeDetail(seg, fromList) {
       ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} סבבים של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
-  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + ' · ' : ''}${rangeLabel(cur.dates)}</span></h2>${seg}${VIEWER ? '' : '<button type="button" class="btn btn-sm btn-ghost clock-btn" id="clock-btn">⏱ שעון סימולציה</button>'}</div>${chips}` +
+  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + ' · ' : ''}${rangeLabel(cur.dates)}</span></h2>${seg}${VIEWER ? '' : `<span class="h-tools">${SIM_AT == null ? '<button type="button" class="btn btn-sm btn-ghost" id="sim-btn">▶ הדמיה</button>' : ''}<button type="button" class="btn btn-sm btn-ghost" id="clock-btn">⏱ שעון סימולציה</button></span>`}</div>${chips}` +
     (rounds.length ? '' : `<div class="card h-empty"><p><b>${evBadge(cur, evs)}</b></p><p class="muted">הראונדים וסדרי העלייה יתווספו כשיתפרסמו.${ev.place ? '' : ' המיקום עוד לא פורסם.'}</p></div>`) +
     days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
 }
@@ -871,7 +871,7 @@ const TONES = {
 };
 function chime(force = false) {
   const snd = store.settings.sound;
-  if (!audio || (!snd.on && !force)) return;
+  if (!audio || (!snd.on && !force) || (userOff && !force)) return; // bell off (3.6.0) = no alert sound
   if (audio.state !== 'running') audio.resume().catch(() => {});
   const t0 = audio.currentTime; const tone = TONES[snd.tone] || TONES.chime; const peak = 0.5; // loudness = the device volume (3.0.0)
   tone.notes.forEach(([f, d, len]) => {
@@ -883,7 +883,10 @@ function chime(force = false) {
 }
 function ensureAudio() {
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* Safari 16.4+ only */ }
-  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch { audio = null; }
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume();
+    const src = audio.createBufferSource(); src.buffer = audio.createBuffer(1, 1, 22050); src.connect(audio.destination); src.start(0); // iOS: a sound inside the gesture unlocks it
+  } catch { audio = null; }
 }
 
 // One banner per athlete: a newer alert for the same athlete replaces the older one (Roei 2026-10-12).
@@ -1033,6 +1036,21 @@ async function renderPushState() {
 let wakeLock = null;
 async function keepAwake() {
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { wakeLock = null; }
+}
+// 3.6.0 (Roei): no "התחל מעקב" bar. Sound + screen-on start on the first touch anywhere (setting autoArm, default on —
+// Safari allows audio / wake lock only from a user gesture); the bell in the header shows the state and toggles it.
+let armed = false, userOff = false;
+function arm() { ensureAudio(); keepAwake(); armed = true; userOff = false; renderBell(); }
+function disarm() { armed = false; userOff = true; try { wakeLock?.release(); } catch { /* already gone */ } wakeLock = null; audio?.suspend?.().catch(() => {}); renderBell(); }
+function renderBell() {
+  const b = $('#arm-btn'); if (!b) return;
+  b.setAttribute('aria-pressed', String(armed)); b.classList.toggle('off', !armed);
+  b.setAttribute('aria-label', armed ? 'צליל ומסך דלוק · פעיל (לחיצה מכבה)' : 'צליל ומסך דלוק · כבוי (לחיצה מדליקה)');
+}
+function setupAutoArm() {
+  const first = e => { if (!armed && !userOff && !VIEWER && store.settings.autoArm && !e.target.closest?.('#arm-btn')) arm(); };
+  for (const ev of ['click', 'touchend']) document.addEventListener(ev, first, { capture: true, passive: true });
+  renderBell();
 }
 
 // ---- dialogs ----
@@ -1504,11 +1522,11 @@ function exportFile(list) {
 function start() {
   VIEWER = DATA.role === 'viewer';
   document.body.classList.toggle('viewer', VIEWER);
-  if (VIEWER) { $('[data-view="mine"]').textContent = MINE_NAME(); $('#start-bar').hidden = true; }
+  if (VIEWER) { $('[data-view="mine"]').textContent = MINE_NAME(); $('#arm-btn').hidden = true; }
   $('#app').hidden = false;
   document.querySelectorAll('.app-ver').forEach(el => { el.textContent = APP_VERSION; });
   current = params.get('round') && round(params.get('round')) ? params.get('round') : pickDefaultRound();
-  if (SIM_AT != null) { $('#sim-bar').hidden = false; $('#sim-btn').hidden = true; }
+  if (SIM_AT != null) $('#sim-bar').hidden = false;
   const liveNow = DATA.rounds.some(r => r.slots.length && stateAt(r, now(), off(r.id)).phase === 'live');
   screen = params.get('round') || liveNow ? 'round' : 'home';
   $('#home').hidden = screen !== 'home'; $('#round-screen').hidden = screen !== 'round';
@@ -1580,11 +1598,7 @@ function start() {
     else if (d.mineTg != null) { const k = Number(d.mineTg); store.toggleMine(current, k, mineK(current).has(k), false); $('#view-all')._html = null; $('#view-mine')._html = null; render(); }
     else if (b.id === 'manual-btn') openManual();
     else if (b.id === 'sim-btn') openSim();
-    else if (b.id === 'start-btn') {
-      ensureAudio();
-      chime(); keepAwake();
-      $('#start-bar').hidden = true;
-    }
+    else if (b.id === 'arm-btn') { if (armed) disarm(); else { arm(); chime(true); } }
   });
   $('#settings-form').addEventListener('change', e => {
     const el = e.target;
@@ -1608,7 +1622,7 @@ function start() {
   applySettings();
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    if (audio) { if (audio.state !== 'running') audio.resume().catch(() => {}); keepAwake(); }
+    if (armed) { if (audio && audio.state !== 'running') audio.resume().catch(() => {}); keepAwake(); }
     render();
   });
   render();
@@ -1620,7 +1634,7 @@ function start() {
   if (SIM_AT == null && VIEWER) viewPull = startViewSync(onRemote);
   else if (SIM_AT == null) startSync({ onRemote, onStatus: renderSyncState });
   if (SIM_AT == null) setupPullRefresh();
-  setupSwipe();
+  setupSwipe(); setupAutoArm();
   if ('serviceWorker' in navigator && SIM_AT == null) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 

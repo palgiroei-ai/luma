@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS = {
   theme: 'light',    // light | dark | auto
   dark: 'plum',      // dark style like Wingate: plum | charcoal | black
   swipeMine: true,   // swipe between rounds: only rounds with my athletes (3.2.0, Roei); off = every round of the competition
+  autoArm: true,     // 3.6.0: sound + screen-on start on the first touch (no start button; bell in the header)
   homeView: 'list',  // home screen: list (one row per competition, default — Roei 2026-10-12) | detail
 };
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
