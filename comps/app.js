@@ -103,6 +103,7 @@ function rankedOf(id) {
   return (rankCache[id] = { res, v: rankRows(res.rows, prevRankOf(id)) }).v;
 }
 
+const LTAG = '<i class="ltag" aria-hidden="true"><i></i>LIVE</i>';
 // ---- live results (3.4.0, trial): polled every 15 s while a round with a start list and no official results runs ----
 const LIVE_FORCE = SIM_AT != null && params.get('live') === 'force'; // testing only: replay the live data over a finished round
 const live = { data: null, at: 0, err: false, busy: false };
@@ -282,14 +283,18 @@ function renderMine(r) {
 function resByBib(r) {
   const res = resultsOf(r.id); if (!res) return null;
   const full = rankedOf(r.id), ok = full.filter(x => x.rank != null);
-  return { res, q: quota(res.live ? res.rows.length : ok.length), by: Object.fromEntries(full.map(x => [x.bib, x])) };
+  // the place = the category the results tab shows (U17 rounds: U17 alone by default); in/out = the overall ranking
+  const opts = catOptions(res.rows, genderOf(r.id)), opt = opts.find(o => o.key === resCat[r.id]) || opts[0];
+  const shown = opt?.cats ? rankInCats(res.rows, opt.cats, prevRankOf(r.id)) : full;
+  const overall = Object.fromEntries(full.map(x => [x.bib, x.rank]));
+  return { res, q: quota(res.live ? res.rows.length : ok.length), overall, by: Object.fromEntries(shown.map(x => [x.bib, x])), all: Object.fromEntries(full.map(x => [x.bib, x])) };
 }
 const bsTxt = bs => bs.map((b, j) => (b ? `B${j + 1} ${cellTxt(b)}` : null)).filter(Boolean).join(' · ');
 const provisional = R => (R.res.live && !R.res.complete ? ' (זמני)' : '');
 function resLine(R, bib) {
   const x = R?.by[bib]; if (!x || x.rank == null) return '';
-  const cut = R.res.final ? '' : x.rank <= R.q ? ' · <span class="yes">בפנים</span>' : ' · <span class="out">בחוץ</span>';
-  return `<p class="res-line"><b>מקום ${x.rank}${provisional(R)}</b> · ${x.score.toFixed(1)} נק׳ · <bdi dir="ltr">${bsTxt(x.bs)}</bdi>${cut}</p>`;
+  const cut = R.res.final ? '' : R.overall[bib] <= R.q ? ' · <span class="yes">בפנים</span>' : ' · <span class="out">בחוץ</span>';
+  return `<p class="res-line${R.res.live ? ' live' : ''}"><b>מקום ${x.rank}${provisional(R)}</b> · ${x.score.toFixed(1)} נק׳ · <bdi dir="ltr">${bsTxt(x.bs)}</bdi>${cut}</p>`;
 }
 function mineCards(r, t, el) {
   const list = mineOf(r.id), R = resByBib(r);
@@ -320,7 +325,7 @@ function renderAll(r) {
   const live = stateAt(r, t, off(r.id)).phase === 'live';
   let nextDone = !live;
   const R = resByBib(r), nc = R ? 7 : 6; // results column (3.4.0) only when the round has results / live results
-  const resTd = s => !R ? '' : `<td class="c-res">${R.by[s.bib]?.rank != null ? `<b>${R.by[s.bib].rank}</b> · ${R.by[s.bib].score.toFixed(1)}` : ''}</td>`;
+  const resTd = s => !R ? '' : `<td class="c-res${R.res.live ? ' live' : ''}">${R.all[s.bib]?.rank != null ? `<b>${R.all[s.bib].rank}</b> · ${R.all[s.bib].score.toFixed(1)}` : ''}</td>` // full list = everyone → overall place;
   // 3.0.0: band on whoever is on a boulder / resting between boulders now + a "הבא בתור" line before the first one waiting;
   // circle next to the name adds / removes a not-mine athlete for this round (Hub athletes have none)
   patch($('#view-all'), `<p class="muted small hint">סנכרון לפי מי שמטפס: לחץ "מתחיל עכשיו" ליד המתחרה שעולה עכשיו לבולדר 1. ערעור אפשר על כל מתחרה.${VIEWER ? '' : ' ○ ליד שם = הוספה לספורטאים שלי בסבב הזה.'}</p><div class="full-wrap"><table class="full"><thead><tr><th>סדר</th><th class="c-bib">גב</th><th>שם</th><th>עלייה</th><th>מצב</th>${R ? `<th>תוצאה${provisional(R)}</th>` : ''}<th></th></tr></thead><tbody>${
@@ -414,7 +419,7 @@ function liveCard(ranked, row, who, q, final, full) {
     cut = overall <= q ? kv('קו העלייה כרגע', `<span class="yes">בפנים</span>${firstOut ? `<small class="d">יתרון ${r1(row.score - firstOut.score).toFixed(1)} על מקום ${firstOut.rank}</small>` : ''}`)
       : kv('קו העלייה כרגע', `חסרות ${r1(lastIn.score - row.score + 0.1).toFixed(1)} נק׳<small class="d">מקום ${q} · ${lastIn.score.toFixed(1)}</small>`);
   }
-  return `<article class="card fc live${who.added ? ' added' : ''}">${head(`${row.rank}<small>/${ok.length}</small>${ranked !== full ? `<span class="rk-all">כללי ${overall}</span>` : ''}`)}
+  return `<article class="card fc live${who.added ? ' added' : ''}">${head(`${row.rank}<small>/${ok.length}</small><em>זמני</em>${ranked !== full ? `<span class="rk-all">כללי ${overall}</span>` : ''}`)}
     <div class="sc"><b>${row.score.toFixed(1)}</b> נק׳ · ${row.bs.filter(b => b && b[0]).length} טופים · ${row.bs.filter(b => b && (b[0] || b[1])).length} זונים · ${nDone}/${row.bs.length} בולדרים</div>
     <div class="bars" style="grid-template-columns:repeat(${row.bs.length},1fr)">${bars}</div>
     <div class="ins"><div class="grp"><span class="gh">מיקום זמני · מתוך ${ok.length} שהתחילו</span>
@@ -456,9 +461,9 @@ function renderResults(r) {
     return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b><small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
       ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live ? 'עדיין בלי תוצאה' : 'לא התחיל (DNS)'}</td><td></td><td class="tt">–</td>` : x.bs.map(b => `<td>${cell(b)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
-  patch($('#view-results'), `<div class="res">
+  patch($('#view-results'), `<div class="res${res.live ? ' is-live' : ''}">
     ${chips}
-    ${res.live ? `<div class="live-bar${live.err ? ' err' : ''}"><span class="dot" aria-hidden="true"></span><b>${res.complete ? 'כל הבולדרים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} בולדרים הוזנו · ${res.started} התחילו</span>${live.err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · לא רשמי</span></div>` : ''}
+    ${res.live ? `<div class="live-bar${live.err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל הבולדרים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} בולדרים הוזנו · ${res.started} התחילו</span>${live.err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · לא רשמי</span></div>` : ''}
     <div class="res-head"><span class="muted small">מקור: ${esc(res.source)}</span>
       <span class="legend"><span><i class="cell t lg">T</i> טופ</span><span><i class="cell z lg">Z</i> זון בלי טופ</span><span><i class="cell n lg">—</i> בלי זון</span><span class="muted">T2 = טופ בניסיון השני</span></span></div>
     ${cards}
@@ -673,7 +678,9 @@ function render() {
   $('#event-title').textContent = evName(evOf(r));
   $('#round-sub').textContent = `${dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים · סבב ${fmtDur(r.slotSec0 * 1000)}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
   renderTabs(); renderBoard(r, s); renderTimer(r, s); renderNext(r, s); renderPar(r);
-  $('[data-view="results"]').hidden = !resultsOf(r.id);
+  const rb = $('[data-view="results"]'), rs = resultsOf(r.id), lv = !!rs?.live;
+  rb.hidden = !rs;
+  if (rb.classList.contains('lv') !== lv) { rb.classList.toggle('lv', lv); rb.innerHTML = 'תוצאות' + (lv ? LTAG : ''); rb.setAttribute('aria-label', lv ? 'תוצאות — חי, לא רשמי' : 'תוצאות'); }
   if (view === 'results' && !resultsOf(r.id)) { setView('mine'); return; }
   if (view === 'results') renderResults(r);
   if (view === 'mine') renderMine(r);
