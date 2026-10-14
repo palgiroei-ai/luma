@@ -222,7 +222,10 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .full .appeal-btn { background: var(--danger-bg); color: var(--danger); border-color: #F0C4C0; }
 .hint { margin: 0 0 8px; }
 
-.home-tab { flex: none; font-weight: 700; border: 1px solid var(--navy); background: var(--card); border-radius: 999px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
+/* 3.6.1 (Roei): "ראשי" = a round house button like the bell / gear, then a thin divider before the rounds */
+.tabs .home-tab { flex: none; width: 40px; height: 40px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--border); background: var(--card); color: var(--navy); cursor: pointer; }
+.home-tab svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.tabs-sep { flex: none; width: 1px; align-self: stretch; margin: 4px 2px; background: var(--border); }
 
 /* home */
 .home { padding: 4px 16px 32px; display: grid; gap: 18px; }

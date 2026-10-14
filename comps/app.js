@@ -8,7 +8,7 @@ import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive } from './live.js';
 import { quota } from './results.js';
 
-export const APP_VERSION = '3.6.0';
+export const APP_VERSION = '3.6.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -637,11 +637,14 @@ function evBadge(ev, evs) {
   return `<span class="hb later">בעוד ${days} ימים</span>`;
 }
 
+// 3.6.1 (Roei): no רשימה/מפורט switch — home = the list; on a competition day it opens straight on that
+// competition's detail ("‹ אירועים" goes to the list until the home button is tapped again)
+let homeListPicked = false;
+function compDayIdx() { const d = todayStr(); return homeEvents().findIndex(ev => ev.dates[0] <= d && d <= ev.dates.at(-1)); }
 function renderHome() {
-  const hv = store.settings.homeView;
-  const seg = `<div class="seg h-seg" role="group" aria-label="תצוגת מסך ראשי"><button type="button" data-hv="list" aria-pressed="${hv === 'list'}">רשימה</button><button type="button" data-hv="detail" aria-pressed="${hv === 'detail'}">מפורט</button></div>`;
-  if (hv === 'list' && homeOpenEvent == null) return renderHomeList(seg);
-  renderHomeDetail(seg, hv === 'list');
+  if (homeOpenEvent == null && !homeListPicked) { const i = compDayIdx(); if (i >= 0) return renderHomeDetail('', true, i); }
+  if (homeOpenEvent == null) return renderHomeList('');
+  renderHomeDetail('', true);
 }
 
 function renderHomeList(seg) {
@@ -664,9 +667,9 @@ const hm = s => s.replace(/^0/, '');
 const isoRow = r => (r.iso ? `<div class="iso"><span class="iso-k">בידוד</span><span class="iso-t"><b>${hm(r.iso.open)}</b> נפתח</span><span class="iso-ar">←</span><span class="iso-t close"><b>${hm(r.iso.close)}</b> נסגר</span>${
   r.iso.preview ? `<span class="iso-sep"></span><span class="iso-k">צפייה במסלולים</span><span class="iso-t"><b>${esc(r.iso.preview)}</b></span>` : ''}</div>` : '');
 
-function renderHomeDetail(seg, fromList) {
+function renderHomeDetail(seg, fromList, auto = null) {
   const t = now();
-  const evs = homeEvents(); const ei = homeOpenEvent ?? focusEventIdx(); const cur = evs[Math.min(ei, evs.length - 1)]; const { event: ev, rounds } = cur;
+  const evs = homeEvents(); const ei = homeOpenEvent ?? auto ?? focusEventIdx(); const cur = evs[Math.min(ei, evs.length - 1)]; const { event: ev, rounds } = cur;
   const days = [...new Set(rounds.map(r => r.date))];
   const chips = !fromList && evs.length > 1 ? `<div class="ev-chips" role="group" aria-label="תחרות">${evs.map((e, i) => {
     const d0 = new Date(e.dates[0] + 'T12:00:00');
@@ -1536,11 +1539,10 @@ function start() {
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
     if (d.page) { setPage(d.page); return; }
-    if (d.hv) { store.setSetting('homeView', d.hv); homeOpenEvent = null; render(); return; }
     if (d.ev != null) { homeOpenEvent = Number(d.ev); render(); return; }
-    if (b.id === 'home-back') { homeOpenEvent = null; render(); return; }
+    if (b.id === 'home-back') { homeOpenEvent = null; homeListPicked = true; render(); return; }
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
-    else if (b.id === 'home-btn') { homeOpenEvent = null; showScreen('home'); }
+    else if (b.id === 'home-btn') { homeOpenEvent = null; homeListPicked = false; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
     else if (d.photo) openPhoto($('#photos-dlg').open ? gridRound : current, Number(d.photo));
     else if (b.id === 'photos-btn') openPhotos();
