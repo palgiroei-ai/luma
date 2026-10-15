@@ -22,6 +22,8 @@
   --st-tech: #1A5E9E; --st-tech-bg: #E2EDF9;
   --st-coord: #7F5400; --st-coord-bg: #FAF0D7;
   --st-elec: #6730D0; --st-elec-bg: #EEE6FC;
+  /* 3.10.0 final results: copper (Palgi accent), darker for white text */
+  --fin: #975425; --fin-bg: #F6E4D2; --on-fin: #FFFFFF;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(20, 36, 59, .05), 0 8px 24px rgba(20, 36, 59, .06);
   --font: 'Heebo', system-ui, sans-serif;
@@ -295,6 +297,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --primary: #F2ECE3; --on-primary: #2E1A47;
   --added: #8FB3F5; --added-bg: #1F2547;
   --st-phys: #FB8A52; --st-phys-bg: #3A2219; --st-tech: #6CB2F2; --st-tech-bg: #16263A; --st-coord: #E5B440; --st-coord-bg: #352A12; --st-elec: #B69BFF; --st-elec-bg: #2E2348;
+  --fin: #E8834A; --fin-bg: #3D2420; --on-fin: #2A1408;
   --live: #FF8A80;
 }
 :root[data-theme="charcoal"] {
@@ -303,6 +306,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --primary: #B39BE0; --on-primary: #1A1024;
   --added: #8FB3F5; --added-bg: #1B2333;
   --st-phys: #FB8A52; --st-phys-bg: #33211A; --st-tech: #6CB2F2; --st-tech-bg: #162433; --st-coord: #E5B440; --st-coord-bg: #30280F; --st-elec: #B69BFF; --st-elec-bg: #2A2238;
+  --fin: #E8834A; --fin-bg: #3A2419; --on-fin: #2A1408;
   --live: #FF8A80;
 }
 :root[data-theme="black"] {
@@ -311,6 +315,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --primary: #E8834A; --on-primary: #1A1024;
   --added: #8FB3F5; --added-bg: #0E1A2E;
   --st-phys: #FB8A52; --st-phys-bg: #2A170E; --st-tech: #6CB2F2; --st-tech-bg: #0E1B2B; --st-coord: #E5B440; --st-coord-bg: #261F0A; --st-elec: #B69BFF; --st-elec-bg: #1E1630;
+  --fin: #E8834A; --fin-bg: #2E1B12; --on-fin: #2A1408;
   --live: #FF8A80;
 }
 :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) { --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); color-scheme: dark; }
@@ -1048,3 +1053,51 @@ body:not(.viewer) .viewer-only { display: none !important; }
   .res-tbl .cell.fresh { animation: cell-pulse .5s ease-in-out 20 alternate; }
   @keyframes cell-pulse { to { opacity: .35; } }
 }
+
+/* 3.10.0 final results (Roei 2026-10-15): copper button in the events list, a card per category on the competition
+   screen, and the final table (R2 / R1 = which round decided the place) */
+.cup { width: 1.1em; height: 1.1em; flex: none; vertical-align: -0.15em; }
+.ev-item { display: grid; padding-bottom: 12px; border-inline-start: 5px solid var(--border); }
+.ev-item.ph-live { border-inline-start-color: var(--danger); }
+.ev-item .ev-row { background: transparent; border: 0; border-radius: var(--radius); }
+.fin-btn { all: unset; box-sizing: border-box; cursor: pointer; justify-self: start; margin-inline: 16px; display: inline-flex; align-items: center; gap: 7px;
+  background: var(--fin); color: var(--on-fin); font-weight: 700; font-size: 14px; border-radius: 999px; padding: 7px 14px 7px 12px; transition: transform .08s; }
+.fin-btn:active { transform: scale(.97); }
+.fin-btn:focus-visible, .fin-card:focus-visible, .fin-chips button:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; }
+.fin-btn .cup { width: 16px; height: 16px; }
+.fin-btn .go { font-size: 16px; line-height: 1; opacity: .8; }
+.fin-sec { display: grid; gap: 8px; }
+.fin-t { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 800; color: var(--fin); }
+.fin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+@media (max-width: 600px) { .fin-grid { grid-template-columns: 1fr 1fr; gap: 8px; } }
+.fin-card { all: unset; box-sizing: border-box; cursor: pointer; min-width: 0; display: grid; gap: 4px; align-content: start; background: var(--card); border: 1px solid var(--border);
+  border-top: 4px solid var(--fin); border-radius: 12px; padding: 8px 10px; box-shadow: var(--shadow); }
+.fin-card.wait { cursor: default; border-top-color: var(--border); opacity: .7; }
+.fin-card h4 { margin: 0; font-size: 15px; font-weight: 800; }
+.fin-card p { margin: 0; }
+.fin-pod { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; font-size: 13px; }
+.fin-pod li { display: flex; gap: 5px; min-width: 0; }
+.fin-pod li span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fin-pod li i { font-style: normal; font-weight: 800; min-width: 1.3em; color: var(--muted); }
+.fin-mine { display: flex; flex-wrap: wrap; gap: 4px; }
+.fin-mine span { background: var(--copper-bg); color: var(--copper-text); border-radius: 7px; padding: 1px 6px; font-size: 12px; }
+.fin-mine b { color: var(--navy); }
+.fin-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fin-h .cup { color: var(--fin); }
+.fin-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.fin-chips button { cursor: pointer; background: transparent; border: 1.5px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 14px; font-weight: 700; }
+.fin-chips button[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.fin-tbl { overflow: hidden; }
+.fin-tbl table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.fin-tbl th { font-size: 12px; color: var(--muted); font-weight: 600; padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: center; }
+.fin-tbl td { padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: center; }
+.fin-tbl .fin-nm { text-align: start; }
+.fin-tbl td.fin-nm small { display: block; color: var(--muted); font-size: 12px; }
+.fin-rk { font-weight: 800; font-size: 16px; width: 2.2em; }
+.fin-pt { font-weight: 700; }
+.medal { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--fin-bg); color: var(--fin); }
+.fin-rd { font-size: 11px; font-weight: 800; border-radius: 6px; padding: 0 6px; border: 1.5px solid currentColor; }
+.fin-rd.r2 { color: var(--ok); } .fin-rd.r1 { color: var(--muted); }
+tr.fin-me { background: var(--copper-bg); }
+tr.fin-me td:first-child { box-shadow: inset -4px 0 0 var(--copper); }
+tr.fin-cut td { padding: 5px 6px; font-size: 12px; font-weight: 700; color: var(--muted); background: var(--line); }

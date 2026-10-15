@@ -123,3 +123,18 @@ export const catLabel = (cat, gender) => (!cat ? '' : cat === 'S' ? (gender === 
 export function rankInCats(rows, cats, prevRank = null) {
   return rankRows(cats ? rows.filter(r => cats.includes(r.cat)) : rows, prevRank);
 }
+
+// 3.10.0 (Roei 2026-10-15): the competition's final standings per category. stages = rankRows() of round 1 [, round 2].
+// One round → its ranking. Two rounds → whoever is in round 2 is ranked by round 2 only (a finalist who did not start
+// it = last of the finalists); everyone else follows by round 1 (ties kept), places continuing after the finalists
+// (World Climbing). Did not start round 1 → bottom, no place. Each row: the deciding round's row + { rank, round }.
+export function finalStandings(stages) {
+  const [first, second] = stages;
+  if (!second) return first.map(x => ({ ...x, round: 1 }));
+  const inR2 = new Set(second.map(x => x.bib));
+  const started = second.filter(x => x.rank != null), fin = [...started.map(x => ({ ...x, round: 2 })),
+    ...second.filter(x => x.rank == null).map(x => ({ ...x, rank: started.length + 1, round: 2 }))];
+  const out = first.filter(x => !inR2.has(x.bib)), outOk = out.filter(x => x.rank != null);
+  const rest = out.map(x => ({ ...x, round: 1, rank: x.rank == null ? null : fin.length + 1 + outOk.filter(y => y.rank < x.rank).length }));
+  return [...fin, ...rest.filter(x => x.rank != null), ...rest.filter(x => x.rank == null)];
+}
