@@ -51,3 +51,21 @@ export async function fetchLive(signal) {
   const [cfg, results] = await Promise.all([get('config'), get('results')]);
   return { cfg, results: results || {} };
 }
+
+// 3.8.0: what changed between two polls → one event per athlete per boulder: a new top (with or without a new zone in the
+// same poll) or a new zone. prev = null (first data for the round) → nothing: no toasts for what happened before we looked.
+export function liveEvents(prevRows, rows) {
+  if (!prevRows || !rows) return [];
+  const before = new Map(prevRows.map(r => [r.bib, r.bs]));
+  const out = [];
+  for (const r of rows) {
+    const pb = before.get(r.bib) || [];
+    r.bs.forEach((c, j) => {
+      if (!c) return;
+      const [t, z] = c, [pt, pz] = pb[j] || [0, 0];
+      if (t && !pt) out.push({ bib: r.bib, name: r.name, b: j + 1, kind: 'top', att: t });
+      else if (z && !pz) out.push({ bib: r.bib, name: r.name, b: j + 1, kind: 'zone', att: z });
+    });
+  }
+  return out;
+}

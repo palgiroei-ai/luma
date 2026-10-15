@@ -5,11 +5,11 @@ import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC
 import { CHANGELOG } from './changelog.js';
 import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats, isLastRound } from './results.js';
 import { setupInstall } from './install.js';
-import { liveRows, liveGroup, fetchLive } from './live.js';
+import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 
-export const APP_VERSION = '3.7.1';
+export const APP_VERSION = '3.8.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -143,6 +143,7 @@ const LTAG = '<i class="ltag" aria-hidden="true"><i></i>LIVE</i>';
 const LIVE_FORCE = SIM_AT != null && params.get('live') === 'force'; // testing only: replay the live data over a finished round
 const live = { data: null, at: 0, err: false, busy: false };
 const liveCache = {};
+const liveSeen = {}, liveFresh = {}; // 3.8.0: last rows per round (to spot new zones/tops) + cells that just changed
 function liveOf(id) {
   const r = round(id); if (!live.data || !r) return null;
   const key = `${live.at}:${Math.floor(now() / 15000)}`;
@@ -154,6 +155,11 @@ function liveOf(id) {
     const prev = DATA.results?.[id.replace(/-r2$/, '-r1')], catOf = Object.fromEntries((prev?.rows || []).map(x => [x.bib, x.cat]));
     // (club: our short name from round 1 first — the judging app has the long official one)
     lr.rows.forEach(x => { if (!x.cat) x.cat = catOf[x.bib] || null; x.club = prev?.rows.find(y => y.bib === x.bib)?.club || x.club; });
+    // 3.8.0: new zone / top since the last update → red toast (everyone, every user) + the cell blinks until the next update
+    const evs = liveEvents(liveSeen[id], lr.rows);
+    if (liveSeen[id]) liveFresh[id] = new Set(evs.map(e => `${e.bib}:${e.b - 1}`));
+    liveSeen[id] = lr.rows.map(x => ({ bib: x.bib, bs: x.bs.map(c => c && [...c]) }));
+    if (id === current && screen === 'round') evs.forEach(liveToast);
     v = { ...lr, live: true, final: lastRound(id), source: `תוצאות חיות מההתאחדות · ניסיון, לא רשמי · עודכן ${fmtClock(lr.updated)}` };
   }
   liveCache[id] = { key, v };
@@ -440,8 +446,8 @@ function resCard(ranked, row, who, final, full) {
 }
 
 // live, round still running (3.4.0): place so far, points, the cut line now; boulders not climbed yet = dashed
-function liveCard(ranked, row, who, q, final, full) {
-  const head = rk => `<div class="top"><div><div class="nm">${esc(row.name)}</div><div class="club">${row.club ? esc(row.club) + ' · ' : ''}מס׳ ${row.bib}</div></div><div class="rk">${rk}</div></div>`;
+function liveCard(ranked, row, who, q, final, full, wallTag = '') {
+  const head = rk => `<div class="top"><div><div class="nm">${esc(row.name)}${wallTag}</div><div class="club">${row.club ? esc(row.club) + ' · ' : ''}מס׳ ${row.bib}</div></div><div class="rk">${rk}</div></div>`;
   if (row.rank == null) return `<article class="card fc live${who.added ? ' added' : ''}">${head('–')}<p class="muted small">עדיין בלי תוצאה — יופיע כאן אחרי הבולדר הראשון.</p></article>`;
   const ok = ranked.filter(x => x.rank != null), all = full.filter(x => x.rank != null), i = ok.indexOf(row);
   const overall = all.find(x => x.bib === row.bib)?.rank ?? row.rank, nDone = row.bs.filter(Boolean).length;
@@ -484,9 +490,14 @@ function renderResults(r) {
   const whoByBib = {};
   for (const m of mineOf(r.id)) { const s = r.slots[m.k]; if (s) whoByBib[s.bib] = m; }
   const running = res.live && !res.complete;
+  // 3.8.0: who is on the wall right now (rotation model + calibration) → label next to the name + frame on that boulder
+  const onWall = {};
+  if (res.live) { const s = stateAt(r, now(), off(r.id)); if (s.phase === 'live') s.boulders.forEach((sl, j) => { if (sl) onWall[sl.bib] = j + 1; }); }
+  const wallTag = bib => (onWall[bib] ? `<span class="onwall"><i></i>על הקיר · B${onWall[bib]}</span>` : '');
+  const fresh = liveFresh[r.id] || new Set();
   const q = res.live ? quota(res.rows.length) : analyze(full, full[0]).quota;
   const mine = (running ? ranked : ok).filter(x => whoByBib[x.bib]);
-  const cards = mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
+  const cards = mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib)) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
     : `<p class="muted">${VIEWER ? 'אין ספורטאים מהפלגיה בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
@@ -494,16 +505,16 @@ function renderResults(r) {
       <span class="c">${b.tops} טופ · ${b.tops + b.zoneOnly} זון / ${b.n}</span><span></span>
       <div class="mydots">${md}<span class="avg">ממוצע ניסיונות לטופ ${b.avgTop ?? '–'}</span><span class="avg">ממוצע ניסיונות לזון ${b.avgZone ?? '–'}</span></div></div>`;
   }).join('');
-  const cell = b => { const k = kind(b);
-    if (k === 'w') return '<div class="cell w"><span class="a">·</span><span class="p"></span></div>';
-    return `<div class="cell ${k}"><span class="a">${k === 'n' ? '—' : (b[0] ? 'T' + b[0] + ' ' : '') + 'Z' + b[1]}</span><span class="p">${k === 'n' ? '0' : pts(b).toFixed(1)}</span></div>`; };
+  const cell = (b, j, bib) => { const k = kind(b), ex = (onWall[bib] === j + 1 ? ' climbing' : '') + (fresh.has(`${bib}:${j}`) ? ' fresh' : '');
+    if (k === 'w') return `<div class="cell w${ex}"><span class="a">${ex.includes('climbing') ? 'מטפס' : '·'}</span><span class="p"></span></div>`;
+    return `<div class="cell ${k}${ex}"><span class="a">${k === 'n' ? '—' : (b[0] ? 'T' + b[0] + ' ' : '') + 'Z' + b[1]}</span><span class="p">${k === 'n' ? '0' : pts(b).toFixed(1)}</span></div>`; };
   let cutDone = false;
   const rows = ranked.map(x => {
     const w = whoByBib[x.bib], cls = w ? (w.added ? 'mine added' : 'mine') : '';
     let pre = '';
     if (!res.final && !cutDone && x.rank != null && overallOf[x.bib] > q) { cutDone = true; pre = `<tr class="cut"><td colspan="${nB + 5}">קו העלייה לסבב הבא · ${q} עולים${ranked === full ? ` (${ok.length} התחילו)` : ' לפי הדירוג הכללי'}</td></tr>`; }
-    return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b><small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
-      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : 'לא התחיל (DNS)'}</td><td></td><td class="tt">–</td>` : x.bs.map(b => `<td>${cell(b)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
+    return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b>${wallTag(x.bib)}<small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
+      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : 'לא התחיל (DNS)'}</td><td></td><td class="tt">–</td>` : x.bs.map((b, j) => `<td>${cell(b, j, x.bib)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
   patch($('#view-results'), `<div class="res${res.live ? ' is-live' : ''}">
     ${chips}
@@ -1191,6 +1202,18 @@ async function copy(text) { try { await navigator.clipboard.writeText(text); sho
 function showToast(text) {
   const el = document.createElement('div'); el.className = 'toast'; el.textContent = text;
   document.body.append(el); setTimeout(() => el.remove(), 1800);
+}
+
+// 3.8.0 live score toast (red, bottom): "name · בולדר N · זון/טופ בניסיון K"; max 3 on screen, 6 s each, tap closes
+function liveToast(e) {
+  let box = $('#live-toasts');
+  if (!box) { box = document.createElement('div'); box.id = 'live-toasts'; box.setAttribute('aria-live', 'polite'); document.body.append(box); }
+  const el = document.createElement('button'); el.type = 'button'; el.className = 'ltoast';
+  el.innerHTML = `<span class="k">${e.kind === 'top' ? 'T' : 'Z'}</span>${esc(e.name)} · בולדר ${e.b} · ${e.kind === 'top' ? 'טופ' : 'זון'} בניסיון ${e.att}`;
+  el.addEventListener('click', () => el.remove());
+  box.append(el);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => el.remove(), 6000);
 }
 
 // ---- sync between the coach's devices (sync.js) ----
