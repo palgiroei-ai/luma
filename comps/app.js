@@ -7,8 +7,9 @@ import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, r
 import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive } from './live.js';
 import { quota } from './results.js';
+import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 
-export const APP_VERSION = '3.6.2';
+export const APP_VERSION = '3.7.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -227,11 +228,11 @@ function renderTabs() {
   }).join(''));
 }
 
-function slotCard(r, s, cls, label) {
+function slotCard(r, s, cls, label, tagHtml = '') {
   const mk = mineK(r.id);
-  if (!s) return `<div class="${cls} empty"><div class="lane-label">${label}</div><div class="who">—</div></div>`;
+  if (!s) return `<div class="${cls} empty"><div class="lane-label">${label}</div>${tagHtml}<div class="who">—</div></div>`;
   const mine = mk.has(s.k), added = mine && mineOf(r.id).find(m => m.k === s.k)?.added;
-  return `<div class="${cls}${mine ? ' mine' : ''}${added ? ' added' : ''}"><div class="lane-label">${label}</div>
+  return `<div class="${cls}${mine ? ' mine' : ''}${added ? ' added' : ''}"><div class="lane-label">${label}</div>${tagHtml}
     <div class="ord">#${s.order}</div><div class="who">${esc(s.name)}</div>
     <div class="bib">גב ${s.bib}${mine ? ` · <b>${esc(shortOf(r.id, s.k))}</b>` : ''}</div></div>`;
 }
@@ -245,7 +246,8 @@ function renderBoard(r, s, el = $('#board')) {
     busyPh.has(r.id + ':' + b) ? '<span class="ph-add-busy">מעלה…</span>' : `<span class="plus">+</span><span class="ph-add-t">בולדר ${b}</span><span class="ph-add-l">הוסף תמונה</span>`}</button>`);
   for (let j = 0; j < r.boulders; j++) {
     const th = thumb(j + 1), add = th ? '' : addSpot(j + 1);
-    cells.push(slotCard(r, s.boulders[j], `lane boulder${th ? ' has-ph' : add ? ' no-ph' : ''}`, th ? `${th}בולדר ${j + 1}` : add ? `${add}<span class="ph-ttl">בולדר ${j + 1}</span>` : `בולדר ${j + 1}`));
+    const bt = boardTag(r.id, j + 1);
+    cells.push(slotCard(r, s.boulders[j], `lane boulder${th ? ' has-ph' : add ? ' no-ph' : ''}`, th ? `${th}בולדר ${j + 1}` : add ? `${add}<span class="ph-ttl">בולדר ${j + 1}</span>` : `בולדר ${j + 1}`, bt));
     if (j < r.boulders - 1) cells.push(slotCard(r, s.rests[j], 'lane rest', `מנוחה <span class="nw">${j + 1}–${j + 2}</span>`));
   }
   if (r.trailingRest) cells.push(slotCard(r, s.trailing, 'lane rest', 'מנוחת סיום'));
@@ -1210,6 +1212,7 @@ function renderSyncState() {
 }
 function onRemote(ch) {
   if (ch.photos?.length && $('#photos-dlg').open) renderPhotoGrid();
+  if (ch.tags?.length && $('#tags-dlg').open && !tagEdit) renderTagList();
   for (const x of ['mine', 'all', 'log', 'home']) if ($('#view-' + x)) $('#view-' + x)._html = null;
   render(); renderSyncState();
   const other = ch.offsets.filter(o => o.dev && o.dev !== store.device);
@@ -1288,6 +1291,111 @@ function openPhoto(rid, b) {
   $('#photo-img').src = u;
   $('#photo-dlg').showModal();
 }
+// ---- boulder tags (3.7.0): the coach tags each boulder (wall angle → style → style questions), any time — before,
+// during or after the round. Shared between the coach's devices; viewers see wall + style on the board only.
+// Layout = the map Roei approved (docs/specs/2026-10-15-boulder-tagging-map.html).
+const WALL_ICON = {
+  slab: 'M12 37 L28 4', face: 'M20 37 L20 4', light: 'M25 37 L15 4', strong: 'M32 37 L16 14 L3 11', corner: 'M20 37 L20 13 M20 13 L6 4 M20 13 L34 4',
+};
+const wallSvg = id => `<svg class="wall-ic" viewBox="0 0 40 40" aria-hidden="true"><line class="g" x1="2" y1="37" x2="38" y2="37"/><path class="w" d="${WALL_ICON[id] || ''}"/></svg>`;
+const SEC_HE = { zone: 'זון', top: 'טופ' };
+// board: wall icon + style name, once for a whole boulder (or when zone = top), else זון / טופ side by side
+function boardTag(rid, b) {
+  const t = store.tag(rid, b); if (!t) return '';
+  const one = (x, pre = '') => (x?.wall || x?.style ? `<span class="btag${x.style ? ' st-' + x.style : ''}">${pre}${x.wall ? wallSvg(x.wall) : ''}${x.style ? esc(styleOf(x.style).l) : ''}</span>` : '');
+  const same = t.mode === 'whole' || (t.zone.wall === t.top.wall && t.zone.style === t.top.style);
+  const html = same ? one(t.zone) : one(t.zone, '<i>Z</i>') + one(t.top, '<i>T</i>');
+  return html ? `<div class="btags">${html}</div>` : '';
+}
+let tagRound = null, tagEdit = null; // tagEdit = { b, draft, sec } while the form is open
+const blankSec = () => ({ wall: null, style: null, feet: [], sub: {} });
+function openTags() {
+  tagRound = current; tagEdit = null; renderTagList();
+  $('#tags-dlg').showModal();
+}
+function tagLine(x) {
+  if (!x?.wall && !x?.style) return '<span class="muted">לא תויג</span>';
+  const st = styleOf(x.style), parts = [];
+  if (x.wall) parts.push(`<span class="tpill">${wallSvg(x.wall)}${esc(wallOf(x.wall).l)}</span>`);
+  if (x.feet?.length) parts.push(`<span class="tpill">${x.feet.map(f => esc(FEET.o.find(o => o.id === f)?.l)).join(' + ')}</span>`);
+  if (st) {
+    parts.push(`<span class="tpill st st-${st.id}">${esc(st.l)}</span>`);
+    for (const q of st.q) if (x.sub?.[q.id]?.length) parts.push(`<span class="tpill">${x.sub[q.id].map(o => esc(q.o.find(z => z.id === o)?.l)).join(' + ')}</span>`);
+  }
+  return parts.join('');
+}
+function tagSummary(t) {
+  if (!t) return '<div class="tg-row"><span class="muted">לא תויג</span></div>';
+  const rows = t.mode === 'whole' ? [['כל הבולדר', t.zone]] : [['זון', t.zone], ['טופ', t.top]];
+  return rows.map(([l, x]) => `<div class="tg-row"><b>${l}</b>${tagLine(x)}</div>`).join('') + (t.note ? `<div class="tg-row tg-note">${esc(t.note)}</div>` : '');
+}
+function renderTagList() {
+  const r = round(tagRound); if (!r) return;
+  $('#tags-title').textContent = `תיוג בולדרים · ${r.title}`;
+  $('#tags-body').innerHTML = `<div class="tg-list">${Array.from({ length: r.boulders }, (_, j) => {
+    const b = j + 1, t = store.tag(r.id, b), u = photoUrl(r.id, b);
+    return `<div class="tg-cell${t ? '' : ' empty'}">
+      <div class="tg-cell-h">${u ? `<img src="${u}" alt="">` : ''}<b>בולדר ${b}</b>
+        <button type="button" class="btn ${t ? 'btn-ghost' : 'btn-primary'} btn-sm" data-tg-open="${b}">${t ? 'עריכה' : 'תייג'}</button></div>
+      ${tagSummary(t)}</div>`;
+  }).join('')}</div>`;
+}
+function tagOpen(b) {
+  const t = store.tag(tagRound, b);
+  tagEdit = { b, sec: 'zone', draft: t ? structuredClone(t) : { mode: 'split', zone: blankSec(), top: blankSec(), note: '' } };
+  renderTagForm();
+}
+const chipBtn = (label, on, attrs, extra = '', cls = '') => `<button type="button" class="tchip${cls ? ' ' + cls : ''}" aria-pressed="${on}" ${attrs}>${extra}${label}</button>`;
+const badge = (txt, cls = '') => `<span class="tbadge ${cls}">${txt}</span>`;
+function renderTagForm() {
+  const r = round(tagRound), { b, draft: d } = tagEdit;
+  const sk = d.mode === 'whole' ? 'zone' : tagEdit.sec, x = d[sk], st = styleOf(x.style);
+  const many = badge('אפשר כמה') + badge('מה שמופיע במהלכים הקשים');
+  let h = `<button type="button" class="link tg-back" data-tg-back="1">‹ כל הבולדרים</button>
+    <h3 class="tg-h">בולדר ${b}</h3>
+    <div class="tq"><div class="tq-h"><b>איך מתייגים את הבולדר?</b></div>
+      <div class="seg" role="group" aria-label="חלוקה">
+        <button type="button" data-tg-mode="whole" aria-pressed="${d.mode === 'whole'}">כל הבולדר כאחד</button>
+        <button type="button" data-tg-mode="split" aria-pressed="${d.mode === 'split'}">זון + טופ בנפרד</button></div></div>`;
+  if (d.mode === 'split') h += `<div class="tq"><div class="tq-h"><b>עכשיו מתייגים את</b></div>
+      <div class="seg" role="group" aria-label="חלק בבולדר">${['zone', 'top'].map(s => `<button type="button" data-tg-sec="${s}" aria-pressed="${s === tagEdit.sec}">${SEC_HE[s]}</button>`).join('')}</div></div>`;
+  h += `<div class="tq"><div class="tq-h"><b>שיפוע</b>${badge('חובה', 'req')}${badge('לפי הקראקס', 'crux')}</div>
+    <div class="tchips">${WALLS.map(w => chipBtn(esc(w.l), x.wall === w.id, `data-tg-wall="${w.id}"${w.h ? ` title="${esc(w.h)}"` : ''}`, wallSvg(w.id))).join('')}</div></div>`;
+  if (x.wall === 'slab') h += `<div class="tbranch"><div class="tq"><div class="tq-h"><b>${FEET.l}</b>${many}</div>
+    <div class="tchips">${FEET.o.map(o => chipBtn(esc(o.l), x.feet.includes(o.id), `data-tg-feet="${o.id}"`)).join('')}</div></div></div>`;
+  h += `<div class="tq"><div class="tq-h"><b>סגנון</b>${badge('חובה', 'req')}${badge('לפי הקראקס', 'crux')}</div>
+    <div class="tchips">${STYLES.map(s => chipBtn(esc(s.l), x.style === s.id, `data-tg-style="${s.id}"`, '', 'st-' + s.id)).join('')}</div></div>`;
+  if (st) h += `<div class="tbranch st-${st.id}"><p class="muted small">${esc(st.d)}</p>${st.q.map(q => `<div class="tq"><div class="tq-h"><b>${esc(q.l)}</b>${many}</div>
+    <div class="tchips">${q.o.map(o => chipBtn(esc(o.l), (x.sub[q.id] || []).includes(o.id), `data-tg-q="${q.id}" data-tg-o="${o.id}"${o.h ? ` title="${esc(o.h)}"` : ''}`)).join('')}</div></div>`).join('')}</div>`;
+  h += `<label class="tq">הערה (רשות)<textarea id="tg-note" rows="2" maxlength="500" placeholder="למשל: הקראקס זה ה-heel בסוף">${esc(d.note || '')}</textarea></label>
+    <div class="tg-out"><b>כך זה יישמר</b>${tagSummary({ ...d, top: d.mode === 'whole' ? d.zone : d.top, note: '' })}</div>
+    <div class="dlg-actions">${store.tag(r.id, b) ? '<button type="button" class="btn btn-ghost btn-sm danger" data-tg-clear="1">מחיקת התיוג</button>' : ''}
+      <button type="button" class="btn btn-ghost" data-tg-back="1">ביטול</button><button type="button" class="btn btn-primary" data-tg-save="1">שמירה</button></div>`;
+  $('#tags-body').innerHTML = h;
+}
+function tagClick(e) {
+  const btn = e.target.closest('button'); if (!btn) return;
+  const d = btn.dataset;
+  if (d.tgOpen) { tagOpen(Number(d.tgOpen)); return; }
+  if (!tagEdit) return;
+  const dr = tagEdit.draft; dr.note = $('#tg-note')?.value ?? dr.note;
+  const x = dr[dr.mode === 'whole' ? 'zone' : tagEdit.sec];
+  const tog = (arr, v) => (arr.includes(v) ? arr.filter(z => z !== v) : [...arr, v]);
+  if (d.tgBack) { tagEdit = null; renderTagList(); return; }
+  if (d.tgSave) { store.setTag(tagRound, tagEdit.b, dr); tagEdit = null; renderTagList(); if (SIM_AT == null) syncNow(); render(); return; }
+  if (d.tgClear) { store.clearTag(tagRound, tagEdit.b); tagEdit = null; renderTagList(); if (SIM_AT == null) syncNow(); render(); return; }
+  if (d.tgMode) { if (d.tgMode === 'split' && dr.mode === 'whole') { dr.top = structuredClone(dr.zone); tagEdit.sec = 'zone'; } dr.mode = d.tgMode; }
+  else if (d.tgSec) tagEdit.sec = d.tgSec;
+  else if (d.tgWall) { x.wall = x.wall === d.tgWall ? null : d.tgWall; if (x.wall !== 'slab') x.feet = []; }
+  else if (d.tgFeet) x.feet = tog(x.feet, d.tgFeet);
+  else if (d.tgStyle) { if (x.style !== d.tgStyle) { x.style = d.tgStyle; x.sub = {}; } else { x.style = null; x.sub = {}; } }
+  else if (d.tgQ) x.sub[d.tgQ] = tog(x.sub[d.tgQ] || [], d.tgO);
+  else return;
+  const keep = Object.entries(d).map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${v}"]`).join('');
+  renderTagForm();
+  $('#tags-body').querySelector(keep)?.focus();
+}
+
 // iPad photos are big: draw onto a canvas ≤1600 px on the long side, JPEG ≤1 MB (usually ~250 KB)
 async function shrinkPhoto(file) {
   const src = URL.createObjectURL(file);
@@ -1550,6 +1658,7 @@ function start() {
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
     else if (d.photo) openPhoto($('#photos-dlg').open ? gridRound : current, Number(d.photo));
     else if (b.id === 'photos-btn') openPhotos();
+    else if (b.id === 'tags-btn') openTags();
     else if (d.phAdd) { gridRound = current; upTarget = Number(d.phAdd); $('#photo-file').value = ''; $('#photo-file').click(); }
     else if (d.phUp) { upTarget = Number(d.phUp); $('#photo-file').value = ''; $('#photo-file').click(); }
     else if (d.phDel) deletePhoto(gridRound, Number(d.phDel));
@@ -1623,6 +1732,8 @@ function start() {
   $('#view-log').addEventListener('change', e => { const id = e.target.dataset?.apOut; if (id) { store.setAppeal(id, { outcome: e.target.value.trim() }); render(); } });
   $('#photo-file').addEventListener('change', e => { const f = e.target.files?.[0]; if (f && upTarget != null && !VIEWER) uploadPhoto(gridRound, upTarget, f); });
   $('#photo-dlg').addEventListener('click', () => $('#photo-dlg').close()); // tap anywhere closes the big photo
+  $('#tags-dlg').addEventListener('click', tagClick);
+  $('#tags-dlg').addEventListener('close', () => { tagEdit = null; });
   $('#dev-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }); // Enter must not close the dialog
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applySettings);
   applySettings();

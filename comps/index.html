@@ -134,6 +134,7 @@
             <button type="button" data-view="results" aria-pressed="false" hidden>תוצאות</button>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" id="photos-btn">📷 תמונות בולדרים</button>
+          <button type="button" class="btn btn-ghost btn-sm coach-only" id="tags-btn">🧗 תיוג בולדרים</button>
         </div>
       </div>
       <div id="view-mine" class="mine-grid"></div>
@@ -315,6 +316,14 @@
   </form>
 </dialog>
 <input type="file" id="photo-file" accept="image/*" hidden>
+
+<dialog id="tags-dlg" class="dlg dlg-wide">
+  <form method="dialog">
+    <div class="ph-head"><h2 id="tags-title"></h2><button class="ph-x" value="close" aria-label="סגירה">✕</button></div>
+    <p class="muted small">שיפוע וסגנון מופיעים גם על הלוח (גם לצופים) · שאר התיוג למאמן בלבד</p>
+    <div id="tags-body"></div>
+  </form>
+</dialog>
 
 <dialog id="photo-dlg" class="ph-view">
   <div class="ph-head"><h2 id="photo-title"></h2><span class="ph-x" aria-hidden="true">✕</span></div>

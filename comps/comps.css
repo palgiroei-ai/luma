@@ -17,6 +17,11 @@
   --on-primary: #FFFFFF;
   --added: #2F5DA8;
   --added-bg: #E2EBF8;
+  /* 3.7.0 boulder styles (like hold colors on a wall): פיזי / טכני / קואורדינציה / אלקטרי */
+  --st-phys: #B23E0B; --st-phys-bg: #FCEADF;
+  --st-tech: #1A5E9E; --st-tech-bg: #E2EDF9;
+  --st-coord: #7F5400; --st-coord-bg: #FAF0D7;
+  --st-elec: #6730D0; --st-elec-bg: #EEE6FC;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(20, 36, 59, .05), 0 8px 24px rgba(20, 36, 59, .06);
   --font: 'Heebo', system-ui, sans-serif;
@@ -289,6 +294,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --copper: #E8834A; --copper-text: #F0955F; --copper-bg: #3D2420; --danger: #F2847D; --danger-bg: #3E1C1F; --ok: #5FD39A;
   --primary: #F2ECE3; --on-primary: #2E1A47;
   --added: #8FB3F5; --added-bg: #1F2547;
+  --st-phys: #FB8A52; --st-phys-bg: #3A2219; --st-tech: #6CB2F2; --st-tech-bg: #16263A; --st-coord: #E5B440; --st-coord-bg: #352A12; --st-elec: #B69BFF; --st-elec-bg: #2E2348;
   --live: #FF8A80;
 }
 :root[data-theme="charcoal"] {
@@ -296,6 +302,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --copper: #E8834A; --copper-text: #F0955F; --copper-bg: #3A2419; --danger: #F2847D; --danger-bg: #3A1A1C; --ok: #5FD39A;
   --primary: #B39BE0; --on-primary: #1A1024;
   --added: #8FB3F5; --added-bg: #1B2333;
+  --st-phys: #FB8A52; --st-phys-bg: #33211A; --st-tech: #6CB2F2; --st-tech-bg: #162433; --st-coord: #E5B440; --st-coord-bg: #30280F; --st-elec: #B69BFF; --st-elec-bg: #2A2238;
   --live: #FF8A80;
 }
 :root[data-theme="black"] {
@@ -303,6 +310,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --copper: #E8834A; --copper-text: #F0955F; --copper-bg: #2E1B12; --danger: #F2847D; --danger-bg: #33161A; --ok: #5FD39A;
   --primary: #E8834A; --on-primary: #1A1024;
   --added: #8FB3F5; --added-bg: #0E1A2E;
+  --st-phys: #FB8A52; --st-phys-bg: #2A170E; --st-tech: #6CB2F2; --st-tech-bg: #0E1B2B; --st-coord: #E5B440; --st-coord-bg: #261F0A; --st-elec: #B69BFF; --st-elec-bg: #1E1630;
   --live: #FF8A80;
 }
 :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) { --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); color-scheme: dark; }
@@ -939,3 +947,46 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .sc-luma .wordmark { font-size: clamp(15px, 3vw, 36px); }
 .sc-field .seg { justify-self: start; }
 .h-head .h-tools { margin-inline-start: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---- 3.7.0 boulder tags: wall-angle drawings + one color per style (approved map, docs/specs/2026-10-15-boulder-tagging-map.html) ---- */
+.st-phys { --st: var(--st-phys); --st-bg: var(--st-phys-bg); }
+.st-tech { --st: var(--st-tech); --st-bg: var(--st-tech-bg); }
+.st-coord { --st: var(--st-coord); --st-bg: var(--st-coord-bg); }
+.st-elec { --st: var(--st-elec); --st-bg: var(--st-elec-bg); }
+.wall-ic { width: 1.35em; height: 1.35em; flex: none; vertical-align: -0.3em; }
+.wall-ic .w { stroke: currentColor; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.wall-ic .g { stroke: currentColor; stroke-width: 1.5; opacity: .35; }
+/* board strip inside the "בולדר N" label */
+.btags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; margin-block: 2px 4px; }
+.btag { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 700; padding: 0 6px 0 4px; border-radius: 6px; background: var(--st-bg, var(--line)); color: var(--st, var(--navy)); line-height: 1.6; }
+.btag i { font-style: normal; opacity: .75; margin-inline-end: 2px; }
+.btag .wall-ic { width: 14px; height: 14px; }
+.lane.mine .btag { background: var(--card); }
+/* list of boulders */
+.tg-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.tg-cell { border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; gap: 8px; align-content: start; background: var(--card); }
+.tg-cell.empty { border-style: dashed; }
+.tg-cell-h { display: flex; align-items: center; gap: 10px; }
+.tg-cell-h img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; }
+.tg-cell-h .btn { margin-inline-start: auto; }
+.tg-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 14px; }
+.tg-row > b { min-width: 3.4em; }
+.tg-note { color: var(--muted); }
+.tpill { display: inline-flex; align-items: center; gap: 3px; border-radius: 6px; padding: 1px 8px; background: var(--line); font-size: 13px; }
+.tpill.st { background: var(--st-bg); color: var(--st); font-weight: 700; }
+/* the form */
+.tg-back { justify-self: start; }
+.tg-h { font-size: 18px; font-weight: 800; margin: 0; }
+#tags-body { display: grid; gap: 14px; }
+.tq { display: grid; gap: 8px; }
+.tq-h { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tbadge { font-size: 11px; font-weight: 600; padding: 0 7px; border-radius: 999px; border: 1px solid currentColor; color: var(--muted); }
+.tbadge.req { color: var(--ok); }
+.tbadge.crux { color: var(--added); }
+.tchips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tchip { font: inherit; font-size: 15px; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--card); color: var(--navy); cursor: pointer; }
+.tchip[aria-pressed="true"] { border-color: var(--st, var(--navy)); background: var(--st-bg, var(--line)); color: var(--st, var(--navy)); font-weight: 700; }
+.tchip.st-phys, .tchip.st-tech, .tchip.st-coord, .tchip.st-elec { color: var(--st); }
+.tbranch { border-inline-start: 3px solid var(--st, var(--border)); padding-inline-start: 12px; display: grid; gap: 12px; }
+.tbranch .tchip[aria-pressed="true"] { border-color: var(--st, var(--navy)); }
+.tg-out { border-top: 1px dashed var(--border); padding-top: 12px; display: grid; gap: 6px; }

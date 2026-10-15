@@ -3,6 +3,7 @@
 // Simulation (?at=…) uses its own key so demo notes/offsets never mix with the real competition (and never sync).
 // Shared between the coach's devices (sync.js ↔ Worker /sync): notes, appeals, offsets, my athletes, device names.
 // Each shared change gets a time t and a "dirty" mark until the server has it; the newest t wins.
+import { normTag } from './tags.js';
 const KEY = new URLSearchParams(location.search).get('at') ? 'comps.sim.v1' : 'comps.v1';
 const CODE_KEY = 'comps.code';
 export const DEFAULT_SETTINGS = {
@@ -18,7 +19,7 @@ export const DEFAULT_SETTINGS = {
 };
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const blank = () => ({ offsets: {}, delays: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {}, push: { on: false, device: null },
-  v: 0, device: null, devName: '', devices: {}, meta: {}, dirty: {}, rev: 0, lastSync: 0, photos: {} });
+  v: 0, device: null, devName: '', devices: {}, meta: {}, dirty: {}, rev: 0, lastSync: 0, photos: {}, tags: {} });
 
 export function defaultDeviceName(ua = navigator.userAgent || '', touch = navigator.maxTouchPoints > 1) {
   if (/iPad/.test(ua) || (/Macintosh/.test(ua) && touch)) return 'אייפד';
@@ -46,6 +47,11 @@ if (state.v < 2) {
 if (state.v < 3) {
   for (const k of Object.keys(state.meta || {})) if (k.startsWith('photo:')) delete state.meta[k];
   state.photos = {}; state.rev = 0; state.v = 3; save();
+}
+// v4 (3.7.0 boulder tags): same story — ≤3.6 skipped 'tag' rows but moved rev past them → forget + pull again once.
+if (state.v < 4) {
+  for (const k of Object.keys(state.meta || {})) if (k.startsWith('tag:')) delete state.meta[k];
+  state.tags = {}; state.rev = 0; state.v = 4; save();
 }
 
 function save() {
@@ -131,6 +137,11 @@ export const store = {
   // boulder photos (2.1.0): version per "round:b" (0 = none). Set only by the server (upload goes straight to /photo).
   photoV(roundId, b) { return state.photos?.[roundId + ':' + b] || 0; },
 
+  // boulder tags (3.7.0): one per "round:b", shared between the coach's devices (newest t wins); viewers get wall + style
+  tag(roundId, b) { return state.tags?.[roundId + ':' + b] || null; },
+  setTag(roundId, b, tag) { const id = roundId + ':' + b; state.tags = state.tags || {}; state.tags[id] = normTag(tag); touch('tag', id); },
+  clearTag(roundId, b) { const id = roundId + ':' + b; if (state.tags) delete state.tags[id]; touch('tag', id); },
+
   // ---- sync ----
   get device() { return state.device; },
   get devName() { return state.devName; },
@@ -151,6 +162,7 @@ export const store = {
         const x = listOf(kind).find(n => n.id === id);
         if (x) out.push({ kind, id, t: x.t, del: x.del ? 1 : 0, data: STRIP(x) }); else delete state.dirty[key];
       } else {
+        if (kind === 'tag') { const tg = state.tags?.[id]; out.push({ kind, id, t: state.meta[key] || 1, del: tg ? 0 : 1, data: tg || null }); continue; }
         const data = kind === 'offset' ? { v: state.offsets[id] || 0, d: this.delay(id) } : kind === 'mine' ? { add: this.mineAdd(id), del: this.mineDel(id) } : { name: state.devName };
         out.push({ kind, id, t: state.meta[key] || 1, del: 0, data });
       }
@@ -168,7 +180,7 @@ export const store = {
   },
   // rows from the server (newest wins). Returns what changed so the UI can re-render / tell the coach.
   applyRemote(items, rev) {
-    const changed = { any: false, offsets: [], photos: [] };
+    const changed = { any: false, offsets: [], photos: [], tags: [] };
     for (const r of items || []) {
       const key = r.kind + ':' + r.id;
       if (r.kind === 'note' || r.kind === 'appeal') {
@@ -190,6 +202,11 @@ export const store = {
         state.photos = state.photos || {};
         if (r.del) delete state.photos[r.id]; else state.photos[r.id] = r.data?.v || r.t;
         changed.photos.push(r.id);
+      } else if (r.kind === 'tag') {
+        state.tags = state.tags || {};
+        const tg = r.del ? null : normTag(r.data);
+        if (tg) state.tags[r.id] = tg; else delete state.tags[r.id];
+        changed.tags.push(r.id);
       } else if (r.kind === 'device') {
         if (r.id === state.device) state.devName = r.data?.name || state.devName;
         else state.devices[r.id] = String(r.data?.name || '');
