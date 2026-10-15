@@ -9,7 +9,7 @@ import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 
-export const APP_VERSION = '3.8.0';
+export const APP_VERSION = '3.8.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -331,12 +331,13 @@ function resByBib(r) {
   const overall = Object.fromEntries(full.map(x => [x.bib, x.rank]));
   return { res, q: quota(res.live ? res.rows.length : ok.length), overall, by: Object.fromEntries(shown.map(x => [x.bib, x])), all: Object.fromEntries(full.map(x => [x.bib, x])) };
 }
-const bsTxt = bs => bs.map((b, j) => (b ? `B${j + 1} ${cellTxt(b)}` : null)).filter(Boolean).join(' · ');
+// 3.8.1: a boulder that just got a zone/top (live) blinks here too
+const bsTxt = (bs, fr, bib) => bs.map((b, j) => (b ? (fr?.has(`${bib}:${j}`) ? `<span class="lfresh">B${j + 1} ${cellTxt(b)}</span>` : `B${j + 1} ${cellTxt(b)}`) : null)).filter(Boolean).join(' · ');
 const provisional = R => (R.res.live && !R.res.complete ? ' (זמני)' : '');
-function resLine(R, bib) {
+function resLine(R, bib, rid) {
   const x = R?.by[bib]; if (!x || x.rank == null) return '';
   const cut = R.res.final ? '' : R.overall[bib] <= R.q ? ' · <span class="yes">בפנים</span>' : ' · <span class="out">בחוץ</span>';
-  return `<p class="res-line${R.res.live ? ' live' : ''}"><b>מקום ${x.rank}${provisional(R)}</b> · ${x.score.toFixed(1)} נק׳ · <bdi dir="ltr">${bsTxt(x.bs)}</bdi>${cut}</p>`;
+  return `<p class="res-line${R.res.live ? ' live' : ''}"><b>מקום ${x.rank}${provisional(R)}</b> · ${x.score.toFixed(1)} נק׳ · <bdi dir="ltr">${bsTxt(x.bs, R.res.live ? liveFresh[rid] : null, bib)}</bdi>${cut}</p>`;
 }
 function mineCards(r, t, el) {
   const list = mineOf(r.id), R = resByBib(r);
@@ -352,7 +353,7 @@ function mineCards(r, t, el) {
       <div class="ath-status">${big}</div>
       <dl class="ath-meta"><div><dt>סדר</dt><dd>#${s.order}</dd></div><div><dt>גב</dt><dd>${s.bib}</dd></div>
         <div><dt>עלייה</dt><dd>${fmtClock(st.startMs)}</dd></div><div><dt>מעבר לנורמן</dt><dd>${fmtHM(s.transfer ? zonedMs(`${r.date}T${s.transfer.padStart(8, '0')}`) + off(r.id) : st.startMs - 80 * 60000)}</dd></div></dl>
-      ${resLine(R, s.bib)}
+      ${resLine(R, s.bib, r.id)}
       ${notes.length ? `<p class="last-note">📝 ${esc(notes[notes.length - 1].text)}${notes.length > 1 ? ` <span class="muted">(+${notes.length - 1})</span>` : ''}</p>` : ''}
       ${appeals.length ? `<p class="last-note appeal-tag">⚑ ${appeals.length} ערעור${appeals.length > 1 ? 'ים' : ''}</p>` : ''}
       <div class="ath-actions"><button type="button" class="btn btn-sm btn-ghost" data-note="${m.k}" data-nr="${r.id}">הערה</button>
@@ -446,14 +447,14 @@ function resCard(ranked, row, who, final, full) {
 }
 
 // live, round still running (3.4.0): place so far, points, the cut line now; boulders not climbed yet = dashed
-function liveCard(ranked, row, who, q, final, full, wallTag = '') {
+function liveCard(ranked, row, who, q, final, full, wallTag = '', fresh = new Set()) {
   const head = rk => `<div class="top"><div><div class="nm">${esc(row.name)}${wallTag}</div><div class="club">${row.club ? esc(row.club) + ' · ' : ''}מס׳ ${row.bib}</div></div><div class="rk">${rk}</div></div>`;
   if (row.rank == null) return `<article class="card fc live${who.added ? ' added' : ''}">${head('–')}<p class="muted small">עדיין בלי תוצאה — יופיע כאן אחרי הבולדר הראשון.</p></article>`;
   const ok = ranked.filter(x => x.rank != null), all = full.filter(x => x.rank != null), i = ok.indexOf(row);
   const overall = all.find(x => x.bib === row.bib)?.rank ?? row.rank, nDone = row.bs.filter(Boolean).length;
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   const above = ok.slice(0, i).reverse().find(x => x.score > row.score), below = ok.slice(i + 1).find(x => x.score < row.score);
-  const bars = row.bs.map((b, j) => b ? `<div class="bar"><div class="fill-wrap"><div class="fill ${kind(b)}" style="height:${pts(b) / 25 * 100}%"></div></div><span class="lb">B${j + 1} (T${b[0] || 0}Z${b[1] || 0})</span></div>`
+  const bars = row.bs.map((b, j) => b ? `<div class="bar${fresh.has(`${row.bib}:${j}`) ? ' fresh' : ''}"><div class="fill-wrap"><div class="fill ${kind(b)}" style="height:${pts(b) / 25 * 100}%"></div></div><span class="lb">B${j + 1} (T${b[0] || 0}Z${b[1] || 0})</span></div>`
     : `<div class="bar wait"><div class="fill-wrap"></div><span class="lb">B${j + 1} · עוד לא</span></div>`).join('');
   let cut = '';
   if (!final) {
@@ -497,7 +498,7 @@ function renderResults(r) {
   const fresh = liveFresh[r.id] || new Set();
   const q = res.live ? quota(res.rows.length) : analyze(full, full[0]).quota;
   const mine = (running ? ranked : ok).filter(x => whoByBib[x.bib]);
-  const cards = mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib)) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
+  const cards = mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
     : `<p class="muted">${VIEWER ? 'אין ספורטאים מהפלגיה בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');

@@ -1005,7 +1005,12 @@ body:not(.viewer) .viewer-only { display: none !important; }
 #live-toasts { position: fixed; inset-inline: 0; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: grid; justify-items: center; gap: 8px; pointer-events: none; z-index: 61; padding-inline: 16px; }
 .ltoast { pointer-events: auto; font: inherit; font-weight: 700; font-size: 15px; background: var(--live); color: var(--card); border: 0; border-radius: 12px; padding: 10px 16px; box-shadow: 0 8px 24px rgba(0,0,0,.25); display: flex; gap: 10px; align-items: center; max-width: min(460px, 100%); cursor: pointer; text-align: start; }
 .ltoast .k { border: 1.5px solid currentColor; border-radius: 6px; padding: 0 6px; font-size: 13px; flex: none; }
+/* 3.8.1: same blink in the "שלי" result line and the live result cards */
+.res-line .lfresh { outline: 2px solid var(--live); outline-offset: 1px; border-radius: 4px; font-weight: 700; color: var(--live); }
+.fc .bar.fresh .fill-wrap { outline: 3px solid var(--live); outline-offset: 2px; }
 @media (prefers-reduced-motion: no-preference) {
+  .res-line .lfresh { display: inline-block; animation: cell-blink .5s ease-in-out 6 alternate; }
+  .fc .bar.fresh .fill-wrap { animation: cell-blink .5s ease-in-out 6 alternate; }
   .onwall i { animation: ow-dot 1.2s ease-in-out infinite; }
   @keyframes ow-dot { 50% { opacity: .25; } }
   .res-tbl .cell.fresh { animation: cell-blink .5s ease-in-out 6 alternate; }
