@@ -1009,11 +1009,11 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .res-line .lfresh { outline: 2px solid var(--live); outline-offset: 1px; border-radius: 4px; font-weight: 700; color: var(--live); }
 .fc .bar.fresh .fill-wrap { outline: 3px solid var(--live); outline-offset: 2px; }
 @media (prefers-reduced-motion: no-preference) {
-  .res-line .lfresh { display: inline-block; animation: cell-blink .5s ease-in-out 6 alternate; }
-  .fc .bar.fresh .fill-wrap { animation: cell-blink .5s ease-in-out 6 alternate; }
+  .res-line .lfresh { display: inline-block; animation: cell-blink .5s ease-in-out 20 alternate; }
+  .fc .bar.fresh .fill-wrap { animation: cell-blink .5s ease-in-out 20 alternate; }
   .onwall i { animation: ow-dot 1.2s ease-in-out infinite; }
   @keyframes ow-dot { 50% { opacity: .25; } }
-  .res-tbl .cell.fresh { animation: cell-blink .5s ease-in-out 6 alternate; }
+  .res-tbl .cell.fresh { animation: cell-blink .5s ease-in-out 20 alternate; }
   @keyframes cell-blink { from { transform: scale(1); } to { transform: scale(1.08); box-shadow: 0 0 0 5px var(--live); } }
   .ltoast { animation: lt-up .25s ease-out; }
   @keyframes lt-up { from { transform: translateY(12px); opacity: 0; } }

@@ -9,7 +9,7 @@ import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 
-export const APP_VERSION = '3.8.1';
+export const APP_VERSION = '3.8.2';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -143,7 +143,10 @@ const LTAG = '<i class="ltag" aria-hidden="true"><i></i>LIVE</i>';
 const LIVE_FORCE = SIM_AT != null && params.get('live') === 'force'; // testing only: replay the live data over a finished round
 const live = { data: null, at: 0, err: false, busy: false };
 const liveCache = {};
-const liveSeen = {}, liveFresh = {}; // 3.8.0: last rows per round (to spot new zones/tops) + cells that just changed
+const liveSeen = {}, liveFresh = {}; // 3.8.0: last rows per round (to spot new zones/tops) + cells that just changed (key → when)
+// 3.8.2 (Roei): a new zone/top blinks for 10 s, counted from when we saw it (not cut short by the next update)
+const FRESH_MS = 10000;
+const freshOf = id => { const m = liveFresh[id], out = new Set(); if (m) for (const [k, at] of m) { if (Date.now() - at < FRESH_MS) out.add(k); else m.delete(k); } return out; };
 function liveOf(id) {
   const r = round(id); if (!live.data || !r) return null;
   const key = `${live.at}:${Math.floor(now() / 15000)}`;
@@ -157,7 +160,7 @@ function liveOf(id) {
     lr.rows.forEach(x => { if (!x.cat) x.cat = catOf[x.bib] || null; x.club = prev?.rows.find(y => y.bib === x.bib)?.club || x.club; });
     // 3.8.0: new zone / top since the last update → red toast (everyone, every user) + the cell blinks until the next update
     const evs = liveEvents(liveSeen[id], lr.rows);
-    if (liveSeen[id]) liveFresh[id] = new Set(evs.map(e => `${e.bib}:${e.b - 1}`));
+    if (liveSeen[id]) { const m = liveFresh[id] || (liveFresh[id] = new Map()); for (const e of evs) m.set(`${e.bib}:${e.b - 1}`, Date.now()); }
     liveSeen[id] = lr.rows.map(x => ({ bib: x.bib, bs: x.bs.map(c => c && [...c]) }));
     if (id === current && screen === 'round') evs.forEach(liveToast);
     v = { ...lr, live: true, final: lastRound(id), source: `תוצאות חיות מההתאחדות · ניסיון, לא רשמי · עודכן ${fmtClock(lr.updated)}` };
@@ -337,7 +340,7 @@ const provisional = R => (R.res.live && !R.res.complete ? ' (זמני)' : '');
 function resLine(R, bib, rid) {
   const x = R?.by[bib]; if (!x || x.rank == null) return '';
   const cut = R.res.final ? '' : R.overall[bib] <= R.q ? ' · <span class="yes">בפנים</span>' : ' · <span class="out">בחוץ</span>';
-  return `<p class="res-line${R.res.live ? ' live' : ''}"><b>מקום ${x.rank}${provisional(R)}</b> · ${x.score.toFixed(1)} נק׳ · <bdi dir="ltr">${bsTxt(x.bs, R.res.live ? liveFresh[rid] : null, bib)}</bdi>${cut}</p>`;
+  return `<p class="res-line${R.res.live ? ' live' : ''}"><b>מקום ${x.rank}${provisional(R)}</b> · ${x.score.toFixed(1)} נק׳ · <bdi dir="ltr">${bsTxt(x.bs, R.res.live ? freshOf(rid) : null, bib)}</bdi>${cut}</p>`;
 }
 function mineCards(r, t, el) {
   const list = mineOf(r.id), R = resByBib(r);
@@ -495,7 +498,7 @@ function renderResults(r) {
   const onWall = {};
   if (res.live) { const s = stateAt(r, now(), off(r.id)); if (s.phase === 'live') s.boulders.forEach((sl, j) => { if (sl) onWall[sl.bib] = j + 1; }); }
   const wallTag = bib => (onWall[bib] ? `<span class="onwall"><i></i>על הקיר · B${onWall[bib]}</span>` : '');
-  const fresh = liveFresh[r.id] || new Set();
+  const fresh = freshOf(r.id);
   const q = res.live ? quota(res.rows.length) : analyze(full, full[0]).quota;
   const mine = (running ? ranked : ok).filter(x => whoByBib[x.bib]);
   const cards = mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
