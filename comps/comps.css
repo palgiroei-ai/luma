@@ -958,8 +958,12 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .wall-ic .g { stroke: currentColor; stroke-width: 1.5; opacity: .35; }
 /* board strip inside the "בולדר N" label */
 .btags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; margin-block: 2px 4px; }
-.btag { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 700; padding: 0 6px 0 4px; border-radius: 6px; background: var(--st-bg, var(--line)); color: var(--st, var(--navy)); line-height: 1.6; }
-.btag i { font-style: normal; opacity: .75; margin-inline-end: 2px; }
+.btag { font: inherit; border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 700; padding: 0 6px 0 4px; border-radius: 6px; background: var(--st-bg, var(--line)); color: var(--st, var(--navy)); line-height: 1.6; }
+.btags.split { flex-direction: column; align-items: center; }
+.zrow { display: flex; align-items: center; gap: 4px; }
+.zt { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid currentColor; font: 800 10px/1 system-ui, sans-serif; flex: none; }
+.tag-pop { position: fixed; z-index: 50; background: var(--card); color: var(--navy); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; box-shadow: var(--shadow); display: grid; gap: 6px; min-width: 170px; font-size: 14px; }
+.tag-pop .tp-r { display: flex; align-items: center; gap: 6px; }
 .btag .wall-ic { width: 14px; height: 14px; }
 .lane.mine .btag { background: var(--card); }
 /* list of boulders */

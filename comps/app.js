@@ -9,7 +9,7 @@ import { liveRows, liveGroup, fetchLive } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 
-export const APP_VERSION = '3.7.0';
+export const APP_VERSION = '3.7.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1299,13 +1299,28 @@ const WALL_ICON = {
 };
 const wallSvg = id => `<svg class="wall-ic" viewBox="0 0 40 40" aria-hidden="true"><line class="g" x1="2" y1="37" x2="38" y2="37"/><path class="w" d="${WALL_ICON[id] || ''}"/></svg>`;
 const SEC_HE = { zone: 'זון', top: 'טופ' };
-// board: wall icon + style name, once for a whole boulder (or when zone = top), else זון / טופ side by side
+// board (3.7.1, Roei picked option A): wall drawing + style; a split boulder gets a round Z / T marker before each tag.
+// Tapping a tag shows a small popover with the part, the wall-angle name and the style (coach + viewers).
 function boardTag(rid, b) {
   const t = store.tag(rid, b); if (!t) return '';
-  const one = (x, pre = '') => (x?.wall || x?.style ? `<span class="btag${x.style ? ' st-' + x.style : ''}">${pre}${x.wall ? wallSvg(x.wall) : ''}${x.style ? esc(styleOf(x.style).l) : ''}</span>` : '');
+  const one = (x, sec) => (x?.wall || x?.style ? `<button type="button" class="btag${x.style ? ' st-' + x.style : ''}" data-tg-pop="${esc(rid)}|${b}|${sec}" aria-label="${esc([x.wall && wallOf(x.wall).l, x.style && styleOf(x.style).l].filter(Boolean).join(' · '))}">${x.wall ? wallSvg(x.wall) : ''}${x.style ? esc(styleOf(x.style).l) : ''}</button>` : '');
   const same = t.mode === 'whole' || (t.zone.wall === t.top.wall && t.zone.style === t.top.style);
-  const html = same ? one(t.zone) : one(t.zone, '<i>Z</i>') + one(t.top, '<i>T</i>');
-  return html ? `<div class="btags">${html}</div>` : '';
+  if (same) { const h = one(t.zone, 'whole'); return h ? `<div class="btags">${h}</div>` : ''; }
+  const row = (x, sec, l) => { const h = one(x, sec); return h ? `<div class="zrow"><span class="zt" aria-hidden="true">${l}</span>${h}</div>` : ''; };
+  const html = row(t.zone, 'zone', 'Z') + row(t.top, 'top', 'T');
+  return html ? `<div class="btags split">${html}</div>` : '';
+}
+function showTagPop(btn) {
+  const [rid, b, sec] = btn.dataset.tgPop.split('|'), t = store.tag(rid, Number(b)); if (!t) return;
+  const x = sec === 'top' ? t.top : t.zone, st = styleOf(x.style);
+  const pop = $('#tag-pop');
+  pop.innerHTML = `<div class="tp-r"><b>${sec === 'whole' ? 'כל הבולדר' : SEC_HE[sec]}</b><span class="muted">בולדר ${b}</span></div>
+    ${x.wall ? `<div class="tp-r">${wallSvg(x.wall)}<span>${esc(wallOf(x.wall).l)}</span></div>` : ''}
+    ${st ? `<div class="tp-r"><span class="tpill st st-${st.id}">${esc(st.l)}</span></div>` : ''}`;
+  pop.hidden = false;
+  const r = btn.getBoundingClientRect(), w = pop.offsetWidth;
+  pop.style.top = `${r.bottom + 6}px`;
+  pop.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
 }
 let tagRound = null, tagEdit = null; // tagEdit = { b, draft, sec } while the form is open
 const blankSec = () => ({ wall: null, style: null, feet: [], sub: {} });
@@ -1733,6 +1748,9 @@ function start() {
   $('#photo-file').addEventListener('change', e => { const f = e.target.files?.[0]; if (f && upTarget != null && !VIEWER) uploadPhoto(gridRound, upTarget, f); });
   $('#photo-dlg').addEventListener('click', () => $('#photo-dlg').close()); // tap anywhere closes the big photo
   $('#tags-dlg').addEventListener('click', tagClick);
+  // tag popover on the board: tap a tag → show; tap anywhere else / scroll → hide
+  document.addEventListener('click', e => { const b = e.target.closest('[data-tg-pop]'); if (b) showTagPop(b); else $('#tag-pop').hidden = true; }, true);
+  addEventListener('scroll', () => { $('#tag-pop').hidden = true; }, { passive: true });
   $('#tags-dlg').addEventListener('close', () => { tagEdit = null; });
   $('#dev-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }); // Enter must not close the dialog
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applySettings);
