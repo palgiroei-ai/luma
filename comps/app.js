@@ -9,7 +9,7 @@ import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 
-export const APP_VERSION = '3.8.2';
+export const APP_VERSION = '3.9.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -511,14 +511,16 @@ function renderResults(r) {
   }).join('');
   const cell = (b, j, bib) => { const k = kind(b), ex = (onWall[bib] === j + 1 ? ' climbing' : '') + (fresh.has(`${bib}:${j}`) ? ' fresh' : '');
     if (k === 'w') return `<div class="cell w${ex}"><span class="a">${ex.includes('climbing') ? 'מטפס' : '·'}</span><span class="p"></span></div>`;
-    return `<div class="cell ${k}${ex}"><span class="a">${k === 'n' ? '—' : (b[0] ? 'T' + b[0] + ' ' : '') + 'Z' + b[1]}</span><span class="p">${k === 'n' ? '0' : pts(b).toFixed(1)}</span></div>`; };
+    return `<div class="cell ${k}${ex}"><span class="a">${k === 'n' ? '—' : (b[0] ? 'T' + b[0] + ' ' : '') + 'Z' + b[1]}</span><span class="s">${k === 'n' ? '—' : b[0] ? 'T' + b[0] : 'Z' + b[1]}</span><span class="p">${k === 'n' ? '0' : pts(b).toFixed(1)}</span></div>`; };
   let cutDone = false;
   const rows = ranked.map(x => {
     const w = whoByBib[x.bib], cls = w ? (w.added ? 'mine added' : 'mine') : '';
     let pre = '';
-    if (!res.final && !cutDone && x.rank != null && overallOf[x.bib] > q) { cutDone = true; pre = `<tr class="cut"><td colspan="${nB + 5}">קו העלייה לסבב הבא · ${q} עולים${ranked === full ? ` (${ok.length} התחילו)` : ' לפי הדירוג הכללי'}</td></tr>`; }
+    if (!res.final && !cutDone && x.rank != null && overallOf[x.bib] > q) { cutDone = true; const ct = `קו העלייה לסבב הבא · ${q} עולים${ranked === full ? ` (${ok.length} התחילו)` : ' לפי הדירוג הכללי'}`;
+      // 3.9.0: phone hides 2 columns → a cell spanning them would add a phantom column; one row per layout
+      pre = `<tr class="cut cut-wide"><td colspan="${nB + 5}">${ct}</td></tr><tr class="cut cut-narrow"><td colspan="${nB + 3}">${ct}</td></tr>`; }
     return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b>${wallTag(x.bib)}<small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
-      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : 'לא התחיל (DNS)'}</td><td></td><td class="tt">–</td>` : x.bs.map((b, j) => `<td>${cell(b, j, x.bib)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
+      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : 'לא התחיל (DNS)'}</td><td class="tz"></td><td class="tt">–</td>` : x.bs.map((b, j) => `<td>${cell(b, j, x.bib)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
   patch($('#view-results'), `<div class="res${res.live ? ' is-live' : ''}">
     ${chips}
@@ -529,7 +531,7 @@ function renderResults(r) {
     ${cards}
     <div class="card bstats"><h3>הבולדרים בסבב: כמה הגיעו לטופ ולזון</h3>${stats}</div>
     <div class="card"><div class="tbl-head"><b>כל המתחרים</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'הפלגיה' : 'שלי'}</span></div>
-      <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th>#</th><th class="n">מטפס</th><th>מס׳</th>${Array.from({ length: nB }, (_, j) => `<th>בולדר ${j + 1}</th>`).join('')}<th>T / Z</th><th>ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+      <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th class="rk">#</th><th class="n">מטפס</th><th class="bib">מס׳</th>${Array.from({ length: nB }, (_, j) => `<th class="bh"><span class="hl">בולדר </span><span class="hs">B</span>${j + 1}</th>`).join('')}<th class="tz">T / Z</th><th class="tt">ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
     <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. ${res.final ? 'סבב אחרון בתחרות — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
   </div>`);
 }
