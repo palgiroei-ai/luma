@@ -2,6 +2,7 @@
 // Add an entry with every code deploy — tests/changelog.test.mjs keeps the first versioned entry = APP_VERSION.
 // Start-list updates (data only, no code version) are entries with `data: true` instead of `v`.
 export const CHANGELOG = [
+  { v: '3.9.1', date: '2026-10-15', items: ['ניסוחים לפי מין בסבבי נשים: מטפסת, ממתינה, סיימה, לא התחילה, מתחילה עכשיו, ירדה על נפילות, "כל המתחרות"'] },
   { v: '3.9.0', date: '2026-10-15', items: ['טלפון: טבלת "כל המתחרים" בתוצאות נכנסת במסך בלי לגלול הצידה — בלי עמודת מס׳ ו-T/Z, בלי שורת מועדון, ובכל משבצת רק T/Z והניסיונות. באייפד ללא שינוי'] },
   { v: '3.8.2', date: '2026-10-15', items: ['תוצאות חיות: זון או טופ חדש מהבהב 10 שניות (בטבלה, ב"שלי" ובכרטיסים)'] },
   { v: '3.8.1', date: '2026-10-15', items: ['תוצאות חיות: ההבהוב של זון או טופ חדש גם ב"שלי" (בשורת התוצאה של הספורטאי) ובכרטיסי התוצאות של הספורטאים שלי'] },

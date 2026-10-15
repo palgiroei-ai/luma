@@ -9,7 +9,7 @@ import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 
-export const APP_VERSION = '3.9.0';
+export const APP_VERSION = '3.9.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -189,6 +189,9 @@ function prevRankOf(id) {
   return prev && Object.fromEntries(prev.map(x => [x.bib, x.rank]));
 }
 const genderOf = id => (/-w(-|$)/.test(id) ? 'W' : 'M');
+// 3.9.1: wording by the round's gender (women's rounds: מטפסת, סיימה, לא התחילה…)
+const gw = (id, m, f) => (genderOf(id) === 'W' ? f : m);
+let resFem = false; // set by renderResults for the result cards built inside it
 const resCat = {}; // chosen category per round (this session)
 const roundsOf = ev => DATA.rounds.filter(r => (r.event || 'bl1') === ev.id && visible(r));
 const MINE_NAME = () => (VIEWER ? 'הפלגיה' : 'שלי');
@@ -206,11 +209,11 @@ const off = id => store.offset(id);
 
 function statusText(r, st) {
   switch (st.kind) {
-    case 'waiting': return 'ממתין';
+    case 'waiting': return gw(r.id, 'ממתין', 'ממתינה');
     case 'boulder': return `על בולדר ${st.boulder}`;
     case 'rest': return `מנוחה בין ${st.from} ל-${st.to}`;
     case 'trailing': return `מנוחת סיום (אחרי ${r.boulders})`;
-    default: return 'סיים';
+    default: return gw(r.id, 'סיים', 'סיימה');
   }
 }
 
@@ -385,7 +388,7 @@ function renderAll(r) {
       const tg = VIEWER || base.has(k) ? '' : `<button type="button" class="mine-tg" data-mine-tg="${k}" aria-pressed="${mk.has(k)}" aria-label="${mk.has(k) ? 'הסרה מהספורטאים שלי' : 'הוספה לספורטאים שלי'} · ${esc(s.name)}"></button>`;
       return pre + `<tr class="${mk.has(k) ? 'mine' : ''}${added ? ' added' : ''}${now_ ? ' now' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td class="c-name"><span class="nm-in">${tg}<span>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</span></span></td>
         <td>${fmtClock(st.startMs)}</td><td class="c-st">${statusText(r, st)}</td>${resTd(s)}
-        <td class="row-actions"><button type="button" class="sync-btn" data-sync="${k}">מתחיל עכשיו</button>
+        <td class="row-actions"><button type="button" class="sync-btn" data-sync="${k}">${gw(r.id, 'מתחיל עכשיו', 'מתחילה עכשיו')}</button>
           <button type="button" class="sync-btn appeal-btn" data-appeal="${k}">ערעור</button></td></tr>`;
     }).join('')}</tbody></table></div>`);
   if (scrollAll) {
@@ -437,11 +440,11 @@ function resCard(ranked, row, who, final, full) {
           ? `בולדרים ${heList(soleJ.map(j => j + 1))}<small class="d">${soleKinds.length > 1 ? soleJ.map(j => `${a.sole[j] === 't' ? 'טופ' : 'זון'} יחיד ב־${j + 1}`).join(', ') : SOLE[soleKinds[0]]}</small>`
           : `בולדר ${a.strong.boulder}<small class="d">${resWord(a.strong.b)} · ${a.sole[a.strong.boulder - 1] ? SOLE[a.sole[a.strong.boulder - 1]] : 'מקום ' + a.strong.place}</small>`) : ''}
         ${a.weak ? kv('בולדר לשיפור', `בולדר ${a.weak.boulder}<small class="d">${a.weak.b[0] || a.weak.b[1] ? resWord(a.weak.b) : 'בלי זון'} · מקום ${a.weak.place} · ${a.weak.topN} מתוך ${a.n} עשו טופ</small>`) : ''}
-        ${kv('פתיחה מול סיום', `מקום ${a.open} · מקום ${a.close}<small class="d">${a.close < a.open ? 'סיים טוב יותר' : a.close > a.open ? 'סיים חלש יותר' : 'יציב'}</small>`)}
+        ${kv('פתיחה מול סיום', `מקום ${a.open} · מקום ${a.close}<small class="d">${a.close < a.open ? (resFem ? 'סיימה טוב יותר' : 'סיים טוב יותר') : a.close > a.open ? (resFem ? 'סיימה חלש יותר' : 'סיים חלש יותר') : 'יציב'}</small>`)}
       </div>
       <div class="grp"><span class="gh">ניסיונות</span>
         ${kv('פלאשים', `טופ ${a.flashes} · זון ${a.zFlashes}<small class="d">ממוצע ${a.flashAvg.toFixed(1)} · ${a.zFlashAvg.toFixed(1)}</small>`)}
-        ${kv('ירד על נפילות', `${a.lost.toFixed(1)} נק׳`)}
+        ${kv(resFem ? 'ירדה על נפילות' : 'ירד על נפילות', `${a.lost.toFixed(1)} נק׳`)}
       </div>
       <div class="grp"><span class="gh">תרחישים</span>
         ${a.opts.length ? a.opts.map(o => kv(WHAT_IF[o.key], what(o))).join('') : kv('טופ נוסף', 'כבר טופ בכל הבולדרים')}
@@ -484,6 +487,7 @@ function lockBar(r, res) {
 }
 
 function renderResults(r) {
+  resFem = genderOf(r.id) === 'W';
   const res = resultsOf(r.id), full = rankedOf(r.id), g = genderOf(r.id);
   const opts = catOptions(res.rows, g), opt = opts.find(o => o.key === resCat[r.id]) || opts[0];
   const sub = opt?.cats ? rankInCats(res.rows, opt.cats, prevRankOf(r.id)) : full;
@@ -510,7 +514,7 @@ function renderResults(r) {
       <div class="mydots">${md}<span class="avg">ממוצע ניסיונות לטופ ${b.avgTop ?? '–'}</span><span class="avg">ממוצע ניסיונות לזון ${b.avgZone ?? '–'}</span></div></div>`;
   }).join('');
   const cell = (b, j, bib) => { const k = kind(b), ex = (onWall[bib] === j + 1 ? ' climbing' : '') + (fresh.has(`${bib}:${j}`) ? ' fresh' : '');
-    if (k === 'w') return `<div class="cell w${ex}"><span class="a">${ex.includes('climbing') ? 'מטפס' : '·'}</span><span class="p"></span></div>`;
+    if (k === 'w') return `<div class="cell w${ex}"><span class="a">${ex.includes('climbing') ? (resFem ? 'מטפסת' : 'מטפס') : '·'}</span><span class="p"></span></div>`;
     return `<div class="cell ${k}${ex}"><span class="a">${k === 'n' ? '—' : (b[0] ? 'T' + b[0] + ' ' : '') + 'Z' + b[1]}</span><span class="s">${k === 'n' ? '—' : b[0] ? 'T' + b[0] : 'Z' + b[1]}</span><span class="p">${k === 'n' ? '0' : pts(b).toFixed(1)}</span></div>`; };
   let cutDone = false;
   const rows = ranked.map(x => {
@@ -520,7 +524,7 @@ function renderResults(r) {
       // 3.9.0: phone hides 2 columns → a cell spanning them would add a phantom column; one row per layout
       pre = `<tr class="cut cut-wide"><td colspan="${nB + 5}">${ct}</td></tr><tr class="cut cut-narrow"><td colspan="${nB + 3}">${ct}</td></tr>`; }
     return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b>${wallTag(x.bib)}<small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
-      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : 'לא התחיל (DNS)'}</td><td class="tz"></td><td class="tt">–</td>` : x.bs.map((b, j) => `<td>${cell(b, j, x.bib)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
+      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : resFem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td><td class="tz"></td><td class="tt">–</td>` : x.bs.map((b, j) => `<td>${cell(b, j, x.bib)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
   patch($('#view-results'), `<div class="res${res.live ? ' is-live' : ''}">
     ${chips}
@@ -530,8 +534,8 @@ function renderResults(r) {
       <span class="legend"><span><i class="cell t lg">T</i> טופ</span><span><i class="cell z lg">Z</i> זון בלי טופ</span><span><i class="cell n lg">—</i> בלי זון</span><span class="muted">T2 = טופ בניסיון השני</span></span></div>
     ${cards}
     <div class="card bstats"><h3>הבולדרים בסבב: כמה הגיעו לטופ ולזון</h3>${stats}</div>
-    <div class="card"><div class="tbl-head"><b>כל המתחרים</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'הפלגיה' : 'שלי'}</span></div>
-      <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th class="rk">#</th><th class="n">מטפס</th><th class="bib">מס׳</th>${Array.from({ length: nB }, (_, j) => `<th class="bh"><span class="hl">בולדר </span><span class="hs">B</span>${j + 1}</th>`).join('')}<th class="tz">T / Z</th><th class="tt">ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <div class="card"><div class="tbl-head"><b>${resFem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'הפלגיה' : 'שלי'}</span></div>
+      <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th class="rk">#</th><th class="n">${resFem ? 'מטפסת' : 'מטפס'}</th><th class="bib">מס׳</th>${Array.from({ length: nB }, (_, j) => `<th class="bh"><span class="hl">בולדר </span><span class="hs">B</span>${j + 1}</th>`).join('')}<th class="tz">T / Z</th><th class="tt">ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
     <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. ${res.final ? 'סבב אחרון בתחרות — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
   </div>`);
 }
@@ -700,7 +704,7 @@ function renderHomeDetail(seg, fromList, auto = null) {
     const ph = r.slots.length ? stateAt(r, t, off(r.id)).phase : 'wait';
     const badge = { live: '<span class="hb live">חי עכשיו</span>', before: '<span class="hb soon">בקרוב</span>', after: '<span class="hb done">הסתיים</span>', wait: '<span class="hb wait">ממתין לסדר עלייה</span>' }[ph];
     const rk = rankedOf(r.id), rankOfK = k => rk?.find(x => x.bib === r.slots[k].bib)?.rank;
-    const mine = mineOf(r.id).map(m => `<li><b>${esc(m.short)}</b> <span>${rk ? (rankOfK(m.k) ? `מקום ${rankOfK(m.k)}` : 'לא התחיל') : `#${r.slots[m.k].order} · ${fmtHM(slotStartMs(r, m.k, off(r.id)))}`}</span></li>`).join('');
+    const mine = mineOf(r.id).map(m => `<li><b>${esc(m.short)}</b> <span>${rk ? (rankOfK(m.k) ? `מקום ${rankOfK(m.k)}` : gw(r.id, 'לא התחיל', 'לא התחילה')) : `#${r.slots[m.k].order} · ${fmtHM(slotStartMs(r, m.k, off(r.id)))}`}</span></li>`).join('');
     const live = ph === 'live' ? (() => { const s = stateAt(r, t, off(r.id)); const b1 = s.boulders[0]; return `<p class="h-live">סבב ${s.n + 1} מתוך ${windowCount(r)} · בולדר 1: ${b1 ? `#${b1.order} ${esc(b1.name)}` : '—'}</p>`; })() : '';
     return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(r.title)}</h3>${rk ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
@@ -1165,7 +1169,7 @@ function confirmSync(title, text, newOffset) {
 function syncFromSlot(k) {
   if (store.settings.lock) { showToast('הכיול נעול · אפשר לפתוח בהגדרות'); return; }
   const r = round(current); const s = r.slots[k]; const o = syncSlotNow(r, k, now());
-  confirmSync(`#${s.order} ${s.name} מתחיל עכשיו?`, `כל הסבב יכויל כך ש-#${s.order} עולה עכשיו לבולדר 1 (${o === off(r.id) ? 'ללא שינוי' : `${o > off(r.id) ? 'מאחר' : 'מקדים'} ב-${fmtDur(Math.abs(o - off(r.id)))} לעומת הכיול הנוכחי`}).`, () => syncSlotNow(r, k, now()));
+  confirmSync(`#${s.order} ${s.name} ${gw(r.id, 'מתחיל', 'מתחילה')} עכשיו?`, `כל הסבב יכויל כך ש-#${s.order} עולה עכשיו לבולדר 1 (${o === off(r.id) ? 'ללא שינוי' : `${o > off(r.id) ? 'מאחר' : 'מקדים'} ב-${fmtDur(Math.abs(o - off(r.id)))} לעומת הכיול הנוכחי`}).`, () => syncSlotNow(r, k, now()));
 }
 
 function openManual() {
