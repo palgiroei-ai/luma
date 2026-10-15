@@ -17,6 +17,12 @@ export const tops = bs => bs.filter(b => b && b[0]).length;
 export const zones = bs => bs.filter(b => b && (b[0] || b[1])).length;
 export const kind = b => (!b ? 'w' : b[0] ? 't' : b[1] ? 'z' : 'n');
 
+// the round has no next round in the same competition (sen-m-r2 when there is no -r3; single U17 round) → no cut line
+export function isLastRound(id, ids) {
+  const m = id.match(/-r(\d)$/);
+  return !m || !ids.includes(id.slice(0, -1) + (Number(m[1]) + 1));
+}
+
 export function quota(n) { return n >= 30 ? 24 : n >= 8 ? Math.max(8, Math.ceil(n / 2)) : n; }
 
 // rows: [{ bib, bs, total:'DNS'|… }]; prevRank: optional { bib: rank } of the preceding round (count-back).
@@ -34,6 +40,10 @@ export function rankRows(rows, prevRank = null) {
 // Everything the athlete card shows. ranked = rankRows() output (the whole round or one category), row = one of its
 // started rows. full = the whole round's ranking: advancing to the next round is always by the overall ranking.
 export function analyze(ranked, row, full = ranked) {
+  // a boulder without a result (null: withdrew mid-round / never entered — kept in locked results) counts as [0, 0]
+  const Z = [0, 0], cellOf = (r, j) => r.bs[j] || Z, bsOf = r => r.bs.map(b => b || Z);
+  ranked = ranked.map(r => (r.bs.includes(null) ? { ...r, bs: bsOf(r) } : r));
+  if (row.bs.includes(null)) row = ranked.find(r => r.bib === row.bib);
   const ok = ranked.filter(r => r.rank != null), n = ok.length;
   const all = full.filter(r => r.rank != null), q = quota(all.length), cutScore = all[q - 1].score;
   const overall = all.find(x => x.bib === row.bib) || row;
@@ -56,7 +66,7 @@ export function analyze(ranked, row, full = ranked) {
   const places = row.bs.map((b, j) => placeOn(j));
   let weak = null;
   if (Math.max(...places) > Math.min(...places)) row.bs.forEach((b, j) => {
-    const topN = ok.filter(x => x.bs[j][0]).length;
+    const topN = ok.filter(x => cellOf(x, j)[0]).length;
     if (!weak || places[j] > weak.place || (places[j] === weak.place && topN > weak.topN)) weak = { boulder: j + 1, place: places[j], topN, b };
   });
   // flashes = tops / zones on the first attempt (a flashed top counts as a zone flash too), vs the ranking's average

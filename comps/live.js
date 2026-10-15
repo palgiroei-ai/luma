@@ -28,14 +28,16 @@ export function liveRows(round, cfg, results, nowMs) {
   if (cfg.roundNumber != null && Number(cfg.roundNumber) !== roundNumberOf(round.id)) return null;
   const cats = cfg.categoryGroups?.[lg.group] || [lg.group], nB = round.boulders;
   const bySlot = new Map(round.slots.filter(Boolean).map(s => [s.bib, { bib: s.bib, name: s.name, club: '', cat: null, bs: Array(nB).fill(null) }]));
-  let updated = 0, done = 0;
+  let updated = 0, done = 0; const seen = new Set();
   for (const [key, v] of Object.entries(results)) {
     let k; try { k = decodeURIComponent(key); } catch { continue; }
     const [bib, cat, gender, route] = k.split('|'), j = Number(route) - 1, row = bySlot.get(Number(bib));
     if (!row || gender !== lg.gender || !cats.includes(cat) || !(j >= 0 && j < nB) || !v) continue;
     const at = Date.parse(v.updatedAt); if (!at || at > nowMs || dayOf(at) !== round.date) continue;
-    if (!row.bs[j]) done++;
-    row.bs[j] = [Number(v.topAttempts) || 0, Number(v.zoneAttempts) || 0];
+    if (!seen.has(row.bib + '|' + j)) { seen.add(row.bib + '|' + j); done++; }
+    // 0 attempts and no top/zone = the judge closed the boulder but he never climbed it (DNS) → not climbed
+    const t = Number(v.topAttempts) || 0, z = Number(v.zoneAttempts) || 0;
+    row.bs[j] = !t && !z && Number(v.attempts) === 0 ? null : [t, z];
     row.cat = catCode(cat); if (v.club) row.club = String(v.club).slice(0, 60);
     updated = Math.max(updated, at);
   }

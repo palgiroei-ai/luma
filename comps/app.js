@@ -1,14 +1,14 @@
 import { decryptJSON } from './decrypt.js';
-import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, syncSlotNow, syncManualStart, windowCount, alertPlan, climbOverlaps, zonedMs, zoneParts, deviceOffZone } from './engine.js';
+import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, delayOffset, syncSlotNow, syncManualStart, windowCount, alertPlan, climbOverlaps, zonedMs, zoneParts, deviceOffZone } from './engine.js';
 import { store } from './store.js';
 import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
-import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats } from './results.js';
+import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats, isLastRound } from './results.js';
 import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive } from './live.js';
 import { quota } from './results.js';
 
-export const APP_VERSION = '3.6.1';
+export const APP_VERSION = '3.6.2';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -95,6 +95,8 @@ const todayStr = () => { const d = zoneParts(now()); return `${d.y}-${pad(d.mo)}
 const visible = r => !VIEWER || !!resultsOf(r.id) || (r.slots.length ? roundEndMs(r) > now() : r.date >= todayStr());
 // results (2.7.0): DATA.results[roundId] = { source, rows } from src/results.mjs; round 2 counts back to round 1
 // live (3.4.0): a round without an official file shows the federation's live data while it runs (see live.js)
+// no next round in this competition → no cut line / "next round" (seniors R2 = the final; audit 2026-10-15)
+const lastRound = id => isLastRound(id, DATA.rounds.map(x => x.id));
 const resultsOf = id => (LIVE_FORCE && liveOf(id)) || DATA.results?.[id] || LOCKED[id] || liveOf(id) || null;
 
 // ---- locked results (3.5.0): at the end of a live round the coach taps "קבע כתוצאות רשמיות" → the final live state is
@@ -107,7 +109,7 @@ async function loadLocked() {
     const next = {};
     for (const [id, v] of Object.entries(items || {})) {
       const old = LOCKED[id];
-      next[id] = old && old.at === v.at ? old : { source: `${v.source || 'תוצאות חיות'} · נקבע כרשמי ${fbDate(v.at)}`, at: v.at, locked: true, final: !/-r\d$/.test(id),
+      next[id] = old && old.at === v.at ? old : { source: `${v.source || 'תוצאות חיות'} · נקבע כרשמי ${fbDate(v.at)}`, at: v.at, locked: true, final: lastRound(id),
         rows: v.rows.map(r => ({ ...r, bs: r.bs.some(Boolean) ? r.bs : [] })) }; // nothing entered = did not start (DNS)
     }
     LOCKED = next; render();
@@ -151,7 +153,7 @@ function liveOf(id) {
     const prev = DATA.results?.[id.replace(/-r2$/, '-r1')], catOf = Object.fromEntries((prev?.rows || []).map(x => [x.bib, x.cat]));
     // (club: our short name from round 1 first — the judging app has the long official one)
     lr.rows.forEach(x => { if (!x.cat) x.cat = catOf[x.bib] || null; x.club = prev?.rows.find(y => y.bib === x.bib)?.club || x.club; });
-    v = { ...lr, live: true, final: !/-r\d$/.test(id), source: `תוצאות חיות מההתאחדות · ניסיון, לא רשמי · עודכן ${fmtClock(lr.updated)}` };
+    v = { ...lr, live: true, final: lastRound(id), source: `תוצאות חיות מההתאחדות · ניסיון, לא רשמי · עודכן ${fmtClock(lr.updated)}` };
   }
   liveCache[id] = { key, v };
   return v;
@@ -406,7 +408,7 @@ function resCard(ranked, row, who, final, full) {
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   const what = o => row.rank === 1 ? `יתרון ${sgn(o.gain)}` : `${o.rank < row.rank ? 'מקום ' + o.rank : 'נשאר ' + row.rank}<small class="d">${sgn(o.gain)}</small>${o.advances && !final ? '<span class="up">עולה</span>' : ''}`;
   const bars = row.bs.map((b, j) => { const k = kind(b), p = pts(b);
-    return `<div class="bar" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div>${a.sole[j] ? `<span class="sole" title="${SOLE[a.sole[j]]}" aria-label="${SOLE[a.sole[j]]}">${STAR}</span>` : ''}</div><span class="lb">B${j + 1} (T${b[0] || 0}Z${b[1] || 0})</span></div>`; }).join('');
+    return `<div class="bar" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div>${a.sole[j] ? `<span class="sole" title="${SOLE[a.sole[j]]}" aria-label="${SOLE[a.sole[j]]}">${STAR}</span>` : ''}</div><span class="lb">B${j + 1} (T${b?.[0] || 0}Z${b?.[1] || 0})</span></div>`; }).join('');
   return `<article class="card fc${who.added ? ' added' : ''}">
     <div class="top"><div><div class="nm">${esc(row.name)}</div><div class="club">${esc(row.club)} · מס׳ ${row.bib}</div></div><div class="rk">${row.rank}<small>/${a.n}</small>${inCat ? `<span class="rk-all">כללי ${a.overallRank}</span>` : ''}</div></div>
     <div class="sc"><b>${row.score.toFixed(1)}</b> נק׳ · ${a.tops} טופים · ${a.zones} זונים</div>
@@ -499,7 +501,7 @@ function renderResults(r) {
     let pre = '';
     if (!res.final && !cutDone && x.rank != null && overallOf[x.bib] > q) { cutDone = true; pre = `<tr class="cut"><td colspan="${nB + 5}">קו העלייה לסבב הבא · ${q} עולים${ranked === full ? ` (${ok.length} התחילו)` : ' לפי הדירוג הכללי'}</td></tr>`; }
     return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b><small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
-      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live ? 'עדיין בלי תוצאה' : 'לא התחיל (DNS)'}</td><td></td><td class="tt">–</td>` : x.bs.map(b => `<td>${cell(b)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
+      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : 'לא התחיל (DNS)'}</td><td></td><td class="tt">–</td>` : x.bs.map(b => `<td>${cell(b)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
   patch($('#view-results'), `<div class="res${res.live ? ' is-live' : ''}">
     ${chips}
@@ -511,7 +513,7 @@ function renderResults(r) {
     <div class="card bstats"><h3>הבולדרים בסבב: כמה הגיעו לטופ ולזון</h3>${stats}</div>
     <div class="card"><div class="tbl-head"><b>כל המתחרים</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'הפלגיה' : 'שלי'}</span></div>
       <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th>#</th><th class="n">מטפס</th><th>מס׳</th>${Array.from({ length: nB }, (_, j) => `<th>בולדר ${j + 1}</th>`).join('')}<th>T / Z</th><th>ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
-    <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. ${res.final ? 'סבב יחיד — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
+    <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. ${res.final ? 'סבב אחרון בתחרות — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
   </div>`);
 }
 
@@ -726,7 +728,8 @@ function render() {
   rb.hidden = !rs;
   if (rb.classList.contains('lv') !== lv) { rb.classList.toggle('lv', lv); rb.innerHTML = 'תוצאות' + (lv ? LTAG : ''); rb.setAttribute('aria-label', lv ? 'תוצאות — חי, לא רשמי' : 'תוצאות'); }
   if (view === 'results' && !resultsOf(r.id)) { setView('mine'); return; }
-  if (view === 'results') renderResults(r);
+  // a results problem must never stop the clock + alerts below (audit 2026-10-15)
+  if (view === 'results') try { renderResults(r); } catch (e) { console.error('results', e); }
   if (view === 'mine') renderMine(r);
   if (view === 'all') renderAll(r);
   if (view === 'log') renderLog();
@@ -1523,6 +1526,7 @@ function exportFile(list) {
 }
 
 function start() {
+  for (const [id, res] of Object.entries(DATA.results || {})) if (res.final == null) res.final = lastRound(id); // a results file without `final`
   VIEWER = DATA.role === 'viewer';
   document.body.classList.toggle('viewer', VIEWER);
   if (VIEWER) { $('[data-view="mine"]').textContent = MINE_NAME(); $('#arm-btn').hidden = true; }
@@ -1595,7 +1599,7 @@ function start() {
     else if (b.id === 'reset-btn') { store.setOffset(current, 0); if (store.delay(current)) store.setDelay(current, 0); render(); }
     else if (b.id === 'delay-btn') {
       if (store.settings.lock) showToast('הכיול נעול · אפשר לפתוח בהגדרות או ב"נעול"');
-      else { const d = (store.delay(current) + 1) % 3; store.setDelay(current, d); render(); showToast(d ? `השהיה ${d}ש׳ בכל מעבר סבב` : 'ללא השהיה'); }
+      else { const d0 = store.delay(current), d = (d0 + 1) % 3; store.setOffset(current, delayOffset(round(current), now(), off(current), d0, d)); store.setDelay(current, d); render(); showToast(d ? `השהיה ${d}ש׳ בכל מעבר סבב` : 'ללא השהיה'); }
     }
     else if (d.mineTg != null) { const k = Number(d.mineTg); store.toggleMine(current, k, mineK(current).has(k), false); $('#view-all')._html = null; $('#view-mine')._html = null; render(); }
     else if (b.id === 'manual-btn') openManual();

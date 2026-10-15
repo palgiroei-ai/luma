@@ -119,6 +119,13 @@ export function syncSlotNow(round, k, nowMs) {
   return nowMs - slotStartMs(round, k, 0);
 }
 
+// "השהיה" changed from d0 to d1 s per window (round.slotSec = base + d0 now) → new offset that keeps the current
+// window's start where it is, so the delay counts from now on and never re-counts windows an earlier calibration fixed.
+export function delayOffset(round, nowMs, offsetMs, d0, d1) {
+  const n = Math.floor((nowMs - roundStart(round) - offsetMs) / (round.slotSec * 1000));
+  return n > 0 ? offsetMs + n * (d0 - d1) * 1000 : offsetMs;
+}
+
 // The round (slot 0) starts at startMs.
 export function syncManualStart(round, startMs) {
   return startMs - roundStart(round);
