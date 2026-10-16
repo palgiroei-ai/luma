@@ -8,10 +8,10 @@ import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
-import { ifscResults, fetchIfsc, isIsr, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS } from './ifsc.js';
+import { ifscResults, fetchIfsc, isIsr, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS, lastName, appealsOf, appealNearLine, appealEvents } from './ifsc.js';
 import { bySeason, seasonLabel } from './seasons.js';
 
-export const APP_VERSION = '3.12.1';
+export const APP_VERSION = '3.12.2';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -218,9 +218,9 @@ function applyIfsc(id, d) {
   if (venueDay(r) > r.date) { res.live = false; res.complete = true; } // safety net: the venue's day is over = finished
   if (r.adv) res.final = false; // 3.12.1: a qualifying line (r.adv advance; split groups: per group)
   res.source = `World Climbing (IFSC) · עודכן ${fmtHM(res.updated || Date.now())}`;
-  const isr = res.rows.filter(isIsr), evs = liveEvents(s.seen, isr);
+  const isr = res.rows.filter(isIsr), evs = [...liveEvents(s.seen, isr), ...appealEvents(s.seen, isr)];
   if (s.seen) { const m = liveFresh[id] || (liveFresh[id] = new Map()); for (const e of evs) m.set(`${e.bib}:${e.b - 1}`, Date.now()); }
-  s.seen = isr.map(x => ({ bib: x.bib, bs: x.bs.map(c => c && [...c]) }));
+  s.seen = isr.map(x => ({ bib: x.bib, name: x.name, bs: x.bs.map(c => c && [...c]), ap: x.ap }));
   if ((id === current || round(current)?.combo?.includes(id)) && screen === 'round') evs.forEach(e => liveToast({ ...e, name: '🇮🇱 ' + e.name }));
   s.data = d; s.res = res;
 }
@@ -491,7 +491,7 @@ function resCard(ranked, row, who, final, full, q0 = null) {
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   const what = o => row.rank === 1 ? `יתרון ${sgn(o.gain)}` : `${o.rank < row.rank ? 'מקום ' + o.rank : 'נשאר ' + row.rank}<small class="d">${sgn(o.gain)}</small>${o.advances && !final ? '<span class="up">עולה</span>' : ''}`;
   const bars = row.bs.map((b, j) => { const k = kind(b), p = pts(b);
-    return `<div class="bar" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div>${a.sole[j] ? `<span class="sole" title="${SOLE[a.sole[j]]}" aria-label="${SOLE[a.sole[j]]}">${STAR}</span>` : ''}</div><span class="lb">B${j + 1} (T${b?.[0] || 0}Z${b?.[1] || 0})</span></div>`; }).join('');
+    return `<div class="bar${row.ap?.includes(j) ? ' appeal' : ''}" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div>${a.sole[j] ? `<span class="sole" title="${SOLE[a.sole[j]]}" aria-label="${SOLE[a.sole[j]]}">${STAR}</span>` : ''}</div><span class="lb">B${j + 1} (T${b?.[0] || 0}Z${b?.[1] || 0})</span></div>`; }).join('');
   return `<article class="card fc${who.added ? ' added' : ''}">
     <div class="top"><div><div class="nm">${esc(row.name)}</div><div class="club">${esc(row.club)} · מס׳ ${row.bib}</div></div><div class="rk">${row.rank}<small>/${a.n}</small>${inCat ? `<span class="rk-all">כללי ${a.overallRank}</span>` : ''}</div></div>
     <div class="sc"><b>${row.score.toFixed(1)}</b> נק׳ · ${a.tops} טופים · ${a.zones} זונים</div>
@@ -528,7 +528,7 @@ function liveCard(ranked, row, who, q, final, full, wallTag = '', fresh = new Se
   const overall = all.find(x => x.bib === row.bib)?.rank ?? row.rank, nDone = row.bs.filter(Boolean).length;
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   const above = ok.slice(0, i).reverse().find(x => x.score > row.score), below = ok.slice(i + 1).find(x => x.score < row.score);
-  const bars = row.bs.map((b, j) => b ? `<div class="bar${fresh.has(`${row.bib}:${j}`) ? ' fresh' : ''}"><div class="fill-wrap"><div class="fill ${kind(b)}" style="height:${pts(b) / 25 * 100}%"></div></div><span class="lb">B${j + 1} (T${b[0] || 0}Z${b[1] || 0})</span></div>`
+  const bars = row.bs.map((b, j) => b ? `<div class="bar${fresh.has(`${row.bib}:${j}`) ? ' fresh' : ''}${row.ap?.includes(j) ? ' appeal' : ''}"><div class="fill-wrap"><div class="fill ${kind(b)}" style="height:${pts(b) / 25 * 100}%"></div></div><span class="lb">B${j + 1} (T${b[0] || 0}Z${b[1] || 0})</span></div>`
     : `<div class="bar wait"><div class="fill-wrap"></div><span class="lb">B${j + 1} · עוד לא</span></div>`).join('');
   let cut = '';
   if (!final) {
@@ -596,14 +596,16 @@ function renderResults(r, part = null, isrKey = r.id) {
       <span class="c">${b.tops} טופ · ${b.tops + b.zoneOnly} זון / ${b.n}</span><span></span>
       <div class="mydots">${md}<span class="avg">ממוצע ניסיונות לטופ ${b.avgTop ?? '–'}</span><span class="avg">ממוצע ניסיונות לזון ${b.avgZone ?? '–'}</span></div></div>`;
   }).join('');
-  const cell = (b, j, bib) => { const k = kind(b), ex = (onWall[bib] === j + 1 ? ' climbing' : '') + (fresh.has(`${bib}:${j}`) ? ' fresh' : '');
+  const apOf = Object.fromEntries(res.rows.filter(x => x.ap).map(x => [x.bib, x.ap])); // 3.12.2: boulders under appeal
+  const cell = (b, j, bib) => { const k = kind(b), ap = apOf[bib]?.includes(j), ex = (onWall[bib] === j + 1 ? ' climbing' : '') + (fresh.has(`${bib}:${j}`) ? ' fresh' : '') + (ap ? ' appeal' : '');
     if (k === 'w') return `<div class="cell w${ex}"><span class="a">${ex.includes('climbing') ? (resFem ? 'מטפסת' : 'מטפס') : '·'}</span><span class="p"></span></div>`;
-    return `<div class="cell ${k}${ex}"><span class="a">${k === 'n' ? '—' : (b[0] ? 'T' + b[0] + ' ' : '') + 'Z' + b[1]}</span><span class="s">${k === 'n' ? '—' : b[0] ? 'T' + b[0] : 'Z' + b[1]}</span><span class="p">${k === 'n' ? '0' : pts(b).toFixed(1)}</span></div>`; };
+    return `<div class="cell ${k}${ex}"${ap ? ' title="בערעור"' : ''}>${ap ? '<span class="aptag">ערעור</span>' : ''}<span class="a">${k === 'n' ? '—' : (b[0] ? 'T' + b[0] + ' ' : '') + 'Z' + b[1]}</span><span class="s">${k === 'n' ? '—' : b[0] ? 'T' + b[0] : 'Z' + b[1]}</span><span class="p">${k === 'n' ? '0' : pts(b).toFixed(1)}</span></div>`; };
   let cutDone = false;
+  const near = intl && q ? appealNearLine(full, q) : []; // 3.12.2: an open appeal that could move someone across the line
   const rows = (onlyIsr ? ranked.filter(x => whoByBib[x.bib]) : ranked).map(x => {
     const w = whoByBib[x.bib], cls = w ? (w.added ? 'mine added' : 'mine') : '';
     let pre = '';
-    if (!res.final && !cutDone && x.rank != null && overallOf[x.bib] > q) { cutDone = true; const ct = `קו העלייה לסבב הבא · ${q} עולים${ranked === full ? ` (${ok.length} התחילו)` : ' לפי הדירוג הכללי'}`;
+    if (!res.final && !cutDone && x.rank != null && overallOf[x.bib] > q) { cutDone = true; const ct = `קו העלייה לסבב הבא · ${q} עולים${ranked === full ? ` (${ok.length} התחילו)` : ' לפי הדירוג הכללי'}${near.length ? ` · <span class="ap-near">⚖️ ייתכן שינוי (ערעור של ${near.map(x => esc(lastName(x.name))).join(', ')})</span>` : ''}`;
       // 3.9.0: phone hides 2 columns → a cell spanning them would add a phantom column; one row per layout
       pre = `<tr class="cut cut-wide"><td colspan="${nB + 5}">${ct}</td></tr><tr class="cut cut-narrow"><td colspan="${nB + 3}">${ct}</td></tr>`; }
     return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${w?.isr ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : ''}${intl ? intlName(x.name) : esc(x.name)}${w && !w.isr ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b>${wallTag(x.bib)}<small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
@@ -611,7 +613,7 @@ function renderResults(r, part = null, isrKey = r.id) {
   }).join('');
   return `<div class="res${res.live ? ' is-live' : ''}">
     ${part ? '' : chips}
-    ${res.live ? (err => `<div class="live-bar${err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל הבולדרים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} בולדרים הוזנו · ${res.started} התחילו</span>${err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · ${intl ? 'World Climbing' : 'לא רשמי'}</span></div>`)(intl ? IFSC[r.id]?.err : live.err) : ''}
+    ${res.live ? (err => `<div class="live-bar${err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל הבולדרים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} בולדרים הוזנו · ${res.started} התחילו</span>${intl ? appealsOf(res.rows).map(a => `<span class="ap-line">⚖️ ערעור פתוח: ${esc(lastName(a.name))} · B${a.b}</span>`).join('') : ''}${err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · ${intl ? 'World Climbing' : 'לא רשמי'}</span></div>`)(intl ? IFSC[r.id]?.err : live.err) : ''}
     ${lockBar(r, res)}
     <div class="res-head"><span class="muted small">מקור: ${esc(res.source)}</span>
       <span class="legend"><span><i class="cell t lg">T</i> טופ</span><span><i class="cell z lg">Z</i> זון בלי טופ</span><span><i class="cell n lg">—</i> בלי זון</span><span class="muted">T2 = טופ בניסיון השני</span></span></div>
@@ -1406,7 +1408,9 @@ function liveToast(e) {
   let box = $('#live-toasts');
   if (!box) { box = document.createElement('div'); box.id = 'live-toasts'; box.setAttribute('aria-live', 'polite'); document.body.append(box); }
   const el = document.createElement('button'); el.type = 'button'; el.className = 'ltoast';
-  el.innerHTML = `<span class="k">${e.kind === 'top' ? 'T' : 'Z'}</span>${esc(e.name)} · בולדר ${e.b} · ${e.kind === 'top' ? 'טופ' : 'זון'} בניסיון ${e.att}`;
+  el.innerHTML = e.kind?.startsWith('appeal') ? `<span class="k">⚖️</span>${esc(e.name)} · בולדר ${e.b} · ${e.kind === 'appeal' ? 'נפתח ערעור' : 'הערעור הוכרע'}` // 3.12.2
+    : `<span class="k">${e.kind === 'top' ? 'T' : 'Z'}</span>${esc(e.name)} · בולדר ${e.b} · ${e.kind === 'top' ? 'טופ' : 'זון'} בניסיון ${e.att}`;
+  if (e.kind?.startsWith('appeal')) el.classList.add('appeal');
   el.addEventListener('click', () => el.remove());
   box.append(el);
   while (box.children.length > 3) box.firstChild.remove();

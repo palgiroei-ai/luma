@@ -12,6 +12,7 @@
   --danger: #B3261E;
   --danger-bg: #FBE3E1;
   --ok: #2E6B4E;
+  --appeal: #B06F00; /* 3.12.2: World Climbing appeal — amber */
   --live: #C62828; /* 3.4.0: live (provisional) results — red, chosen by Roei */
   --primary: #14243B;
   --on-primary: #FFFFFF;
@@ -299,6 +300,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --st-phys: #FB8A52; --st-phys-bg: #3A2219; --st-tech: #6CB2F2; --st-tech-bg: #16263A; --st-coord: #E5B440; --st-coord-bg: #352A12; --st-elec: #B69BFF; --st-elec-bg: #2E2348;
   --fin: #E8834A; --fin-bg: #3D2420; --on-fin: #2A1408;
   --live: #FF8A80;
+  --appeal: #F0A91A;
 }
 :root[data-theme="charcoal"] {
   --chalk: #141216; --card: #1E1B22; --navy: #EEE8E0; --navy-2: #D9CCEA; --muted: #ADA5B5; --border: #2F2B35; --line: #2A2531;
@@ -308,6 +310,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --st-phys: #FB8A52; --st-phys-bg: #33211A; --st-tech: #6CB2F2; --st-tech-bg: #162433; --st-coord: #E5B440; --st-coord-bg: #30280F; --st-elec: #B69BFF; --st-elec-bg: #2A2238;
   --fin: #E8834A; --fin-bg: #3A2419; --on-fin: #2A1408;
   --live: #FF8A80;
+  --appeal: #F0A91A;
 }
 :root[data-theme="black"] {
   --chalk: #000000; --card: #121014; --navy: #F5F1EA; --navy-2: #D9CCEA; --muted: #A9A2B0; --border: #26222A; --line: #1C1820;
@@ -317,6 +320,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --st-phys: #FB8A52; --st-phys-bg: #2A170E; --st-tech: #6CB2F2; --st-tech-bg: #0E1B2B; --st-coord: #E5B440; --st-coord-bg: #261F0A; --st-elec: #B69BFF; --st-elec-bg: #1E1630;
   --fin: #E8834A; --fin-bg: #2E1B12; --on-fin: #2A1408;
   --live: #FF8A80;
+  --appeal: #F0A91A;
 }
 :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) { --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); color-scheme: dark; }
 :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .btn-primary, :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .cbtn-main, :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .tabs button[aria-pressed="true"],
@@ -1129,3 +1133,11 @@ body.combo-round #photos-btn, body.combo-round #tags-btn { display: none !import
   .combo-grid .res .cell { min-width: 0; }
   .combo-grid .res-tbl .hl { display: none; } .combo-grid .res-tbl .hs { display: inline; }
 }
+
+/* ---- 3.12.2 World Climbing appeals (Roei approved mock): amber frame + label on the boulder, line in the live bar ---- */
+.res-tbl .cell.appeal { outline: 2.5px solid var(--appeal); outline-offset: 1px; position: relative; }
+.res-tbl .cell .aptag { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); background: var(--appeal); color: var(--card); font-size: 9px; font-weight: 800; line-height: 1.4; padding: 0 4px; border-radius: 6px; white-space: nowrap; z-index: 1; }
+.live-bar > span.ap-line, .ap-near { color: var(--appeal); font-weight: 800; }
+.fc .bar.appeal .fill-wrap { outline: 2.5px solid var(--appeal); outline-offset: 1px; }
+.fc .bar.appeal .lb::after { content: ' · ערעור'; color: var(--appeal); font-weight: 800; }
+.ltoast.appeal { background: var(--appeal); }
