@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="הדגמה של LUMA, מערכת לניהול ספורטאים וקבוצות ספורט: תוכניות אימון, מעקב עומס ופציעות, לוח ותקשורת בצוות.">
+  <meta name="theme-color" content="#F5F1EA">
+  <meta property="og:title" content="הדגמת LUMA · LUMA">
+  <meta property="og:description" content="הדגמה של LUMA, מערכת לניהול ספורטאים וקבוצות ספורט: תוכניות אימון, מעקב עומס ופציעות, לוח ותקשורת בצוות.">
+  <meta property="og:locale" content="he_IL">
+  <link rel="icon" type="image/svg+xml" href="../../assets/mark.svg">
+<title>הדגמת LUMA · LUMA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&family=Jost:wght@500&display=swap">
+<style>
+  /* Layout: one column — brand header, chapter strip, the phone "screen" playing the steps, the caption
+     under it, then the transport. Colors are the app's own (Climbing Academy brand), one light look. */
+  :root {
+    --chalk: #F5F1EA;        /* app background */
+    --card: #FFFFFF;
+    --ink: #2E1A47;          /* brand purple: text + phone body */
+    --ink-soft: #6A5F78;
+    --line: #E4DCCF;
+    --ember: #C8642E;        /* brand orange: finger, progress, active chapter */
+    --ember-soft: #F6E6DA;
+    --font: "Heebo", "Arial Hebrew", "Segoe UI", Arial, sans-serif;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--chalk); color: var(--ink); font-family: var(--font); }
+  /* Everything (phone + explanation + buttons) fits one screen: fit() sizes the phone to the space left. */
+  /* Portrait phone: one column (top, phone, explanation). Wide screens: the phone on one side at full
+     height, the explanation and buttons beside it. */
+  .wrap { max-width: 460px; margin: 0 auto; padding-inline: 16px; padding-block: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .top, .bottom { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .wide .wrap { max-width: 1000px; display: grid; grid-template-columns: auto minmax(0, 440px); grid-template-areas: "phone top" "phone bottom";
+    grid-template-rows: auto 1fr; justify-content: center; column-gap: 48px; row-gap: 14px; align-items: start; padding-block: 28px; }
+  .wide .top { grid-area: top; padding-top: 12px; }
+  .wide .bottom { grid-area: bottom; gap: 12px; }
+  .wide .phone { grid-area: phone; margin: 0; }
+  .wide h1 { font-size: 26px; }
+  .wide .intro { font-size: 16px; }
+  .wide .caption h2 { font-size: 22px; }
+  .wide .caption p { font-size: 17px; line-height: 1.6; }
+  .wide .controls { justify-content: flex-start; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  header img { height: 28px; width: auto; flex: none; }
+  h1 { margin: 0; font-size: 20px; font-weight: 800; line-height: 1.2; text-wrap: balance; min-width: 0; }
+  .intro { margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.45; }
+
+  .chapters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .chapters::-webkit-scrollbar { display: none; }
+  .chap { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px;
+    padding: 6px 12px; font: 500 13px var(--font); cursor: pointer; white-space: nowrap; }
+  .chap[aria-current="true"] { background: var(--ember-soft); border-color: var(--ember); color: var(--ink); font-weight: 700; }
+
+  /* The frame wraps the screen; the screen itself has the app's exact 390×844 shape, so nothing is cropped. */
+  .phone { position: relative; width: min(330px, 100%); max-width: 100%; margin: 0 auto; flex: none;
+    background: var(--ink); border-radius: 34px; padding: 10px; box-shadow: 0 18px 40px rgba(46, 26, 71, .22); }
+  .screen { position: relative; width: 100%; aspect-ratio: 390 / 844; border-radius: 22px; overflow: hidden; background: var(--chalk); cursor: default; }
+  .screen.practice { cursor: pointer; }
+  .screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; opacity: 0; transition: opacity .45s ease; }
+  .screen img.on { opacity: 1; }
+
+  .finger { position: absolute; z-index: 4; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+    background: rgba(200, 100, 46, .35); border: 3px solid var(--ember); box-shadow: 0 4px 12px rgba(46, 26, 71, .25);
+    opacity: 0; transition: left .9s cubic-bezier(.3,.7,.2,1), top .9s cubic-bezier(.3,.7,.2,1), opacity .3s, transform .15s; pointer-events: none; }
+  .finger.show { opacity: 1; }
+  .finger.press { transform: scale(.82); }
+  .ripple { position: absolute; z-index: 4; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid var(--ember);
+    pointer-events: none; animation: ripple .6s ease-out forwards; }
+  @keyframes ripple { from { transform: scale(.6); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
+  .target { position: absolute; z-index: 4; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; border: 3px solid var(--ember);
+    pointer-events: none; animation: pulse 1.3s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { transform: scale(.9); opacity: 1; } 50% { transform: scale(1.15); opacity: .55; } }
+
+  .caption { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+  .caption .meta { font-size: 12px; font-weight: 700; letter-spacing: .02em; color: var(--ember); font-variant-numeric: tabular-nums; }
+  .caption h2 { margin: 0; font-size: 16.5px; font-weight: 700; line-height: 1.3; text-wrap: balance; }
+  .caption p { margin: 0; font-size: 14.5px; line-height: 1.45; color: var(--ink); }
+  .hint { margin: 0; font-size: 14px; color: var(--ember); font-weight: 600; }
+  .hint:empty { display: none; }
+
+  .bar { display: flex; gap: 3px; }
+  .bar span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; position: relative; }
+  .bar span i { position: absolute; inset-block: 0; inset-inline-start: 0; width: 0; background: var(--ember); }
+  .bar span.done i { width: 100%; }
+
+  .controls { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn { border: 1px solid var(--ink); background: var(--card); color: var(--ink); border-radius: 12px; min-height: 44px; padding: 0 14px;
+    font: 600 15px var(--font); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+  .btn.icon { min-width: 44px; padding: 0 10px; font-size: 18px; }
+  .btn.primary { background: var(--ink); color: var(--chalk); min-width: 104px; }
+  .btn.try[aria-pressed="true"] { background: var(--ember-soft); border-color: var(--ember); }
+  .btn[disabled] { opacity: .35; cursor: default; }
+  .btn[hidden] { display: none; }
+  header .btn { min-height: 34px; flex: none; }
+  :focus-visible { outline: 3px solid var(--ember); outline-offset: 2px; }
+  /* Phones (not .wide): compact controls so the phone frame gets the room (Roei, 2026-10-09). */
+  body:not(.wide) .wrap { gap: 6px; padding-block: 8px; }
+  body:not(.wide) .top, body:not(.wide) .bottom { gap: 6px; }
+  body:not(.wide) h1 { font-size: 17px; }
+  body:not(.wide) header img { height: 22px; }
+  body:not(.wide) .chap { padding: 4px 10px; font-size: 12px; }
+  body:not(.wide) .btn { min-height: 38px; padding: 0 12px; font-size: 14px; border-radius: 10px; }
+  body:not(.wide) .btn.icon { min-width: 38px; padding: 0 8px; font-size: 16px; }
+  body:not(.wide) .btn.primary { min-width: 88px; }
+  body:not(.wide) .caption { padding: 8px 12px; border-radius: 14px; gap: 2px; }
+  body:not(.wide) .caption .meta { font-size: 11px; }
+  body:not(.wide) .caption h2 { font-size: 15.5px; }
+  body:not(.wide) .caption p { font-size: 14px; line-height: 1.42; }
+  /* LUMA site bar (same look as the top of luma.palgitraining.com) */
+  .luma-bar { display: block; border-bottom: 1px solid var(--line); background: rgba(245, 241, 234, .96); } /* not the guide's header row */
+  .luma-bar-in { max-width: 1000px; margin: 0 auto; padding-inline: 16px; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 14px; } /* logo + label together, centered (Roei) */
+  .luma-brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: #14243B; }
+  .luma-mark { width: 26px; height: 26px; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .luma-mark circle { stroke: #C0743A; opacity: .6; }
+  .luma-mark path { stroke: currentColor; }
+  .luma-word { font-family: 'Jost', 'Heebo', sans-serif; font-weight: 500; letter-spacing: .32em; font-size: 17px; direction: ltr; padding-left: .32em; }
+  .luma-label { font-size: 13px; font-weight: 500; color: #5B6676; }
+  @media (prefers-reduced-motion: reduce) {
+    .finger { transition: opacity .2s; } .target, .ripple { animation: none; } .screen img { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="luma-bar" id="luma-bar" dir="rtl"><div class="luma-bar-in">
+  <a class="luma-brand" href="https://luma.palgitraining.com/" aria-label="LUMA — לאתר"><svg class="luma-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg><span class="luma-word">LUMA</span></a>
+  <span class="luma-label">הדגמת המערכת</span>
+</div></header>
+<div class="wrap" dir="rtl" lang="he">
+  <div class="top">
+  <header>
+    <h1>LUMA במבט אחד</h1>
+    <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MzYuNzMgMTc0LjAwIiB3aWR0aD0iNTM3IiBoZWlnaHQ9IjE3NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJDbGltYmluZyBBY2FkZW15Ij48dGl0bGU+Q2xpbWJpbmcgQWNhZGVteTwvdGl0bGU+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTI2Ljk2MyAtMTYuNjc3KSBzY2FsZSgxLjA0Mzg3KSI+PHBhdGggZD0iTTQwIDE3MCBDNDYgMTQ2IDc2IDEzNiAxMDAgMTM2IEMxMjQgMTM2IDE1NCAxNDYgMTYwIDE3MCBDMTMwIDE3NiA3MCAxNzYgNDAgMTcwIFoiIHN0eWxlPSJmaWxsOiAjQzg2NDJFIj48L3BhdGg+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCAtMTQpIHJvdGF0ZSgtMTYgMTAwIDcyKSI+PHBhdGggZD0iTTY4IDc0IEw2OCA5NiBDODIgMTA2IDExOCAxMDYgMTMyIDk2IEwxMzIgNzQiIHN0eWxlPSJzdHJva2U6ICMyRTFBNDc7IHN0cm9rZS13aWR0aDogMy42OyBzdHJva2UtbGluZWNhcDogcm91bmQ7IHN0cm9rZS1saW5lam9pbjogcm91bmQ7IGZpbGw6IG5vbmUiPjwvcGF0aD48cGF0aCBkPSJNMzggNjAgTDM4IDY0IEwxMDAgODQgTDE2MiA2NCBMMTYyIDYwIiBzdHlsZT0ic3Ryb2tlOiAjMkUxQTQ3OyBzdHJva2Utd2lkdGg6IDMuNjsgc3Ryb2tlLWxpbmVjYXA6IHJvdW5kOyBzdHJva2UtbGluZWpvaW46IHJvdW5kOyBmaWxsOiBub25lIj48L3BhdGg+PHBhdGggZD0iTTEwMCA0MCBMMTYyIDYwIEwxMDAgODAgTDM4IDYwIFoiIHN0eWxlPSJzdHJva2U6ICMyRTFBNDc7IHN0cm9rZS13aWR0aDogMy42OyBzdHJva2UtbGluZWNhcDogcm91bmQ7IHN0cm9rZS1saW5lam9pbjogcm91bmQ7IGZpbGw6IG5vbmUiPjwvcGF0aD48cGF0aCBkPSJNMTAwIDYwIEMxMTggNjIgMTM2IDY0IDE1MCA2NiBMMTUwIDkyIiBzdHlsZT0ic3Ryb2tlOiAjMkUxQTQ3OyBzdHJva2Utd2lkdGg6IDMuNjsgc3Ryb2tlLWxpbmVjYXA6IHJvdW5kOyBzdHJva2UtbGluZWpvaW46IHJvdW5kOyBmaWxsOiBub25lIj48L3BhdGg+PGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjMuOTYiIHN0eWxlPSJmaWxsOiAjMkUxQTQ3Ij48L2NpcmNsZT48cGF0aCBkPSJNMTQ2IDkyIEwxNTQgOTIgTDE1NiAxMDggTDE0NCAxMDggWiIgc3R5bGU9ImZpbGw6ICMyRTFBNDc7IHN0cm9rZTogIzJFMUE0Nzsgc3Ryb2tlLXdpZHRoOiAzLjY7IHN0cm9rZS1saW5lam9pbjogcm91bmQiPjwvcGF0aD48L2c+PHBhdGggZD0iTTg0IDEwOCBMODIgMTIyIiBzdHlsZT0ic3Ryb2tlOiAjMkUxQTQ3OyBzdHJva2Utd2lkdGg6IDMuNjsgc3Ryb2tlLWxpbmVjYXA6IHJvdW5kOyBzdHJva2UtbGluZWpvaW46IHJvdW5kOyBmaWxsOiBub25lIj48L3BhdGg+PHBhdGggZD0iTTEwMCAxMTAgTDEwMCAxMjYiIHN0eWxlPSJzdHJva2U6ICMyRTFBNDc7IHN0cm9rZS13aWR0aDogMy42OyBzdHJva2UtbGluZWNhcDogcm91bmQ7IHN0cm9rZS1saW5lam9pbjogcm91bmQ7IGZpbGw6IG5vbmUiPjwvcGF0aD48cGF0aCBkPSJNMTE2IDEwOCBMMTE4IDEyMiIgc3R5bGU9InN0cm9rZTogIzJFMUE0Nzsgc3Ryb2tlLXdpZHRoOiAzLjY7IHN0cm9rZS1saW5lY2FwOiByb3VuZDsgc3Ryb2tlLWxpbmVqb2luOiByb3VuZDsgZmlsbDogbm9uZSI+PC9wYXRoPjwvZz48cmVjdCB4PSIxODMuNzMiIHk9IjQzLjAwIiB3aWR0aD0iMiIgaGVpZ2h0PSI4OC4wMCIgZmlsbD0iI0M4NjQyRSIvPjxwYXRoIGQ9Ik0yMzAuMDA2Mzk4NDQyODkxIDYwLjVRMjMwLjAwNjM5ODQ0Mjg5MSA1Ni43NSAyMzEuNjgxMzk4NDQyODkxIDUzLjk4NzVRMjMzLjM1NjM5ODQ0Mjg5MSA1MS4yMjQ5OTk5OTk5OTk5OTQgMjM2LjA3NTE0ODQ0Mjg5MSA0OS42ODc1UTIzOC43OTM4OTg0NDI4OTEgNDguMTUgMjQxLjk5Mzg5ODQ0Mjg5MSA0OC4xNVEyNDQuNDkzODk4NDQyODkxIDQ4LjE1IDI0Ni41MDAxNDg0NDI4OTEgNDguNzkzNzVRMjQ4LjUwNjM5ODQ0Mjg5MSA0OS40Mzc1IDI1MC4xMjUxNDg0NDI4OTEgNTAuNTY4NzVRMjUxLjc0Mzg5ODQ0Mjg5MSA1MS43IDI1Mi45MTg4OTg0NDI4OTEgNTMuMTI1VjQ2LjA5OTk5OTk5OTk5OTk5NFEyNTAuNzU2Mzk4NDQyODkxIDQ0LjI3NSAyNDguMjAwMTQ4NDQyODkxIDQzLjMyNVEyNDUuNjQzODk4NDQyODkxIDQyLjM3NSAyNDEuNzkzODk4NDQyODkxIDQyLjM3NVEyMzcuOTE4ODk4NDQyODkxIDQyLjM3NSAyMzQuNjAwMTQ4NDQyODkxIDQzLjY5Mzc0OTk5OTk5OTk5NFEyMzEuMjgxMzk4NDQyODkxIDQ1LjAxMjQ5OTk5OTk5OTk5NiAyMjguODE4ODk4NDQyODkxIDQ3LjQ0Mzc0OTk5OTk5OTk5NFEyMjYuMzU2Mzk4NDQyODkxIDQ5Ljg3NSAyMjQuOTgxMzk4NDQyODkxIDUzLjJRMjIzLjYwNjM5ODQ0Mjg5MSA1Ni41MjUgMjIzLjYwNjM5ODQ0Mjg5MSA2MC41UTIyMy42MDYzOTg0NDI4OTEgNjQuNDc1IDIyNC45ODEzOTg0NDI4OTEgNjcuOFEyMjYuMzU2Mzk4NDQyODkxIDcxLjEyNSAyMjguODE4ODk4NDQyODkxIDczLjU1NjI1UTIzMS4yODEzOTg0NDI4OTEgNzUuOTg3NSAyMzQuNjAwMTQ4NDQyODkxIDc3LjMwNjI1UTIzNy45MTg4OTg0NDI4OTEgNzguNjI1IDI0MS43OTM4OTg0NDI4OTEgNzguNjI1UTI0NS42NDM4OTg0NDI4OTEgNzguNjI1IDI0OC4yMDAxNDg0NDI4OTEgNzcuNjY4NzVRMjUwLjc1NjM5ODQ0Mjg5MSA3Ni43MTI1IDI1Mi45MTg4OTg0NDI4OTEgNzQuOVY2Ny44NzVRMjUxLjc0Mzg5ODQ0Mjg5MSA2OS4zIDI1MC4xMjUxNDg0NDI4OTEgNzAuNDI1UTI0OC41MDYzOTg0NDI4OTEgNzEuNTUgMjQ2LjUwMDE0ODQ0Mjg5MSA3Mi4xOTk5OTk5OTk5OTk5OVEyNDQuNDkzODk4NDQyODkxIDcyLjg1IDI0MS45OTM4OTg0NDI4OTEgNzIuODVRMjM4Ljc5Mzg5ODQ0Mjg5MSA3Mi44NSAyMzYuMDc1MTQ4NDQyODkxIDcxLjMxMjVRMjMzLjM1NjM5ODQ0Mjg5MSA2OS43NzUgMjMxLjY4MTM5ODQ0Mjg5MSA2Ni45OTM3NVEyMzAuMDA2Mzk4NDQyODkxIDY0LjIxMjUgMjMwLjAwNjM5ODQ0Mjg5MSA2MC41Wk0yNzAuMTU2Mzk4NDQyODkxIDQzLjBWNzguMEgyODkuOTY4ODk4NDQyODkxVjcyLjY4NzVIMjc2LjA5Mzg5ODQ0Mjg5MVY0My4wWk0zMDQuMjA2Mzk4NDQyODkxIDQzLjBWNzguMEgzMTAuMjA2Mzk4NDQyODkxVjQzLjBaTTMzNC40ODEzOTg0NDI4OTA5NiA1Ni42ODc1IDM0NS4xNDM4OTg0NDI4OTEgNzQuNzUgMzU1LjgwNjM5ODQ0Mjg5MSA1Ni42ODc1IDM1OC4yMDYzOTg0NDI4OTEgNzguMEgzNjQuMzMxMzk4NDQyODkxTDM1OS41MTg4OTg0NDI4OTEgNDEuMjVMMzQ1LjE0Mzg5ODQ0Mjg5MSA2NC45ODc1TDMzMC43Njg4OTg0NDI4OTEgNDEuMjVMMzI1Ljk1NjM5ODQ0Mjg5MSA3OC4wSDMzMi4wODEzOTg0NDI4OTFaTTM4NC42NDM4OTg0NDI4OTEgNTkuOTM3NUgzOTAuNjY4ODk4NDQyODkwOTZRMzk0LjAwNjM5ODQ0Mjg5MDk0IDU5LjkzNzUgMzk2LjUxODg5ODQ0Mjg5MSA1OC45OTM3NVEzOTkuMDMxMzk4NDQyODkxIDU4LjA1IDQwMC40NTYzOTg0NDI4OTEgNTYuMjE4NzVRNDAxLjg4MTM5ODQ0Mjg5MDk0IDU0LjM4NzUgNDAxLjg4MTM5ODQ0Mjg5MDk0IDUxLjgxMjVRNDAxLjg4MTM5ODQ0Mjg5MDk0IDQ4LjgxMjUgNDAwLjQ1NjM5ODQ0Mjg5MSA0Ni44Njg3NVEzOTkuMDMxMzk4NDQyODkxIDQ0LjkyNSAzOTYuNTE4ODk4NDQyODkxIDQzLjk2MjVRMzk0LjAwNjM5ODQ0Mjg5MDk0IDQzLjAgMzkwLjY2ODg5ODQ0Mjg5MDk2IDQzLjBIMzgwLjEwNjM5ODQ0Mjg5MDk2Vjc4LjBIMzkxLjI5Mzg5ODQ0Mjg5MDk2UTM5NS4wMDYzOTg0NDI4OTA5NCA3OC4wIDM5Ny44MzEzOTg0NDI4OTEgNzYuOTE4NzVRNDAwLjY1NjM5ODQ0Mjg5MSA3NS44Mzc1IDQwMi4yNjg4OTg0NDI4OTEgNzMuNjA2MjVRNDAzLjg4MTM5ODQ0Mjg5MDk0IDcxLjM3NSA0MDMuODgxMzk4NDQyODkwOTQgNjcuOTEyNVE0MDMuODgxMzk4NDQyODkwOTQgNjUuNDEyNSA0MDIuODc1MTQ4NDQyODkwOSA2My42MDYyNDk5OTk5OTk5OTZRNDAxLjg2ODg5ODQ0Mjg5MDk1IDYxLjggNDAwLjExMjY0ODQ0Mjg5MSA2MC42NDM3NVEzOTguMzU2Mzk4NDQyODkwOTYgNTkuNDg3NSAzOTYuMTAwMTQ4NDQyODkwOTQgNTguOTMxMjVRMzkzLjg0Mzg5ODQ0Mjg5MSA1OC4zNzUgMzkxLjI5Mzg5ODQ0Mjg5MDk2IDU4LjM3NUgzODQuNjQzODk4NDQyODkxVjYxLjYzNzVIMzkwLjkxODg5ODQ0Mjg5MDk2UTM5Mi40MzEzOTg0NDI4OTA5NSA2MS42Mzc1IDM5My42ODc2NDg0NDI4OTA5IDYxLjk4MTI1UTM5NC45NDM4OTg0NDI4OTA5NCA2Mi4zMjUgMzk1Ljg3NTE0ODQ0Mjg5MDkgNjMuMDMxMjVRMzk2LjgwNjM5ODQ0Mjg5MDk1IDYzLjczNzUgMzk3LjMxMjY0ODQ0Mjg5MDkgNjQuODA2MjVRMzk3LjgxODg5ODQ0Mjg5MDk0IDY1Ljg3NSAzOTcuODE4ODk4NDQyODkwOTQgNjcuMjg3NVEzOTcuODE4ODk4NDQyODkwOTQgNjkuMjUgMzk2LjkyNTE0ODQ0Mjg5MSA3MC41Mzc1UTM5Ni4wMzEzOTg0NDI4OTEgNzEuODI1IDM5NC40NzUxNDg0NDI4OTA5NCA3Mi40NzVRMzkyLjkxODg5ODQ0Mjg5MDk2IDczLjEyNSAzOTAuOTE4ODk4NDQyODkwOTYgNzMuMTI1SDM4Ni4wNDM4OTg0NDI4OTA5NlY0Ny44NzVIMzkwLjI5Mzg5ODQ0Mjg5MDk2UTM5Mi43NTYzOTg0NDI4OTA5NCA0Ny44NzUgMzk0LjI4NzY0ODQ0Mjg5MDk0IDQ5LjA2MjVRMzk1LjgxODg5ODQ0Mjg5MDk0IDUwLjI1IDM5NS44MTg4OTg0NDI4OTA5NCA1Mi40NjI1UTM5NS44MTg4OTg0NDI4OTA5NCA1My45MjUgMzk1LjExODg5ODQ0Mjg5MDk1IDU0Ljk0OTk5OTk5OTk5OTk5NlEzOTQuNDE4ODk4NDQyODkwOTYgNTUuOTc0OTk5OTk5OTk5OTk0IDM5My4xNjg4OTg0NDI4OTA5NiA1Ni41MTI0OTk5OTk5OTk5OTZRMzkxLjkxODg5ODQ0Mjg5MDk2IDU3LjA1IDM5MC4yOTM4OTg0NDI4OTA5NiA1Ny4wNUgzODQuNjQzODk4NDQyODkxWk00MjAuMTU2Mzk4NDQyODkxIDQzLjBWNzguMEg0MjYuMTU2Mzk4NDQyODkxVjQzLjBaTTQ2OS40Njg4OTg0NDI4OTEgNDMuMFY2Ni41TDQ0My45MDYzOTg0NDI4OTEgNDEuMjVWNzguMEg0NDkuNzE4ODk4NDQyODkxVjU0LjVMNDc1LjI4MTM5ODQ0Mjg5MSA3OS43NVY0My4wWk01MDkuNzQzODk4NDQyODkxIDY0LjY4NzVINTIwLjQ1NjM5ODQ0Mjg5MVE1MjAuMDA2Mzk4NDQyODkxIDY2LjQ2MjUgNTE5LjExMjY0ODQ0Mjg5MSA2OC4wMTI1UTUxOC4yMTg4OTg0NDI4OTEgNjkuNTYyNSA1MTYuODc1MTQ4NDQyODkxIDcwLjc1UTUxNS41MzEzOTg0NDI4OTEgNzEuOTM3NSA1MTMuNjc1MTQ4NDQyODkxIDcyLjU5Mzc1UTUxMS44MTg4OTg0NDI4OTEgNzMuMjUgNTA5LjQ5Mzg5ODQ0Mjg5MSA3My4yNVE1MDYuMDQzODk4NDQyODkxIDczLjI1IDUwMy4yODc2NDg0NDI4OTEwNSA3MS42NVE1MDAuNTMxMzk4NDQyODkxMDMgNzAuMDUgNDk4LjkxODg5ODQ0Mjg5MSA2Ny4xNzVRNDk3LjMwNjM5ODQ0Mjg5MSA2NC4zIDQ5Ny4zMDYzOTg0NDI4OTEgNjAuNVE0OTcuMzA2Mzk4NDQyODkxIDU2LjY1IDQ5OC45NDM4OTg0NDI4OTEgNTMuODMxMjVRNTAwLjU4MTM5ODQ0Mjg5MSA1MS4wMTI1IDUwMy4zNDM4OTg0NDI4OTEwMyA0OS40NDM3NVE1MDYuMTA2Mzk4NDQyODkxIDQ3Ljg3NSA1MDkuNDkzODk4NDQyODkxIDQ3Ljg3NVE1MTMuMTE4ODk4NDQyODkxIDQ3Ljg3NSA1MTUuNjkzODk4NDQyODkwOSA0OS4zNjg3NVE1MTguMjY4ODk4NDQyODkxIDUwLjg2MjUgNTE5LjczMTM5ODQ0Mjg5MSA1My4zNzVMNTI0LjU0Mzg5ODQ0Mjg5MSA1MC4xNjI0OTk5OTk5OTk5OTRRNTIyLjk4MTM5ODQ0Mjg5MSA0Ny43MTI1IDUyMC43Njg4OTg0NDI4OTEgNDUuOTgxMjVRNTE4LjU1NjM5ODQ0Mjg5MSA0NC4yNSA1MTUuNzQzODk4NDQyODkxIDQzLjMxMjVRNTEyLjkzMTM5ODQ0Mjg5MSA0Mi4zNzUgNTA5LjQ5Mzg5ODQ0Mjg5MSA0Mi4zNzVRNTA1LjU0Mzg5ODQ0Mjg5MSA0Mi4zNzUgNTAyLjE3NTE0ODQ0Mjg5MSA0My42ODc1UTQ5OC44MDYzOTg0NDI4OTEgNDUuMCA0OTYuMzEyNjQ4NDQyODkxMDMgNDcuNDE4NzVRNDkzLjgxODg5ODQ0Mjg5MSA0OS44Mzc1IDQ5Mi40Mzc2NDg0NDI4OTEwMyA1My4xNjg3NVE0OTEuMDU2Mzk4NDQyODkxIDU2LjUgNDkxLjA1NjM5ODQ0Mjg5MSA2MC41UTQ5MS4wNTYzOTg0NDI4OTEgNjQuNSA0OTIuNDE4ODk4NDQyODkxIDY3Ljg1UTQ5My43ODEzOTg0NDI4OTEwMyA3MS4yIDQ5Ni4yNTAxNDg0NDI4OTEwMyA3My42NDM3NTAwMDAwMDAwMVE0OTguNzE4ODk4NDQyODkxMDMgNzYuMDg3NSA1MDIuMDY4ODk4NDQyODkxMDUgNzcuNDE4NzVRNTA1LjQxODg5ODQ0Mjg5MSA3OC43NSA1MDkuMzY4ODk4NDQyODkxIDc4Ljc1UTUxMy41NTYzOTg0NDI4OTEgNzguNzUgNTE2LjgxMjY0ODQ0Mjg5MSA3Ny4yMzEyNVE1MjAuMDY4ODk4NDQyODkxIDc1LjcxMjUgNTIyLjI4MTM5ODQ0Mjg5MSA3My4wNjI1UTUyNC40OTM4OTg0NDI4OTEgNzAuNDEyNSA1MjUuNTg3NjQ4NDQyODkxIDY2Ljk4MTI0OTk5OTk5OTk5UTUyNi42ODEzOTg0NDI4OTEgNjMuNTUgNTI2LjU4MTM5ODQ0Mjg5MSA1OS42ODc1SDUwOS43NDM4OTg0NDI4OTFaIiBmaWxsPSIjMkUxQTQ3Ii8+PHBhdGggZD0iTTIyOS44MzEzOTg0NDI4OTEgMTIyLjBIMjQ4LjMzMTM5ODQ0Mjg5MUwyNDcuMjA2Mzk4NDQyODkxIDExNy4wMjVIMjMwLjk1NjM5ODQ0Mjg5MVpNMjM4Ljk4MTM5ODQ0Mjg5MSAxMDUuOSAyNDQuNTU2Mzk4NDQyODkxIDExOC44ODc1IDI0NC42Njg4OTg0NDI4OTEgMTIwLjM1IDI0OS40MTg4OTg0NDI4OTEgMTMxLjBIMjU2LjEwNjM5ODQ0Mjg5MDk2TDIzOC45ODEzOTg0NDI4OTEgOTQuMDYyNUwyMjEuODU2Mzk4NDQyODkxIDEzMS4wSDIyOC41NDM4OTg0NDI4OTFMMjMzLjM5Mzg5ODQ0Mjg5MSAxMjAuMDM3NUwyMzMuNDgxMzk4NDQyODkxIDExOC43Mzc1Wk0yNzQuNTA2Mzk4NDQyODkwOTQgMTEzLjVRMjc0LjUwNjM5ODQ0Mjg5MDk0IDEwOS43NSAyNzYuMTgxMzk4NDQyODkwOTUgMTA2Ljk4NzVRMjc3Ljg1NjM5ODQ0Mjg5MDk2IDEwNC4yMjUgMjgwLjU3NTE0ODQ0Mjg5MDk2IDEwMi42ODc1UTI4My4yOTM4OTg0NDI4OTA5NiAxMDEuMTUgMjg2LjQ5Mzg5ODQ0Mjg5MDk1IDEwMS4xNVEyODguOTkzODk4NDQyODkwOTUgMTAxLjE1IDI5MS4wMDAxNDg0NDI4OTA5IDEwMS43OTM3NVEyOTMuMDA2Mzk4NDQyODkwOTQgMTAyLjQzNzUgMjk0LjYyNTE0ODQ0Mjg5MDkgMTAzLjU2ODc1UTI5Ni4yNDM4OTg0NDI4OTA5NSAxMDQuNyAyOTcuNDE4ODk4NDQyODkwOTYgMTA2LjEyNVY5OS4xUTI5NS4yNTYzOTg0NDI4OTA5NCA5Ny4yNzUgMjkyLjcwMDE0ODQ0Mjg5MDk2IDk2LjMyNVEyOTAuMTQzODk4NDQyODkxIDk1LjM3NSAyODYuMjkzODk4NDQyODkwOTYgOTUuMzc1UTI4Mi40MTg4OTg0NDI4OTA5NiA5NS4zNzUgMjc5LjEwMDE0ODQ0Mjg5MDk0IDk2LjY5Mzc1UTI3NS43ODEzOTg0NDI4OTEgOTguMDEyNDk5OTk5OTk5OTkgMjczLjMxODg5ODQ0Mjg5MDk0IDEwMC40NDM3NVEyNzAuODU2Mzk4NDQyODkwOTYgMTAyLjg3NSAyNjkuNDgxMzk4NDQyODkwOTYgMTA2LjJRMjY4LjEwNjM5ODQ0Mjg5MDk2IDEwOS41MjUgMjY4LjEwNjM5ODQ0Mjg5MDk2IDExMy41UTI2OC4xMDYzOTg0NDI4OTA5NiAxMTcuNDc1IDI2OS40ODEzOTg0NDI4OTA5NiAxMjAuOFEyNzAuODU2Mzk4NDQyODkwOTYgMTI0LjEyNSAyNzMuMzE4ODk4NDQyODkwOTQgMTI2LjU1NjI1UTI3NS43ODEzOTg0NDI4OTEgMTI4Ljk4NzUgMjc5LjEwMDE0ODQ0Mjg5MDk0IDEzMC4zMDYyNVEyODIuNDE4ODk4NDQyODkwOTYgMTMxLjYyNSAyODYuMjkzODk4NDQyODkwOTYgMTMxLjYyNVEyOTAuMTQzODk4NDQyODkxIDEzMS42MjUgMjkyLjcwMDE0ODQ0Mjg5MDk2IDEzMC42Njg3NVEyOTUuMjU2Mzk4NDQyODkwOTQgMTI5LjcxMjUgMjk3LjQxODg5ODQ0Mjg5MDk2IDEyNy45VjEyMC44NzVRMjk2LjI0Mzg5ODQ0Mjg5MDk1IDEyMi4zIDI5NC42MjUxNDg0NDI4OTA5IDEyMy40MjVRMjkzLjAwNjM5ODQ0Mjg5MDk0IDEyNC41NSAyOTEuMDAwMTQ4NDQyODkwOSAxMjUuMTk5OTk5OTk5OTk5OTlRMjg4Ljk5Mzg5ODQ0Mjg5MDk1IDEyNS44NSAyODYuNDkzODk4NDQyODkwOTUgMTI1Ljg1UTI4My4yOTM4OTg0NDI4OTA5NiAxMjUuODUgMjgwLjU3NTE0ODQ0Mjg5MDk2IDEyNC4zMTI1UTI3Ny44NTYzOTg0NDI4OTA5NiAxMjIuNzc1IDI3Ni4xODEzOTg0NDI4OTA5NSAxMTkuOTkzNzVRMjc0LjUwNjM5ODQ0Mjg5MDk0IDExNy4yMTI1IDI3NC41MDYzOTg0NDI4OTA5NCAxMTMuNVpNMzE4Ljg4MTM5ODQ0Mjg5MSAxMjIuMEgzMzcuMzgxMzk4NDQyODkxTDMzNi4yNTYzOTg0NDI4OTEgMTE3LjAyNUgzMjAuMDA2Mzk4NDQyODkxWk0zMjguMDMxMzk4NDQyODkxIDEwNS45IDMzMy42MDYzOTg0NDI4OTA5NiAxMTguODg3NSAzMzMuNzE4ODk4NDQyODkxIDEyMC4zNSAzMzguNDY4ODk4NDQyODkxIDEzMS4wSDM0NS4xNTYzOTg0NDI4OTFMMzI4LjAzMTM5ODQ0Mjg5MSA5NC4wNjI1TDMxMC45MDYzOTg0NDI4OTEgMTMxLjBIMzE3LjU5Mzg5ODQ0Mjg5MUwzMjIuNDQzODk4NDQyODkxIDEyMC4wMzc1TDMyMi41MzEzOTg0NDI4OTEgMTE4LjczNzVaTTM1OS4xNTYzOTg0NDI4OTEgOTYuMFYxMzEuMEgzNjUuMjA2Mzk4NDQyODkxVjk2LjBaTTM3MC40Njg4OTg0NDI4OTEgMTMxLjBRMzc1LjgxODg5ODQ0Mjg5MSAxMzEuMCAzNzkuODc1MTQ4NDQyODkxIDEyOC44MjVRMzgzLjkzMTM5ODQ0Mjg5MDk1IDEyNi42NSAzODYuMjAwMTQ4NDQyODkwOTYgMTIyLjcyNVEzODguNDY4ODk4NDQyODkxIDExOC44IDM4OC40Njg4OTg0NDI4OTEgMTEzLjVRMzg4LjQ2ODg5ODQ0Mjg5MSAxMDguMTg3NSAzODYuMjAwMTQ4NDQyODkwOTYgMTA0LjI2ODc1UTM4My45MzEzOTg0NDI4OTA5NSAxMDAuMzUgMzc5Ljg3NTE0ODQ0Mjg5MSA5OC4xNzVRMzc1LjgxODg5ODQ0Mjg5MSA5Ni4wIDM3MC40Njg4OTg0NDI4OTEgOTYuMEgzNjIuODE4ODk4NDQyODkxVjEwMS41NjI1SDM3MC4zNDM4OTg0NDI4OTFRMzcyLjkxODg5ODQ0Mjg5MDk2IDEwMS41NjI1IDM3NS4xMzEzOTg0NDI4OTA5NCAxMDIuMzE4NzVRMzc3LjM0Mzg5ODQ0Mjg5MSAxMDMuMDc1IDM3OC45Njg4OTg0NDI4OTEgMTA0LjU2ODc1UTM4MC41OTM4OTg0NDI4OTEgMTA2LjA2MjUgMzgxLjUwMDE0ODQ0Mjg5MSAxMDguM1EzODIuNDA2Mzk4NDQyODkxIDExMC41Mzc1IDM4Mi40MDYzOTg0NDI4OTEgMTEzLjVRMzgyLjQwNjM5ODQ0Mjg5MSAxMTYuNDYyNSAzODEuNTAwMTQ4NDQyODkxIDExOC43UTM4MC41OTM4OTg0NDI4OTEgMTIwLjkzNzUgMzc4Ljk2ODg5ODQ0Mjg5MSAxMjIuNDMxMjVRMzc3LjM0Mzg5ODQ0Mjg5MSAxMjMuOTI1IDM3NS4xMzEzOTg0NDI4OTA5NCAxMjQuNjgxMjVRMzcyLjkxODg5ODQ0Mjg5MDk2IDEyNS40Mzc1IDM3MC4zNDM4OTg0NDI4OTEgMTI1LjQzNzVIMzYyLjgxODg5ODQ0Mjg5MVYxMzEuMFpNNDA3Ljg2ODg5ODQ0Mjg5MSAxMzEuMEg0MjUuNTE4ODk4NDQyODkxVjEyNS44MTI1SDQwNy44Njg4OTg0NDI4OTFaTTQwNy44Njg4OTg0NDI4OTEgMTAxLjE4NzVINDI1LjUxODg5ODQ0Mjg5MVY5Ni4wSDQwNy44Njg4OTg0NDI4OTFaTTQwNy44Njg4OTg0NDI4OTEgMTE0LjgxMjVINDI0LjUxODg5ODQ0Mjg5MVYxMDkuNjg3NUg0MDcuODY4ODk4NDQyODkxWk00MDQuMjA2Mzk4NDQyODkxIDk2LjBWMTMxLjBINDEwLjAxODg5ODQ0Mjg5MVY5Ni4wWk00NDkuMjgxMzk4NDQyODkxIDEwOS42ODc1IDQ1OS45NDM4OTg0NDI4OTEgMTI3Ljc1IDQ3MC42MDYzOTg0NDI4OTEgMTA5LjY4NzUgNDczLjAwNjM5ODQ0Mjg5MSAxMzEuMEg0NzkuMTMxMzk4NDQyODkxTDQ3NC4zMTg4OTg0NDI4OTEgOTQuMjVMNDU5Ljk0Mzg5ODQ0Mjg5MSAxMTcuOTg3NUw0NDUuNTY4ODk4NDQyODkxIDk0LjI1TDQ0MC43NTYzOTg0NDI4OTEgMTMxLjBINDQ2Ljg4MTM5ODQ0Mjg5MVpNNTE0LjE5Mzg5ODQ0Mjg5MSA5Ni4wIDUwNi4wMzEzOTg0NDI4OTEwMyAxMTAuOTc1IDQ5Ny45MDYzOTg0NDI4OTEwMyA5Ni4wSDQ5MS4xNTYzOTg0NDI4OTEwM0w1MDMuMDU2Mzk4NDQyODkxIDExNi4zVjEzMS4wSDUwOS4wNTYzOTg0NDI4OTFWMTE2LjIzNzVMNTIwLjk0Mzg5ODQ0Mjg5MSA5Ni4wWiIgZmlsbD0iIzJFMUE0NyIvPjwvc3ZnPgo=" alt="Climbing Academy">
+    <button class="btn" id="close" type="button" aria-label="סגור" hidden>✕ סגור</button>
+  </header>
+  <p class="intro">כך נראית LUMA באקדמיה לטיפוס תחרותי: מה הספורטאים רואים, ומה הצוות מקבל.</p>
+  <nav class="chapters" id="chapters" aria-label="פרקים"></nav>
+  </div>
+  <div class="phone" id="phone">
+    <div class="screen" id="screen" aria-live="off">
+      <img id="imgA" alt=""><img id="imgB" alt="">
+
+    </div>
+  </div>
+  <div class="bottom">
+  <div class="bar" id="bar" aria-hidden="true"></div>
+  <div class="controls">
+    <button class="btn icon" id="prev" type="button" aria-label="השלב הקודם">→</button>
+    <button class="btn primary" id="play" type="button">▶ הפעל</button>
+    <button class="btn icon" id="next" type="button" aria-label="השלב הבא">←</button>
+
+
+  </div>
+  <section class="caption" id="caption" aria-live="polite">
+    <div class="meta" id="meta"></div>
+    <h2 id="stitle"></h2>
+    <p id="stext"></p>
+    <p class="hint" id="hint"></p>
+  </section>
+  </div>
+</div>
+
+<script>
+const CHAPTERS = ["פתיחה","הספורטאי","בניית תוכניות","עומס ובריאות","לוח ונוכחות","תקשורת בצוות"];
+const STEPS = [{"id":"demo--cover","chapter":0,"title":"LUMA","text":"מערכת לניהול ספורטאים וקבוצות ספורט, בטלפון.","tap":null},{"id":"athlete--home","chapter":1,"title":"השבוע שלי","text":"כל ספורטאי רואה את האימונים שלו לשבוע הקרוב.","tap":null},{"id":"athlete--s-card","chapter":1,"title":"אימון כוח אישי","text":"התוכנית שהמאמן בנה, תרגיל אחר תרגיל.","tap":null},{"id":"athlete--s-set","chapter":1,"title":"דיווח תוך כדי אימון","text":"הספורטאי מתעד מה עשה בפועל.","tap":null},{"id":"athlete--pr-ex","chapter":1,"title":"רואים את ההתקדמות","text":"לכל תרגיל: מאיפה התחלנו ולאן הגענו.","tap":null},{"id":"fitness--ed-part","chapter":2,"title":"תוכנית לכל ספורטאי","text":"מאמן הכושר בונה לכל ספורטאי אימון אישי.","tap":null},{"id":"fitness--b-open","chapter":2,"title":"בנק תרגילים","text":"כל תרגיל נשמר פעם אחת, וההתקדמות נמדדת לאורך זמן.","tap":null},{"id":"athlete--e-box","chapter":3,"title":"כמה קשה היה","text":"הספורטאי נותן ציון לקושי ולמשך, והמערכת מחשבת עומס.","tap":null},{"id":"fitness--pg-load","chapter":3,"title":"עומס שבועי","text":"הצוות רואה קפיצות בעומס בזמן.","tap":null},{"id":"athlete--p-home","chapter":3,"title":"דיווח על כאב","text":"כאב מדווח מהטלפון ומגיע לצוות מיד.","tap":null},{"id":"fitness--at-item","chapter":3,"title":"מה דורש תשומת לב","text":"רשימה אחת לצוות של כל מה שצריך לבדוק.","tap":null},{"id":"manager--e-done","chapter":4,"title":"לוח אחד לכולם","text":"אימונים, תחרויות ופגישות בלוח אחד.","tap":null},{"id":"setter--r-entry","chapter":4,"title":"מי מגיע","text":"לכל אימון: מי מאמן ומי צפוי להגיע.","tap":null},{"id":"setter--f-fill","chapter":4,"title":"סיכום אימון","text":"מה עשינו ומי הגיע, ישר לספורטאים ולמאמנים.","tap":null},{"id":"coach--sum-fill","chapter":5,"title":"סיכומי פגישות","text":"חלק לספורטאי, וחלק שנשאר בתוך הצוות.","tap":null},{"id":"manager--an-form","chapter":5,"title":"הכרזות","text":"הודעה לכולם, ורואים מי קרא.","tap":null},{"id":"athlete--bell-list","chapter":5,"title":"התראות לטלפון","text":"כל עדכון מגיע כהתראה לטלפון.","tap":null}];
+(function () {
+  const $ = id => document.getElementById(id);
+  const screen = $('screen'), finger = $('finger') || document.createElement('div'), imgs = [$('imgA'), $('imgB')];
+  let index = 0, front = 0, playing = false, practice = false, timers = [], target = null, animToken = 0;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  CHAPTERS.forEach((name, ci) => {
+    const b = document.createElement('button');
+    b.className = 'chap'; b.type = 'button'; b.textContent = name;
+    b.addEventListener('click', () => go(STEPS.findIndex(s => s.chapter === ci)));
+    $('chapters').appendChild(b);
+  });
+  STEPS.forEach(() => { const s = document.createElement('span'); s.appendChild(document.createElement('i')); $('bar').appendChild(s); });
+
+  function clear() { animToken++; audio.pause(); timers.forEach(clearTimeout); timers = []; if (target) { target.remove(); target = null; } }
+  function later(ms, fn) { timers.push(setTimeout(fn, ms)); }
+  function readMs(step) { return Math.max(5200, (step.title.length + step.text.length) * 62); }
+  function place(el, tap) { el.style.left = tap.x + '%'; el.style.top = tap.y + '%'; }
+  function ripple(tap) { const r = document.createElement('div'); r.className = 'ripple'; place(r, tap); screen.appendChild(r); setTimeout(() => r.remove(), 700); }
+
+  // How long a step stays in play mode. Used by the player page (inlined) and by tests.
+function nextDelay(o) {
+  if (o.audioOk && !o.muted && isFinite(o.audioMs) && o.audioMs > 0) return Math.round(o.audioMs) + 600;
+  return o.readMs;
+}
+
+
+  const params = new URLSearchParams(location.search);
+  const PASS = params.get('p') || '';
+  const Q = PASS ? '?p=' + encodeURIComponent(PASS) : '';
+  const INAPP = params.get('inapp') === '1';
+  const audio = new Audio();
+  audio.preload = 'auto';
+  const SILENT = true; // the LUMA demo has no narration (Roei): timed by reading length
+  let muted = SILENT;
+  if (!SILENT) { try { muted = localStorage.getItem('guide-muted') === '1'; } catch (e) {} }
+  function media(kind, id) { return kind + '/' + encodeURIComponent(id) + (kind === 'img' ? '.jpg' : '.mp3') + Q; }
+  function setMuteUi() { if (!$('mute')) return; $('mute').textContent = muted ? '🔇' : '🔊'; $('mute').setAttribute('aria-pressed', muted ? 'true' : 'false'); }
+  function playStepAudio(onLength) {
+    audio.pause();
+    if (muted) { onLength(false, 0); return; }
+    audio.src = media('audio', STEPS[index].id);
+    let done = false;
+    const finish = (ok, ms) => { if (!done) { done = true; onLength(ok, ms); } };
+    audio.onloadedmetadata = () => finish(true, audio.duration * 1000);
+    audio.onerror = () => finish(false, 0);
+    setTimeout(() => finish(false, 0), 2500); // slow network: don't hold the step
+    audio.play().catch(() => finish(false, 0));
+  }
+  if ($('mute')) $('mute').addEventListener('click', () => {
+    muted = !muted; try { localStorage.setItem('guide-muted', muted ? '1' : '0'); } catch (e) {}
+    setMuteUi(); if (muted) audio.pause();
+  });
+  if (INAPP) { $('close').hidden = false; $('close').addEventListener('click', () => { audio.pause(); parent.postMessage({ type: 'guide-close' }, location.origin); }); }
+  setMuteUi();
+
+  function render() {
+    const step = STEPS[index];
+    const back = 1 - front;
+    imgs[back].src = media('img', step.id); imgs[back].alt = step.title;
+    imgs[back].classList.add('on'); imgs[front].classList.remove('on'); front = back;
+    $('meta').textContent = CHAPTERS[step.chapter] + ' · שלב ' + (index + 1) + ' מתוך ' + STEPS.length;
+    $('stitle').textContent = step.title;
+    $('stext').textContent = step.text;
+    $('hint').textContent = '';
+    document.querySelectorAll('.chap').forEach((b, ci) => b.setAttribute('aria-current', ci === step.chapter ? 'true' : 'false'));
+    const cur = document.querySelectorAll('.chap')[step.chapter]; if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    document.querySelectorAll('#bar span').forEach((s, i) => { s.classList.toggle('done', i < index); s.querySelector('i').style.transition = 'none'; s.querySelector('i').style.width = i < index ? '100%' : '0'; });
+    $('prev').disabled = index === 0;
+    $('next').disabled = index === STEPS.length - 1;
+    finger.classList.remove('show', 'press');
+  }
+
+  function animate() {
+    clear();
+    const token = animToken;
+    const step = STEPS[index];
+    if (practice) {
+      playStepAudio(() => {});
+      if (step.tap) { target = document.createElement('div'); target.className = 'target'; place(target, step.tap); screen.appendChild(target); $('hint').textContent = 'לחצו על המקום המסומן במסך'; }
+      else $('hint').textContent = 'לחצו "הבא" כדי להמשיך';
+      return;
+    }
+    if (!playing) return;
+    playStepAudio((ok, ms) => {
+      if (!playing || token !== animToken) return; // paused or moved on while the audio length was loading
+      const dur = nextDelay({ audioOk: ok, muted, audioMs: ms, readMs: readMs(step) });
+      const fill = document.querySelectorAll('#bar span i')[index];
+      requestAnimationFrame(() => { fill.style.transition = 'width ' + dur + 'ms linear'; fill.style.width = '100%'; });
+      if (step.tap) {
+        finger.style.transition = 'none'; finger.style.left = '50%'; finger.style.top = '104%';
+        later(dur * 0.45, () => { finger.style.transition = ''; finger.classList.add('show'); place(finger, step.tap); });
+        later(dur * 0.45 + (reduce ? 200 : 1000), () => { finger.classList.add('press'); ripple(step.tap); });
+        later(dur * 0.45 + (reduce ? 400 : 1250), () => finger.classList.remove('press'));
+      }
+      later(dur, () => { if (index < STEPS.length - 1) { index++; render(); animate(); } else stop(true); });
+    });
+  }
+
+  function go(i) { index = Math.max(0, Math.min(STEPS.length - 1, i)); render(); animate(); }
+  function start() { if (index === STEPS.length - 1 && !practice) { index = 0; render(); } playing = true; $('play').textContent = '❚❚ השהה'; animate(); }
+  function stop(ended) { playing = false; clear(); $('play').textContent = ended ? '↺ מההתחלה' : '▶ המשך'; if (ended) $('hint').textContent = 'סוף המדריך'; }
+
+  $('play').addEventListener('click', () => { if (practice) { practice = false; if ($('practice')) $('practice').setAttribute('aria-pressed', 'false'); screen.classList.remove('practice'); } playing ? stop() : start(); });
+  $('prev').addEventListener('click', () => go(index - 1));
+  $('next').addEventListener('click', () => go(index + 1));
+  if ($('practice')) $('practice').addEventListener('click', () => { practice = !practice; $('practice').setAttribute('aria-pressed', practice ? 'true' : 'false'); screen.classList.toggle('practice', practice); if (practice) stop(); $('play').textContent = '▶ הפעל'; animate(); });
+  screen.addEventListener('click', e => {
+    if (!practice) return;
+    const step = STEPS[index]; if (!step.tap) return;
+    const r = screen.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width * 100, y = (e.clientY - r.top) / r.height * 100;
+    if (Math.abs(x - step.tap.x) < 14 && Math.abs(y - step.tap.y) < 6) {
+      ripple(step.tap);
+      if (index < STEPS.length - 1) setTimeout(() => { index++; render(); animate(); }, 350);
+      else { clear(); $('hint').textContent = 'כל הכבוד, סיימתם!'; }
+    } else $('hint').textContent = 'כמעט! לחצו על העיגול הכתום';
+  });
+
+  // The caption keeps the height of the longest step (no jumping), and the phone takes what is left of
+  // the screen, so phone + explanation + buttons are all visible without scrolling.
+  function fit() {
+    const bar = document.getElementById('luma-bar');
+    const H = window.innerHeight - (bar ? bar.offsetHeight : 0);
+    const wide = window.innerWidth >= 720 && window.innerWidth > window.innerHeight * 0.9;
+    document.body.classList.toggle('wide', wide);
+    const cap = $('caption'), phone = $('phone'), wrap = document.querySelector('.wrap');
+    const keep = [$('meta').textContent, $('stitle').textContent, $('stext').textContent];
+    cap.style.minHeight = '0';
+    let tallest = 0;
+    STEPS.forEach((st, i) => { $('meta').textContent = 'x'; $('stitle').textContent = st.title; $('stext').textContent = st.text; tallest = Math.max(tallest, cap.offsetHeight); });
+    [$('meta').textContent, $('stitle').textContent, $('stext').textContent] = keep;
+    const reserve = tallest - cap.offsetHeight; // room for the tallest step (the try-it hint may add a small scroll; Roei's call)
+    const pad = 20; // the frame around the screen
+    const intro = document.querySelector('.intro');
+    if (wide) { // the phone takes the full height beside the text
+      intro.hidden = false;
+      phone.style.width = Math.round(Math.max(150, Math.min(290, (H - 22 - pad) * 390 / 844 + pad))) + 'px';
+      return;
+    }
+    const widthFor = () => (H - 2 - reserve - (wrap.offsetHeight - phone.offsetHeight) - pad) * 390 / 844 + pad;
+    intro.hidden = false;
+    if (widthFor() < 240) intro.hidden = true; // a short screen: the phone needs that line more
+    phone.style.width = Math.round(Math.max(160, Math.min(330, wrap.clientWidth - 32, widthFor()))) + 'px';
+  }
+  render();
+  fit();
+  window.addEventListener('resize', fit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+})();
+</script>
+</body>
+</html>

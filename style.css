@@ -136,6 +136,7 @@ p { margin: 0; }
 .try-go { align-self: flex-start; margin-top: 10px; }
 @media (min-width: 760px) {
   .tries { grid-template-columns: 1fr 1fr; gap: 24px; max-width: 920px; margin-inline: auto; }
+  .tries.single { grid-template-columns: 1fr; max-width: 460px; }
   .try-card { grid-template-columns: 1fr; gap: 0; padding: 0; align-items: stretch; }
   .try-shot { display: flex; justify-content: center; height: 300px; overflow: hidden; padding: 32px 32px 0; background: #EFE9DF; border-bottom: 1px solid var(--border); }
   .try-shot img { width: 260px; aspect-ratio: auto; border-radius: 18px 18px 0 0; border-bottom: 0; box-shadow: 0 20px 40px -24px rgba(20, 36, 59, .35); }
