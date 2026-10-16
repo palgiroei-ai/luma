@@ -8,10 +8,10 @@ import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
-import { ifscResults, fetchIfsc, isIsr, ifscRanked, ifscPhaseOf, IFSC_POLL_MS } from './ifsc.js';
+import { ifscResults, fetchIfsc, isIsr, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS } from './ifsc.js';
 import { bySeason, seasonLabel } from './seasons.js';
 
-export const APP_VERSION = '3.11.1';
+export const APP_VERSION = '3.12.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -220,21 +220,24 @@ function applyIfsc(id, d) {
   const isr = res.rows.filter(isIsr), evs = liveEvents(s.seen, isr);
   if (s.seen) { const m = liveFresh[id] || (liveFresh[id] = new Map()); for (const e of evs) m.set(`${e.bib}:${e.b - 1}`, Date.now()); }
   s.seen = isr.map(x => ({ bib: x.bib, bs: x.bs.map(c => c && [...c]) }));
-  if (id === current && screen === 'round') evs.forEach(e => liveToast({ ...e, name: '🇮🇱 ' + e.name }));
+  if ((id === current || round(current)?.combo?.includes(id)) && screen === 'round') evs.forEach(e => liveToast({ ...e, name: '🇮🇱 ' + e.name }));
   s.data = d; s.res = res;
 }
 // international round phase (3.11.1): live from the start time or the first result — never from IFSC's 'active' alone
 const IFSC_EARLY_MS = 10 * 60000; // polling starts 10 min before the start
-const ifscPhase = r => ifscPhaseOf({ nowMs: now(), startMs: roundStart(r), date: r.date, venueDay: venueDay(r), status: IFSC[r.id]?.data?.status, started: IFSC[r.id]?.res?.started || 0 });
+// 3.12.0 combined A + B entry: live if a group is live, done when both are
+const ifscIds = r => r.combo || [r.id];
+const ifscPhase = r => (r.combo ? (ps => (ps.includes('live') ? 'live' : ps.every(p => p === 'after') ? 'after' : 'before'))(r.combo.map(id => ifscPhase(round(id))))
+  : ifscPhaseOf({ nowMs: now(), startMs: roundStart(r), date: r.date, venueDay: venueDay(r), status: IFSC[r.id]?.data?.status, started: IFSC[r.id]?.res?.started || 0 }));
 const venueDay = r => evToday(evOf(r));
 // the rounds to poll now: the open international round, or the international competition shown on home
 function ifscWanted() {
-  if (screen === 'round') { const r = round(current); return r?.ifsc ? [r.id] : []; }
+  if (screen === 'round') { const r = round(current); return r?.ifsc ? ifscIds(r) : []; }
   if (homeFinal) return [];
   const evs = homeEvents(), i = homeOpenEvent ?? (homeListPicked ? -1 : compDayIdx()), ev = evs[i];
   // home (competition or list): once per app open, then every 15 s only from 10 min before a round's start until it is
   // done (review 2026-10-16 + 3.11.1: 7 rounds × every client was too much)
-  const want = r => r.ifsc && (!IFSC[r.id]?.at || (now() >= roundStart(r) - IFSC_EARLY_MS && ifscPhase(r) !== 'after'));
+  const want = r => r.ifsc && !r.combo && (!IFSC[r.id]?.at || (now() >= roundStart(r) - IFSC_EARLY_MS && ifscPhase(r) !== 'after'));
   if (ev) return ev.event.intl ? ev.rounds.filter(want).map(r => r.id) : [];
   return evs.filter(e => e.event.intl).flatMap(e => e.rounds.filter(want).map(r => r.id));
 }
@@ -303,11 +306,16 @@ function slotCard(r, s, cls, label, tagHtml = '') {
 
 function renderBoard(r, s, el = $('#board')) {
   const cells = [];
-  const thumb = b => { const u = photoUrl(r.id, b); return u ? `<button type="button" class="ph-thumb" data-photo="${b}" aria-label="תמונת בולדר ${b}"><img src="${u}" alt=""></button>` : ''; };
+  const thumb = b => { const u = photoUrl(r.id, b); return u ? `<button type="button" class="ph-thumb" data-photo="${b}" data-ph-round="${r.id}" aria-label="תמונת בולדר ${b}"><img src="${u}" alt=""></button>` : ''; };
   // no photo yet → coach gets an empty photo spot with "+" right on the board (2.3.0, Roei picked option A); viewers see the plain card
-  const addSpot = b => (VIEWER || photoV(r.id, b) ? '' : `<button type="button" class="ph-add" data-ph-add="${b}" aria-label="הוספת תמונה לבולדר ${b}"${busyPh.has(r.id + ':' + b) ? ' disabled' : ''}>${
+  const addSpot = b => (VIEWER || photoV(r.id, b) ? '' : `<button type="button" class="ph-add" data-ph-add="${b}" data-ph-round="${r.id}" aria-label="הוספת תמונה לבולדר ${b}"${busyPh.has(r.id + ':' + b) ? ' disabled' : ''}>${
     busyPh.has(r.id + ':' + b) ? '<span class="ph-add-busy">מעלה…</span>' : `<span class="plus">+</span><span class="ph-add-t">בולדר ${b}</span><span class="ph-add-l">הוסף תמונה</span>`}</button>`);
   const label = (b, th, add) => (th ? `${th}בולדר ${b}` : add ? `${add}<span class="ph-ttl">בולדר ${b}</span>` : `בולדר ${b}`);
+  if (r.combo) { // 3.12.0 combined A + B: each group's boulders in its own labeled row (photos / tags stay per group)
+    const tmp = document.createElement('div');
+    patch(el, r.combo.map(id => { const g = round(id); tmp._html = null; renderBoard(g, null, tmp); return `<div class="combo-board"><b class="combo-h">קבוצה ${esc(g.group)}</b>${tmp.innerHTML}</div>`; }).join(''));
+    return;
+  }
   if (r.ifsc) { // 3.11.0 international round: no start list here — the boulders with photos + tags (coach adds, viewers see)
     for (let b = 1; b <= r.boulders; b++) { const th = thumb(b), add = th ? '' : addSpot(b);
       cells.push(`<div class="lane boulder${th ? ' has-ph' : add ? ' no-ph' : ''}"><div class="lane-label">${label(b, th, add)}</div>${boardTag(r.id, b)}</div>`); }
@@ -463,7 +471,7 @@ let scrollAll = false; // once per opening of the full list (Roei: then it must 
 function openRoundView() {
   pollLive(true);
   const r = round(current);
-  if (r.ifsc) { pollIfsc(r.id, true); if (view !== 'results') setView('results'); return; } // 3.11.0: results only
+  if (r.ifsc) { ifscIds(r).forEach(id => pollIfsc(id, true)); if (view !== 'results') setView('results'); return; } // 3.11.0: results only
   if (resultsOf(r.id) && (!r.slots.length || stateAt(r, now(), off(r.id)).phase === 'after')) setView('results');
   else if (view === 'results') setView('mine');
 }
@@ -551,10 +559,12 @@ function intlName(n) {
   while (i > 1 && /\p{L}/u.test(w[i - 1]) && w[i - 1] === w[i - 1].toUpperCase()) i--;
   return i && i < w.length ? `<span class="fn">${esc(w.slice(0, i).join(' '))} </span>${esc(w.slice(i).join(' '))}` : esc(n);
 }
-function renderResults(r) {
+// → the results HTML. 3.12.0: part 'cards' = only the analysis cards (no wrapper), 'group' = everything but the chips and
+// cards (one group inside the combined A + B screen); isrKey = whose "רק ישראלים" choice applies
+function renderResults(r, part = null, isrKey = r.id) {
   resFem = genderOf(r.id) === 'W';
   const res = resultsOf(r.id), full = rankedOf(r.id), g = genderOf(r.id);
-  if (res.intl && !res.rows.length) { patch($('#view-results'), `<p class="muted intl-wait">סדר העלייה לסבב הזה עוד לא פורסם ב-World Climbing. התוצאות יופיעו כאן כשהסבב יתחיל.</p>`); return; }
+  if (res.intl && !res.rows.length) return part === 'cards' ? '' : `<p class="muted intl-wait">סדר העלייה לסבב הזה עוד לא פורסם ב-World Climbing. התוצאות יופיעו כאן כשהסבב יתחיל.</p>`;
   const opts = catOptions(res.rows, g), opt = opts.find(o => o.key === resCat[r.id]) || opts[0];
   const sub = opt?.cats ? rankInCats(res.rows, opt.cats, prevRankOf(r.id)) : full;
   const ranked = sub.length === full.length ? full : sub; // a view of everyone = the overall ranking (no "כללי")
@@ -564,7 +574,7 @@ function renderResults(r) {
   const whoByBib = {};
   if (intl) for (const x of res.rows) { if (isIsr(x)) whoByBib[x.bib] = { short: x.name.split(' ')[0], isr: true }; }
   else for (const m of mineOf(r.id)) { const s = r.slots[m.k]; if (s) whoByBib[s.bib] = m; }
-  const nIsr = Object.keys(whoByBib).length, onlyIsr = intl && nIsr && resIsr[r.id];
+  const nIsr = Object.keys(whoByBib).length, onlyIsr = intl && nIsr && resIsr[isrKey];
   const chips = opts.length > 1 ? `<div class="seg res-cats" role="group" aria-label="קטגוריה">${opts.map(o => `<button type="button" data-rescat="${o.key}" aria-pressed="${o === opt}">${esc(o.label)}</button>`).join('')}</div>`
     : intl && nIsr ? `<div class="seg res-cats" role="group" aria-label="סינון"><button type="button" data-resisr="0" aria-pressed="${!onlyIsr}">כולם</button><button type="button" data-resisr="1" aria-pressed="${!!onlyIsr}">🇮🇱 רק ישראלים</button></div>` : '';
   const analysis = !(intl && VIEWER);
@@ -576,7 +586,8 @@ function renderResults(r) {
   const fresh = freshOf(r.id);
   const q = intl ? 0 : res.live ? quota(res.rows.length) : analyze(full, full[0]).quota;
   const mine = (running ? ranked : ok).filter(x => whoByBib[x.bib]);
-  const cards = !analysis ? '' : mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
+  if (part === 'cards') return analysis ? mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('') : '';
+  const cards = !analysis || part ? '' : mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
     : `<p class="muted">${intl ? (res.rows.length ? 'אין ישראלים בסבב הזה.' : '') : VIEWER ? 'אין ספורטאים מהפלגיה בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
@@ -597,8 +608,8 @@ function renderResults(r) {
     return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${w?.isr ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : ''}${intl ? intlName(x.name) : esc(x.name)}${w && !w.isr ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b>${wallTag(x.bib)}<small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
       ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : resFem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td><td class="tz"></td><td class="tt">–</td>` : x.bs.map((b, j) => `<td>${cell(b, j, x.bib)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
-  patch($('#view-results'), `<div class="res${res.live ? ' is-live' : ''}">
-    ${chips}
+  return `<div class="res${res.live ? ' is-live' : ''}">
+    ${part ? '' : chips}
     ${res.live ? (err => `<div class="live-bar${err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל הבולדרים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} בולדרים הוזנו · ${res.started} התחילו</span>${err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · ${intl ? 'World Climbing' : 'לא רשמי'}</span></div>`)(intl ? IFSC[r.id]?.err : live.err) : ''}
     ${lockBar(r, res)}
     <div class="res-head"><span class="muted small">מקור: ${esc(res.source)}</span>
@@ -608,7 +619,17 @@ function renderResults(r) {
     <div class="card"><div class="tbl-head"><b>${onlyIsr ? (resFem ? 'הישראליות' : 'הישראלים') : resFem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">שורה מסומנת = ${intl ? (resFem ? 'ישראליות' : 'ישראלים') : VIEWER ? 'הפלגיה' : 'שלי'}</span></div>
       <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th class="rk">#</th><th class="n">${resFem ? 'מטפסת' : 'מטפס'}</th><th class="bib">מס׳</th>${Array.from({ length: nB }, (_, j) => `<th class="bh"><span class="hl">בולדר </span><span class="hs">B</span>${j + 1}</th>`).join('')}<th class="tz">T / Z</th><th class="tt">ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
     <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. ${intl ? '' : 'תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. '}${intl ? 'הדירוג לפי World Climbing (של הסבב הזה בלבד); מי עולה לסבב הבא — לפי World Climbing.' : res.final ? 'סבב אחרון בתחרות — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
-  </div>`);
+  </div>`;
+}
+// 3.12.0 combined A + B (Roei): the Israelis' cards of both groups on top (coach), then each group's own table — side by
+// side on wide screens (A on the right), stacked on narrow ones. Rankings are never merged.
+function renderCombo(r) {
+  const gs = r.combo.map(round), anyIsr = gs.some(g => resultsOf(g.id)?.rows.some(isIsr)), only = !!resIsr[r.id];
+  const chips = anyIsr ? `<div class="seg res-cats" role="group" aria-label="סינון"><button type="button" data-resisr="0" aria-pressed="${!only}">כולם</button><button type="button" data-resisr="1" aria-pressed="${only}">🇮🇱 רק ישראלים</button></div>` : '';
+  const cards = VIEWER ? '' : gs.map(g => (resultsOf(g.id) ? renderResults(g, 'cards', r.id) : '')).join('');
+  const groups = gs.map(g => `<section class="combo-g"><h3 class="combo-h">קבוצה ${esc(g.group)}</h3>${resultsOf(g.id) ? renderResults(g, 'group', r.id)
+    : `<p class="muted intl-wait">${IFSC[g.id]?.err ? 'אין חיבור כרגע לתוצאות של World Climbing — מנסה שוב…' : 'טוען תוצאות מ-World Climbing…'}</p>`}</section>`).join('');
+  return `<div class="res combo-res">${chips}${cards ? `<div class="focus">${cards}</div>` : ''}<div class="combo-grid">${groups}</div></div>`;
 }
 
 function appealText(a) {
@@ -844,6 +865,7 @@ function renderHomeDetail(seg, fromList, auto = null) {
 
 // 3.11.0 home card of an international round: date + boulders (no times — IFSC gives none), Israelis + their place
 function intlCard(r) {
+  if (r.combo) return comboCard(r);
   const ph = ifscPhase(r), res = resultsOf(r.id), rk = res ? rankedOf(r.id) : null;
   const st = roundStart(r), ilDay = dayIn(st), when = `${ilDay !== r.date ? dayLabel(ilDay) + ' ' : ''}${fmtHM(st)}`; // Israel time
   const badge = { live: '<span class="hb live">חי עכשיו</span>', before: `<span class="hb soon">בקרוב · ${fmtHM(st)}</span>`, after: '<span class="hb done">הסתיים</span>' }[ph];
@@ -852,6 +874,20 @@ function intlCard(r) {
       <div class="h-top"><h3>${esc(r.title)}</h3>${res?.started ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
       <p class="muted small">${when} · ${r.boulders} בולדרים${res?.rows.length ? ` · ${res.rows.length} ${gw(r.id, 'מתחרים', 'מתחרות')}` : ''}</p>
       ${isr ? `<ul class="h-mine">${isr}</ul>` : `<p class="muted small">${res && res.rows.length ? gw(r.id, 'אין ישראלים בסבב', 'אין ישראליות בסבב') : ''}</p>`}
+    </button>`;
+}
+
+// 3.12.0 combined A + B home card: time + badge like its groups, the Israelis of both with their place in their group
+function comboCard(r) {
+  const ph = ifscPhase(r), gs = r.combo.map(round), st = roundStart(r), ilDay = dayIn(st);
+  const badge = { live: '<span class="hb live">חי עכשיו</span>', before: `<span class="hb soon">בקרוב · ${fmtHM(st)}</span>`, after: '<span class="hb done">הסתיים</span>' }[ph];
+  const isr = gs.flatMap(g => { const res = resultsOf(g.id); return (res ? rankedOf(g.id) : []).filter(isIsr).map(x =>
+    `<li><b>🇮🇱 ${esc(x.name)}</b> <span>${x.rank ? `מקום ${x.rank}` : res.live ? gw(g.id, 'עוד לא טיפס', 'עוד לא טיפסה') : gw(g.id, 'לא התחיל', 'לא התחילה')} · ${esc(g.group)}</span></li>`); }).join('');
+  const n = gs.reduce((s, g) => s + (resultsOf(g.id)?.rows.length || 0), 0), started = gs.some(g => resultsOf(g.id)?.started);
+  return `<button type="button" class="h-card card combo-card ph-${ph}" data-open="${r.id}">
+      <div class="h-top"><h3>${esc(r.title)}</h3>${started ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
+      <p class="muted small">${ilDay !== r.date ? dayLabel(ilDay) + ' ' : ''}${fmtHM(st)} · ${r.boulders} בולדרים · ${gs.length} קבוצות${n ? ` · ${n} ${gw(r.id, 'מתחרים', 'מתחרות')}` : ''}</p>
+      ${isr ? `<ul class="h-mine">${isr}</ul>` : ''}
     </button>`;
 }
 
@@ -868,7 +904,7 @@ function render() {
   applyDelays();
   if (DATA.rounds.some(r => r.ifsc)) ifscWanted().forEach(id => pollIfsc(id)); // 3.11.0: each round waits 15 s between fetches itself
   if (screen === 'home') {
-    document.body.classList.remove('intl-round');
+    document.body.classList.remove('intl-round', 'combo-round');
     $('#clock').textContent = fmtClock(now());
     $('#event-title').textContent = evName(homeEvents()[homeFinal?.ev ?? homeOpenEvent ?? focusEventIdx()].event);
     $('#round-sub').textContent = `מסך ראשי${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
@@ -892,11 +928,13 @@ function render() {
   const rb = $('[data-view="results"]'), rs = resultsOf(r.id), lv = !!rs?.live;
   rb.hidden = !rs;
   if (rb.classList.contains('lv') !== lv) { rb.classList.toggle('lv', lv); rb.innerHTML = 'תוצאות' + (lv ? LTAG : ''); rb.setAttribute('aria-label', lv ? 'תוצאות — חי, לא רשמי' : 'תוצאות'); }
+  document.body.classList.toggle('combo-round', !!r.combo);
   if (r.ifsc && view !== 'results') { setView('results'); return; }
   if (view === 'results' && !resultsOf(r.id) && !r.ifsc) { setView('mine'); return; }
   // a results problem must never stop the clock + alerts below (audit 2026-10-15)
-  if (view === 'results' && !resultsOf(r.id)) patch($('#view-results'), `<p class="muted intl-wait">${IFSC[r.id]?.err ? 'אין חיבור כרגע לתוצאות של World Climbing — מנסה שוב…' : 'טוען תוצאות מ-World Climbing…'}</p>`);
-  else if (view === 'results') try { renderResults(r); } catch (e) { console.error('results', e); }
+  if (view === 'results' && r.combo) try { patch($('#view-results'), renderCombo(r)); } catch (e) { console.error('results', e); }
+  else if (view === 'results' && !resultsOf(r.id)) patch($('#view-results'), `<p class="muted intl-wait">${IFSC[r.id]?.err ? 'אין חיבור כרגע לתוצאות של World Climbing — מנסה שוב…' : 'טוען תוצאות מ-World Climbing…'}</p>`);
+  else if (view === 'results') try { patch($('#view-results'), renderResults(r)); } catch (e) { console.error('results', e); }
   if (view === 'mine') renderMine(r);
   if (view === 'all') renderAll(r);
   if (view === 'log') renderLog();
@@ -1830,6 +1868,7 @@ function exportFile(list) {
 }
 
 function start() {
+  DATA.rounds = withCombos(DATA.rounds); // 3.12.0: combined A + B entries for rounds split into groups
   for (const [id, res] of Object.entries(DATA.results || {})) if (res.final == null) res.final = lastRound(id); // a results file without `final`
   VIEWER = DATA.role === 'viewer';
   MINE_H = $('#mine-h').textContent;
@@ -1855,10 +1894,10 @@ function start() {
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
     else if (b.id === 'home-btn') { homeOpenEvent = null; homeListPicked = false; homeFinal = null; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
-    else if (d.photo) openPhoto($('#photos-dlg').open ? gridRound : current, Number(d.photo));
+    else if (d.photo) openPhoto(d.phRound || ($('#photos-dlg').open ? gridRound : current), Number(d.photo));
     else if (b.id === 'photos-btn') openPhotos();
     else if (b.id === 'tags-btn') openTags();
-    else if (d.phAdd) { gridRound = current; upTarget = Number(d.phAdd); $('#photo-file').value = ''; $('#photo-file').click(); }
+    else if (d.phAdd) { gridRound = d.phRound || current; upTarget = Number(d.phAdd); $('#photo-file').value = ''; $('#photo-file').click(); }
     else if (d.phUp) { upTarget = Number(d.phUp); $('#photo-file').value = ''; $('#photo-file').click(); }
     else if (d.phDel) deletePhoto(gridRound, Number(d.phDel));
     else if (d.adj) adjust(d.adj);

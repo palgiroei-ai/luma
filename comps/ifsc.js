@@ -27,6 +27,24 @@ export function ifscPhaseOf({ nowMs, startMs, date, venueDay, status, started = 
   return started > 0 || nowMs >= startMs ? 'live' : 'before';
 }
 
+// 3.12.0 (Roei): rounds split into groups (`group` 'A'/'B', ids <base>-a / <base>-b) → a combined entry <base> right
+// before them: { combo: [group ids] } with the first group's day/start. Only an entry, never merged results.
+export function withCombos(rounds) {
+  const out = [], done = new Set(rounds.filter(r => r.combo).map(r => r.id));
+  for (const r of rounds) {
+    const base = r.group && r.id.replace(/-[a-z]$/, '');
+    if (base && !done.has(base)) {
+      const gs = rounds.filter(x => x.group && x.event === r.event && x.id.replace(/-[a-z]$/, '') === base);
+      if (gs.length > 1) {
+        done.add(base);
+        out.push({ ...gs[0], id: base, group: undefined, combo: gs.map(x => x.id), title: `${gs[0].title.replace(/ · קבוצה \S+$/, '')} · ${gs.map(x => x.group).join(' + ')}` });
+      }
+    }
+    out.push(r);
+  }
+  return out;
+}
+
 // one round from the Worker; throws on network / server error (the app keeps the last data)
 export async function fetchIfsc(base, headers, id, timeoutMs = 10000) {
   const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), timeoutMs);

@@ -1111,3 +1111,21 @@ body.intl-round #round-screen .mid, body.intl-round #par, body.intl-round .sec-h
 .res-tbl .flag { font-size: 1.05em; }
 .intl-wait { padding: 18px 4px; }
 @media (max-width: 600px) { .res-tbl .n .fn { display: none; } }
+
+/* 3.12.0 combined A + B (split quals groups): two labeled boulder rows; the groups' tables side by side when wide (A on the right) */
+body.combo-round #photos-btn, body.combo-round #tags-btn { display: none !important; }
+.combo-board + .combo-board { margin-top: 10px; }
+.combo-board > .combo-h { display: block; margin: 0 2px 6px; }
+.combo-h { font-size: 15px; font-weight: 800; color: var(--navy); }
+.combo-res > .focus { margin-bottom: 4px; }
+.combo-grid { display: grid; gap: 16px; align-items: start; }
+.combo-g { min-width: 0; display: grid; gap: 8px; }
+@media (min-width: 1180px) {
+  .combo-grid { grid-template-columns: 1fr 1fr; }
+  /* half width: no bib / T-Z columns, narrower cells — each table fits its column without sideways scrolling */
+  .combo-grid .res-tbl { min-width: 0; }
+  .combo-grid .res-tbl th.bib, .combo-grid .res-tbl td.bib, .combo-grid .res-tbl th.tz, .combo-grid .res-tbl td.tz { display: none; }
+  .combo-grid .res-tbl td { padding: 5px 3px; }
+  .combo-grid .res .cell { min-width: 0; }
+  .combo-grid .res-tbl .hl { display: none; } .combo-grid .res-tbl .hs { display: inline; }
+}
