@@ -8,10 +8,10 @@ import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
-import { ifscResults, fetchIfsc, isIsr, ifscRanked, IFSC_POLL_MS } from './ifsc.js';
+import { ifscResults, fetchIfsc, isIsr, ifscRanked, ifscPhaseOf, IFSC_POLL_MS } from './ifsc.js';
 import { bySeason, seasonLabel } from './seasons.js';
 
-export const APP_VERSION = '3.11.0';
+export const APP_VERSION = '3.11.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -207,6 +207,7 @@ async function pollIfsc(id, force = false) {
   // 'finished' → on its own day keep checking every minute in case that was early (review 2026-10-16)
   const r = round(id), past = venueDay(r) > r.date;
   if (s.data && (past || (s.data.status === 'finished' && Date.now() - s.at < 60000))) return;
+  if (s.data && now() < roundStart(r) - IFSC_EARLY_MS) return; // 3.11.1: before the start = once per app open
   if (!force && Date.now() - s.at < IFSC_POLL_MS - 500) return;
   s.busy = true;
   try { applyIfsc(id, await fetchIfsc(SYNC_URL, await authHeaders(VIEWER), id)); s.err = false; } catch { s.err = true; } // keep the last data
@@ -222,22 +223,18 @@ function applyIfsc(id, d) {
   if (id === current && screen === 'round') evs.forEach(e => liveToast({ ...e, name: '🇮🇱 ' + e.name }));
   s.data = d; s.res = res;
 }
-// international round phase: IFSC's status when we have it, else by the venue's day (no start times from IFSC)
-function ifscPhase(r) {
-  if (venueDay(r) > r.date) return 'after'; // safety net (review 2026-10-16): the venue's day is over
-  const st = IFSC[r.id]?.data?.status;
-  if (st) return st === 'finished' ? 'after' : st === 'active' ? 'live' : 'before';
-  return 'before';
-}
+// international round phase (3.11.1): live from the start time or the first result — never from IFSC's 'active' alone
+const IFSC_EARLY_MS = 10 * 60000; // polling starts 10 min before the start
+const ifscPhase = r => ifscPhaseOf({ nowMs: now(), startMs: roundStart(r), date: r.date, venueDay: venueDay(r), status: IFSC[r.id]?.data?.status, started: IFSC[r.id]?.res?.started || 0 });
 const venueDay = r => evToday(evOf(r));
 // the rounds to poll now: the open international round, or the international competition shown on home
 function ifscWanted() {
   if (screen === 'round') { const r = round(current); return r?.ifsc ? [r.id] : []; }
   if (homeFinal) return [];
   const evs = homeEvents(), i = homeOpenEvent ?? (homeListPicked ? -1 : compDayIdx()), ev = evs[i];
-  // home (competition or list): every 15 s only rounds of the venue's today or active; the others once per app open
-  // (review 2026-10-16: 7 rounds × every client was too much)
-  const want = r => r.ifsc && (!IFSC[r.id]?.at || venueDay(r) === r.date || IFSC[r.id]?.data?.status === 'active');
+  // home (competition or list): once per app open, then every 15 s only from 10 min before a round's start until it is
+  // done (review 2026-10-16 + 3.11.1: 7 rounds × every client was too much)
+  const want = r => r.ifsc && (!IFSC[r.id]?.at || (now() >= roundStart(r) - IFSC_EARLY_MS && ifscPhase(r) !== 'after'));
   if (ev) return ev.event.intl ? ev.rounds.filter(want).map(r => r.id) : [];
   return evs.filter(e => e.event.intl).flatMap(e => e.rounds.filter(want).map(r => r.id));
 }
@@ -291,7 +288,7 @@ function renderTabs() {
   patch($('#round-tabs'), roundsOf(tabEv).map(r => {
     const live = r.ifsc ? ifscPhase(r) === 'live' : r.slots.length && stateAt(r, t, off(r.id)).phase === 'live';
     return `<button type="button" data-round="${r.id}" aria-pressed="${screen === 'round' && r.id === current}">
-      <span class="tab-day">${dayLabel(r.date)}</span> ${esc(r.title)}${live ? ' <span class="live-dot">חי</span>' : ''}${r.slots.length || r.ifsc ? '' : ' <span class="tab-wait">ממתין לסדר עלייה</span>'}</button>`;
+      <span class="tab-day">${r.ifsc ? `${dayLabel(dayIn(roundStart(r)))} ${fmtHM(roundStart(r))}` : dayLabel(r.date)}</span> ${esc(r.title)}${live ? ' <span class="live-dot">חי</span>' : ''}${r.slots.length || r.ifsc ? '' : ' <span class="tab-wait">ממתין לסדר עלייה</span>'}</button>`;
   }).join(''));
 }
 
@@ -710,10 +707,7 @@ function evPhase(ev, t = now()) {
     const rs = ev.rounds.filter(r => r.slots.length);
     if (rs.some(r => stateAt(r, t, off(r.id)).phase === 'live') || ev.rounds.some(r => r.ifsc && ifscPhase(r) === 'live')) return 'live';
     const done = r => (r.ifsc ? ifscPhase(r) === 'after' : roundStart(r) + off(r.id) + (r.slots.length ? windowCount(r) * r.slotSec * 1000 : 12 * 3600e3) < t);
-    if (ev.rounds.every(done)) return 'after';
-    // international: during its venue days the competition is on, even between rounds (no start times from IFSC)
-    const d = evToday(ev.event);
-    return ev.event.intl && ev.dates[0] <= d && d <= ev.dates.at(-1) ? 'live' : 'before';
+    return ev.rounds.every(done) ? 'after' : 'before';
   }
   const today = evToday(ev.event);
   return ev.dates.at(-1) < today ? 'after' : ev.dates[0] <= today ? 'live' : 'before';
@@ -736,6 +730,9 @@ function evBadge(ev, evs) {
   const ph = evPhase(ev);
   if (ph === 'live') return ev.rounds.length ? '<span class="hb live">חי עכשיו</span>' : '<span class="hb live">היום</span>';
   if (ph === 'after') return '<span class="hb done">הסתיים</span>';
+  // 3.11.1 international, between rounds on its days: the next round's start (Israel time)
+  const next = ev.event.intl && ev.rounds.filter(r => r.ifsc && ifscPhase(r) === 'before').sort((a, b) => roundStart(a) - roundStart(b))[0];
+  if (next && ev.dates[0] <= evToday(ev.event)) return `<span class="hb soon">היום · ${fmtHM(roundStart(next))}</span>`;
   if (evs.find(x => evPhase(x) === 'before') === ev) return '<span class="hb soon">בקרוב</span>';
   const days = Math.round((new Date(ev.dates[0] + 'T12:00:00') - new Date(evToday(ev.event) + 'T12:00:00')) / 864e5);
   return `<span class="hb later">בעוד ${days} ימים</span>`;
@@ -848,11 +845,12 @@ function renderHomeDetail(seg, fromList, auto = null) {
 // 3.11.0 home card of an international round: date + boulders (no times — IFSC gives none), Israelis + their place
 function intlCard(r) {
   const ph = ifscPhase(r), res = resultsOf(r.id), rk = res ? rankedOf(r.id) : null;
-  const badge = { live: '<span class="hb live">חי עכשיו</span>', before: '<span class="hb soon">בקרוב</span>', after: '<span class="hb done">הסתיים</span>' }[ph];
+  const st = roundStart(r), ilDay = dayIn(st), when = `${ilDay !== r.date ? dayLabel(ilDay) + ' ' : ''}${fmtHM(st)}`; // Israel time
+  const badge = { live: '<span class="hb live">חי עכשיו</span>', before: `<span class="hb soon">בקרוב · ${fmtHM(st)}</span>`, after: '<span class="hb done">הסתיים</span>' }[ph];
   const isr = (rk || []).filter(isIsr).map(x => `<li><b>🇮🇱 ${esc(x.name)}</b> <span>${x.rank ? `מקום ${x.rank}` : res.live ? gw(r.id, 'עוד לא טיפס', 'עוד לא טיפסה') : gw(r.id, 'לא התחיל', 'לא התחילה')}</span></li>`).join('');
   return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(r.title)}</h3>${res?.started ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
-      <p class="muted small">${r.boulders} בולדרים${res?.rows.length ? ` · ${res.rows.length} ${gw(r.id, 'מתחרים', 'מתחרות')}` : ''}</p>
+      <p class="muted small">${when} · ${r.boulders} בולדרים${res?.rows.length ? ` · ${res.rows.length} ${gw(r.id, 'מתחרים', 'מתחרות')}` : ''}</p>
       ${isr ? `<ul class="h-mine">${isr}</ul>` : `<p class="muted small">${res && res.rows.length ? gw(r.id, 'אין ישראלים בסבב', 'אין ישראליות בסבב') : ''}</p>`}
     </button>`;
 }
@@ -886,7 +884,7 @@ function render() {
   const s = stateAt(r, now(), off(r.id));
   $('#clock').textContent = fmtClock(now());
   $('#event-title').textContent = evName(evOf(r));
-  $('#round-sub').textContent = `${dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים${r.ifsc ? '' : ` · סבב ${fmtDur(r.slotSec0 * 1000)}`}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
+  $('#round-sub').textContent = `${r.ifsc ? `${dayLabel(dayIn(roundStart(r)))} ${fmtHM(roundStart(r))}` : dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים${r.ifsc ? '' : ` · סבב ${fmtDur(r.slotSec0 * 1000)}`}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
   // 3.11.0 international round: board (photos + tags) + results only — no clock, start list, "mine", notes (CSS)
   document.body.classList.toggle('intl-round', !!r.ifsc);
   $('#mine-h').textContent = r.ifsc ? 'תוצאות' : MINE_H;
@@ -1008,7 +1006,11 @@ function setupSwipe() {
     if (screen !== 'round' || e.touches.length !== 1 || document.querySelector('dialog[open]')) return;
     const t = e.touches[0], tg = e.target;
     if (t.clientX < 28 || t.clientX > innerWidth - 28) return;
-    if (tg.closest('.full-wrap, .tbl-wrap, .seg, #round-tabs, input, textarea, select')) return;
+    if (tg.closest('input, textarea, select')) return;
+    // 3.11.1: only areas that really scroll sideways (the phone results table fits — 3.9.0 — so swiping works over it)
+    for (let el = tg.closest('.full-wrap, .tbl-wrap, .seg, #round-tabs, .ev-chips'); el; el = el.parentElement?.closest('.full-wrap, .tbl-wrap, .seg, #round-tabs, .ev-chips')) {
+      if (el.scrollWidth > el.clientWidth + 1) return;
+    }
     st = { x: t.clientX, y: t.clientY, at: Date.now(), drag: false };
   }, { passive: true });
   addEventListener('touchmove', e => {

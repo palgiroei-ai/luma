@@ -37,8 +37,9 @@ export function zonedMs(str, tz = TZ) {
 // true when this device's clock is not on venue time (→ the app shows a small "שעון ישראל" label)
 export const deviceOffZone = (ms = Date.now(), tz = TZ) => zoneOffset(ms, tz) !== -new Date(ms).getTimezoneOffset() * 60000;
 
+// a round with its own `tz` (international, 3.11.1) keeps its start in venue time; shown in Israel time like the rest
 export function roundStart(round) {
-  return zonedMs(round.start);
+  return zonedMs(round.start, round.tz || TZ);
 }
 
 const lastIndex = slots => {
