@@ -1101,3 +1101,13 @@ body:not(.viewer) .viewer-only { display: none !important; }
 tr.fin-me { background: var(--copper-bg); }
 tr.fin-me td:first-child { box-shadow: inset -4px 0 0 var(--copper); }
 tr.fin-cut td { padding: 5px 6px; font-size: 12px; font-weight: 700; color: var(--muted); background: var(--line); }
+
+/* 3.11.0 international events: season headers in the events list; an IFSC round = boulders (photos + tags) + results only */
+.season-h { font-size: 13px; font-weight: 800; letter-spacing: .02em; color: var(--muted); margin: 8px 2px -2px; }
+.season-h:first-child { margin-top: 0; }
+body.intl-round #round-screen .mid, body.intl-round #par, body.intl-round .sec-head .seg { display: none !important; }
+.lanes.intl .lane { min-height: 0; }
+@media (max-width: 600px) { .lanes.intl { grid-template-columns: 1fr 1fr !important; } .lanes.intl .lane { min-height: 72px; } }
+.res-tbl .flag { font-size: 1.05em; }
+.intl-wait { padding: 18px 4px; }
+@media (max-width: 600px) { .res-tbl .n .fn { display: none; } }

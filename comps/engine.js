@@ -14,6 +14,8 @@ export function zoneParts(ms, tz = TZ) {
   for (const p of dtf(tz).formatToParts(ms)) o[p.type] = p.value;
   return { y: +o.year, mo: +o.month, d: +o.day, h: +o.hour % 24, mi: +o.minute, s: +o.second };
 }
+// 'YYYY-MM-DD' of an instant in a zone (3.11.0: an international competition's "today" = its venue's day)
+export const dayIn = (ms, tz = TZ) => { const d = zoneParts(ms, tz); return `${d.y}-${String(d.mo).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`; };
 // zone offset from UTC at that instant (ms; Israel +2 h / +3 h)
 export function zoneOffset(ms, tz = TZ) {
   const p = zoneParts(ms, tz);
