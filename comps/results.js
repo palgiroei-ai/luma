@@ -39,13 +39,14 @@ export function rankRows(rows, prevRank = null) {
 
 // Everything the athlete card shows. ranked = rankRows() output (the whole round or one category), row = one of its
 // started rows. full = the whole round's ranking: advancing to the next round is always by the overall ranking.
-export function analyze(ranked, row, full = ranked) {
+// q0 = how many advance when not by ILCA's quota (3.12.1: international rounds, World Climbing's numbers)
+export function analyze(ranked, row, full = ranked, q0 = null) {
   // a boulder without a result (null: withdrew mid-round / never entered — kept in locked results) counts as [0, 0]
   const Z = [0, 0], cellOf = (r, j) => r.bs[j] || Z, bsOf = r => r.bs.map(b => b || Z);
   ranked = ranked.map(r => (r.bs.includes(null) ? { ...r, bs: bsOf(r) } : r));
   if (row.bs.includes(null)) row = ranked.find(r => r.bib === row.bib);
   const ok = ranked.filter(r => r.rank != null), n = ok.length;
-  const all = full.filter(r => r.rank != null), q = quota(all.length), cutScore = all[q - 1].score;
+  const all = full.filter(r => r.rank != null), q = q0 != null ? Math.min(q0, all.length) : quota(all.length), cutScore = all[q - 1].score;
   const overall = all.find(x => x.bib === row.bib) || row;
   const i = ok.indexOf(row);
   const above = ok.slice(0, i).reverse().find(x => x.score > row.score) || null;

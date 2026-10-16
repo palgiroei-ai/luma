@@ -11,7 +11,7 @@ import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 import { ifscResults, fetchIfsc, isIsr, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS } from './ifsc.js';
 import { bySeason, seasonLabel } from './seasons.js';
 
-export const APP_VERSION = '3.12.0';
+export const APP_VERSION = '3.12.1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -216,6 +216,7 @@ async function pollIfsc(id, force = false) {
 function applyIfsc(id, d) {
   const s = IFSC[id], res = ifscResults(d), r = round(id);
   if (venueDay(r) > r.date) { res.live = false; res.complete = true; } // safety net: the venue's day is over = finished
+  if (r.adv) res.final = false; // 3.12.1: a qualifying line (r.adv advance; split groups: per group)
   res.source = `World Climbing (IFSC) · עודכן ${fmtHM(res.updated || Date.now())}`;
   const isr = res.rows.filter(isIsr), evs = liveEvents(s.seen, isr);
   if (s.seen) { const m = liveFresh[id] || (liveFresh[id] = new Map()); for (const e of evs) m.set(`${e.bib}:${e.b - 1}`, Date.now()); }
@@ -401,7 +402,7 @@ function resByBib(r) {
   const opts = catOptions(res.rows, genderOf(r.id)), opt = opts.find(o => o.key === resCat[r.id]) || opts[0];
   const shown = opt?.cats ? rankInCats(res.rows, opt.cats, prevRankOf(r.id)) : full;
   const overall = Object.fromEntries(full.map(x => [x.bib, x.rank]));
-  return { res, q: quota(res.live ? res.rows.length : ok.length), overall, by: Object.fromEntries(shown.map(x => [x.bib, x])), all: Object.fromEntries(full.map(x => [x.bib, x])) };
+  return { res, q: res.intl ? r.adv || 0 : quota(res.live ? res.rows.length : ok.length), overall, by: Object.fromEntries(shown.map(x => [x.bib, x])), all: Object.fromEntries(full.map(x => [x.bib, x])) };
 }
 // 3.8.1: a boulder that just got a zone/top (live) blinks here too
 const bsTxt = (bs, fr, bib) => bs.map((b, j) => (b ? (fr?.has(`${bib}:${j}`) ? `<span class="lfresh">B${j + 1} ${cellTxt(b)}</span>` : `B${j + 1} ${cellTxt(b)}`) : null)).filter(Boolean).join(' · ');
@@ -484,8 +485,8 @@ const SOLE = { t: 'הטופ היחיד', z: 'הזון היחיד' };
 const heList = xs => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} ו־${xs[xs.length - 1]}` : `${xs[0]}`);
 const WHAT_IF = { topFromZone: 'טופ במקום זון', topFromEmpty: 'טופ בבולדר ריק', zoneFromEmpty: 'זון בבולדר ריק' };
 
-function resCard(ranked, row, who, final, full) {
-  const a = analyze(ranked, row, full), inCat = ranked !== full;
+function resCard(ranked, row, who, final, full, q0 = null) {
+  const a = analyze(ranked, row, full, q0), inCat = ranked !== full;
   const soleJ = a.sole.flatMap((k, j) => (k ? [j] : [])), soleKinds = [...new Set(soleJ.map(j => a.sole[j]))];
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   const what = o => row.rank === 1 ? `יתרון ${sgn(o.gain)}` : `${o.rank < row.rank ? 'מקום ' + o.rank : 'נשאר ' + row.rank}<small class="d">${sgn(o.gain)}</small>${o.advances && !final ? '<span class="up">עולה</span>' : ''}`;
@@ -584,10 +585,10 @@ function renderResults(r, part = null, isrKey = r.id) {
   if (res.live) { const s = stateAt(r, now(), off(r.id)); if (s.phase === 'live') s.boulders.forEach((sl, j) => { if (sl) onWall[sl.bib] = j + 1; }); }
   const wallTag = bib => (onWall[bib] ? `<span class="onwall"><i></i>על הקיר · B${onWall[bib]}</span>` : '');
   const fresh = freshOf(r.id);
-  const q = intl ? 0 : res.live ? quota(res.rows.length) : analyze(full, full[0]).quota;
+  const q = intl ? r.adv || 0 : res.live ? quota(res.rows.length) : analyze(full, full[0]).quota; // 3.12.1: intl = World Climbing's number
   const mine = (running ? ranked : ok).filter(x => whoByBib[x.bib]);
-  if (part === 'cards') return analysis ? mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('') : '';
-  const cards = !analysis || part ? '' : mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full)).join('')}</div>`
+  if (part === 'cards') return analysis ? mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full, intl ? q : null)).join('') : '';
+  const cards = !analysis || part ? '' : mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full, intl ? q : null)).join('')}</div>`
     : `<p class="muted">${intl ? (res.rows.length ? 'אין ישראלים בסבב הזה.' : '') : VIEWER ? 'אין ספורטאים מהפלגיה בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
@@ -618,7 +619,7 @@ function renderResults(r, part = null, isrKey = r.id) {
     ${analysis ? `<div class="card bstats"><h3>הבולדרים בסבב: כמה הגיעו לטופ ולזון</h3>${stats}</div>` : ''}
     <div class="card"><div class="tbl-head"><b>${onlyIsr ? (resFem ? 'הישראליות' : 'הישראלים') : resFem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">שורה מסומנת = ${intl ? (resFem ? 'ישראליות' : 'ישראלים') : VIEWER ? 'הפלגיה' : 'שלי'}</span></div>
       <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th class="rk">#</th><th class="n">${resFem ? 'מטפסת' : 'מטפס'}</th><th class="bib">מס׳</th>${Array.from({ length: nB }, (_, j) => `<th class="bh"><span class="hl">בולדר </span><span class="hs">B</span>${j + 1}</th>`).join('')}<th class="tz">T / Z</th><th class="tt">ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
-    <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. ${intl ? '' : 'תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. '}${intl ? 'הדירוג לפי World Climbing (של הסבב הזה בלבד); מי עולה לסבב הבא — לפי World Climbing.' : res.final ? 'סבב אחרון בתחרות — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
+    <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. ${intl ? '' : 'תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. '}${intl ? `הדירוג לפי World Climbing (של הסבב הזה בלבד). ${r.adv ? `עולים לסבב הבא: ${r.adv}${r.group ? ' מכל קבוצה' : ''}; תיקו על המקום האחרון — לפי World Climbing.` : 'סבב אחרון — אין סבב המשך.'}` : res.final ? 'סבב אחרון בתחרות — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
   </div>`;
 }
 // 3.12.0 combined A + B (Roei): the Israelis' cards of both groups on top (coach), then each group's own table — side by
