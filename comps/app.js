@@ -9,9 +9,9 @@ import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 import { ifscResults, fetchIfsc, isIsr, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS, lastName, appealsOf, appealNearLine, appealEvents } from './ifsc.js';
-import { bySeason, seasonLabel } from './seasons.js';
+import { bySeason, seasonLabel, SEASONS, evCode, filterOptions, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.12.2';
+export const APP_VERSION = '3.14.0';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -201,6 +201,7 @@ function prevRankOf(id) {
 const IFSC = {}; // round id → { data, res, at, err, busy, seen }
 const ifscRes = id => IFSC[id]?.res || null;
 async function pollIfsc(id, force = false) {
+  if (round(id)?.ifscStatic) return; // 3.13.0: saved results (finished competitions) — nothing to fetch
   const s = IFSC[id] || (IFSC[id] = { data: null, res: null, at: 0, err: false, busy: false, seen: null });
   if (s.busy || (document.hidden && !force)) return;
   // done (or the venue's day is over) = fetched once per app open; a group IFSC gives no status for is only inferred
@@ -217,7 +218,7 @@ function applyIfsc(id, d) {
   const s = IFSC[id], res = ifscResults(d), r = round(id);
   if (venueDay(r) > r.date) { res.live = false; res.complete = true; } // safety net: the venue's day is over = finished
   if (r.adv) res.final = false; // 3.12.1: a qualifying line (r.adv advance; split groups: per group)
-  res.source = `World Climbing (IFSC) · עודכן ${fmtHM(res.updated || Date.now())}`;
+  res.source = r.ifscStatic ? 'World Climbing (IFSC) · תוצאות סופיות' : `World Climbing (IFSC) · עודכן ${fmtHM(res.updated || Date.now())}`;
   const isr = res.rows.filter(isIsr), evs = [...liveEvents(s.seen, isr), ...appealEvents(s.seen, isr)];
   if (s.seen) { const m = liveFresh[id] || (liveFresh[id] = new Map()); for (const e of evs) m.set(`${e.bib}:${e.b - 1}`, Date.now()); }
   s.seen = isr.map(x => ({ bib: x.bib, name: x.name, bs: x.bs.map(c => c && [...c]), ap: x.ap }));
@@ -292,7 +293,7 @@ function renderTabs() {
   patch($('#round-tabs'), roundsOf(tabEv).map(r => {
     const live = r.ifsc ? ifscPhase(r) === 'live' : r.slots.length && stateAt(r, t, off(r.id)).phase === 'live';
     return `<button type="button" data-round="${r.id}" aria-pressed="${screen === 'round' && r.id === current}">
-      <span class="tab-day">${r.ifsc ? `${dayLabel(dayIn(roundStart(r)))} ${fmtHM(roundStart(r))}` : dayLabel(r.date)}</span> ${esc(r.title)}${live ? ' <span class="live-dot">חי</span>' : ''}${r.slots.length || r.ifsc ? '' : ' <span class="tab-wait">ממתין לסדר עלייה</span>'}</button>`;
+      <span class="tab-day">${r.ifsc && !r.noTime ? `${dayLabel(dayIn(roundStart(r)))} ${fmtHM(roundStart(r))}` : dayLabel(r.date)}</span> ${esc(r.title)}${live ? ' <span class="live-dot">חי</span>' : ''}${r.slots.length || r.ifsc ? '' : ' <span class="tab-wait">ממתין לסדר עלייה</span>'}</button>`;
   }).join(''));
 }
 
@@ -587,8 +588,8 @@ function renderResults(r, part = null, isrKey = r.id) {
   const fresh = freshOf(r.id);
   const q = intl ? r.adv || 0 : res.live ? quota(res.rows.length) : analyze(full, full[0]).quota; // 3.12.1: intl = World Climbing's number
   const mine = (running ? ranked : ok).filter(x => whoByBib[x.bib]);
-  if (part === 'cards') return analysis ? mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full, intl ? q : null)).join('') : '';
-  const cards = !analysis || part ? '' : mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full, intl ? q : null)).join('')}</div>`
+  if (part === 'cards') return analysis ? mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full, intl && q > 0 ? q : null)).join('') : '';
+  const cards = !analysis || part ? '' : mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full, intl && q > 0 ? q : null)).join('')}</div>`
     : `<p class="muted">${intl ? (res.rows.length ? 'אין ישראלים בסבב הזה.' : '') : VIEWER ? 'אין ספורטאים מהפלגיה בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
@@ -715,6 +716,11 @@ function overlapHtml(r, t) {
 }
 
 let homeOpenEvent = null; // list view: which event is opened (null = the list)
+let homeSeason = null;   // 3.14.0 list level: which season is open (null = the seasons level)
+let homeFrom = null;     // where the open competition came from: a season id → back to that list; null → seasons level
+let evFilter = loadFilter(); // { disc: [], type: [], age: [] } — [] = all
+function loadFilter() { try { return { disc: [], type: [], age: [], ...JSON.parse(localStorage.getItem('comp-filters-v1') || '{}') }; } catch { return { disc: [], type: [], age: [] }; } }
+function saveFilter() { try { localStorage.setItem('comp-filters-v1', JSON.stringify(evFilter)); } catch {} }
 // Every competition by date. A competition without rounds (lead leagues for now) is listed by its `dates` only.
 // Viewer: only rounds still ahead, and competitions with something still ahead.
 const hasRounds = e => DATA.rounds.some(r => (r.event || 'bl1') === e.id);
@@ -817,21 +823,46 @@ function renderHome() {
   renderHomeDetail('', true);
 }
 
-function renderHomeList(seg) {
-  const t = now();
-  const evs = homeEvents();
-  const rows = evs.map((ev, i) => {
-    const ph = evPhase(ev, t), badge = evBadge(ev, evs);
-    const meta = [ev.event.place && esc(ev.event.place), rangeLabel(ev.dates), ev.rounds.length ? `${ev.rounds.length} ראונדים` : 'הראונדים יתווספו בהמשך'].filter(Boolean).join(' · ');
-    const people = new Set(ev.rounds.flatMap(r => (r.ifsc ? (ifscRes(r.id)?.rows || []).filter(isIsr).map(x => x.name) : mineOf(r.id).map(m => r.slots[m.k].name))));
-    const ovl = ev.rounds.reduce((n, r) => n + (mineOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
-    const fin = finalsReady(ev);
-    const head = !i || (evs[i - 1].event.season || '') !== (ev.event.season || '') ? `<h3 class="season-h">${esc(seasonLabel(ev.event.season))}</h3>` : '';
-    return `${head}${fin ? `<div class="ev-item card ph-${ph}">` : ''}<button type="button" class="ev-row${fin ? '' : ' card'} ph-${ph}" data-ev="${i}">
+// the coach's sim tools in the home header (all home levels; none for viewers)
+const homeTools = () => (VIEWER ? '' : `<span class="h-tools">${SIM_AT == null ? '<button type="button" class="btn btn-sm btn-ghost" id="sim-btn">▶ הדמיה</button>' : ''}<button type="button" class="btn btn-sm btn-ghost" id="clock-btn">⏱ שעון סימולציה</button></span>`);
+// one competition row of the home list (data-ev = its index in homeEvents()); 3.14.0: + the Hub-style code (WC-B) for international
+function evRowHtml(ev, i, evs, t) {
+  const ph = evPhase(ev, t), badge = evBadge(ev, evs), code = evCode(ev.event);
+  const meta = [ev.event.place && esc(ev.event.place), (code ? `<span class="ev-code">${code}</span>` : '') + rangeLabel(ev.dates), ev.rounds.length ? `${ev.rounds.length} ראונדים` : 'הראונדים יתווספו בהמשך'].filter(Boolean).join(' · ');
+  const people = new Set(ev.rounds.flatMap(r => (r.ifsc ? (ifscRes(r.id)?.rows || []).filter(isIsr).map(x => x.name) : mineOf(r.id).map(m => r.slots[m.k].name))));
+  const ovl = ev.rounds.reduce((n, r) => n + (mineOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
+  const fin = finalsReady(ev);
+  return `${fin ? `<div class="ev-item card ph-${ph}">` : ''}<button type="button" class="ev-row${fin ? '' : ' card'} ph-${ph}" data-ev="${i}">
       <span class="ev-main"><b>${esc(evName(ev.event))}</b><span class="muted small">${meta}</span></span>
       <span class="ev-side">${badge}<span class="small">${!ev.rounds.length || !people.size ? '' : `${people.size} ${ev.event.intl ? 'ישראלים' : VIEWER ? 'מהפלגיה' : 'שלי'}`}${ovl ? `${people.size ? ' · ' : ''}<span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>${fin ? `<button type="button" class="fin-btn" data-final="${i}:${finalsOf(ev)[0].key}:list">${CUP}תוצאות סופיות<span class="go" aria-hidden="true">‹</span></button></div>` : ''}`;
-  }).join('');
-  patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}${VIEWER ? '' : `<span class="h-tools">${SIM_AT == null ? '<button type="button" class="btn btn-sm btn-ghost" id="sim-btn">▶ הדמיה</button>' : ''}<button type="button" class="btn btn-sm btn-ghost" id="clock-btn">⏱ שעון סימולציה</button></span>`}</div><div class="ev-list">${rows}</div>`);
+}
+const seasonOf = ev => ev.event.season || 'nat-2026-27';
+// 3.14.0 (Roei): home list in two levels — seasons ("עכשיו" strip + a card per season), then one season's competitions
+// (international: discipline / type / age filter chips). data-ev indices stay homeEvents() order.
+function renderHomeList(seg) {
+  const t = now(), evs = homeEvents(), tools = homeTools();
+  if (homeSeason == null) { // level 1: now strip + season cards
+    const ni = pickNow(evs, ev => evPhase(ev, t), ev => evToday(ev.event));
+    const strip = ni < 0 ? '' : `<section class="now-strip"><h3 class="season-h">עכשיו</h3>${evRowHtml(evs[ni], ni, evs, t)}</section>`;
+    const cards = SEASONS.map(s => {
+      const items = evs.filter(x => seasonOf(x) === s.id); if (!items.length) return '';
+      const withRes = items.filter(x => x.rounds.some(r => resultsOf(r.id)?.started)).length;
+      return `<button type="button" class="card season-card" data-season="${s.id}"><span class="ev-main"><b>${esc(s.label)}</b>
+        <span class="muted small">${esc(seasonSummary(items.map(x => x.event)))}${withRes ? ` · ${withRes} עם תוצאות` : ''}</span></span><span class="chev" aria-hidden="true"></span></button>`;
+    }).join('');
+    return patch($('#home'), `<div class="h-head"><h2 class="h-event">אירועים</h2>${seg}${tools}</div>${strip}<div class="season-cards">${cards}</div>`);
+  }
+  // level 2: one season (international: filter chips)
+  const all = evs.map((ev, i) => ({ ev, i })).filter(x => seasonOf(x.ev) === homeSeason);
+  const intl = homeSeason.startsWith('intl');
+  const opts = intl ? filterOptions(all.map(x => x.ev.event)) : null, ef = intl ? effectiveFilter(evFilter, opts) : null;
+  const row = (k, labels) => (opts[k].length < 2 ? '' : `<div class="seg ev-filter" role="group" aria-label="${{ disc: 'ענף', type: 'סוג תחרות', age: 'גיל' }[k]}">${opts[k].map(v =>
+    `<button type="button" data-filt="${k}:${v}" aria-pressed="${!ef[k].length || ef[k].includes(v)}">${esc(labels[v])}</button>`).join('')}</div>`);
+  const shown = intl ? filterEvents(all.map(x => ({ ...x, event: x.ev.event })), ef) : all;
+  const body = shown.length ? shown.map(x => evRowHtml(x.ev, x.i, evs, t)).join('')
+    : `<div class="card h-empty"><p>אין תחרויות שמתאימות לסינון</p><button type="button" class="btn btn-sm" id="filt-reset">הצג הכל</button></div>`;
+  patch($('#home'), `<div class="h-head"><button type="button" class="ios-back h-back" id="season-back"><span class="ios-back-chev"></span>אירועים</button><h2 class="h-event">${esc(seasonLabel(homeSeason))}</h2>${seg}${tools}</div>
+    ${intl ? `<div class="ev-filters">${row('disc', DISC)}${row('type', TYPES)}${row('age', AGES)}</div>` : ''}<div class="ev-list">${body}</div>`);
 }
 
 // isolation open/close (+ U17 route preview) from the federation info sheet (2.4.0); close time stressed = the deadline
@@ -842,7 +873,7 @@ const isoRow = r => (r.iso ? `<div class="iso"><span class="iso-k">בידוד</s
 function renderHomeDetail(seg, fromList, auto = null) {
   const t = now();
   const evs = homeEvents(); const ei = homeOpenEvent ?? auto ?? focusEventIdx(); const cur = evs[Math.min(ei, evs.length - 1)]; const { event: ev, rounds } = cur;
-  const days = [...new Set(rounds.map(r => r.date))];
+  const days = [...new Set(rounds.map(r => r.date))].sort();
   const chips = !fromList && evs.length > 1 ? `<div class="ev-chips" role="group" aria-label="תחרות">${evs.map((e, i) => {
     const d0 = new Date(e.dates[0] + 'T12:00:00');
     return `<button type="button" data-ev="${i}" aria-pressed="${i === ei}">${esc(evName(e.event).replace('ליגת העל ', ''))} <span class="muted">${d0.getDate()}/${d0.getMonth() + 1}</span></button>`;
@@ -861,7 +892,7 @@ function renderHomeDetail(seg, fromList, auto = null) {
       ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} סבבים של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
-  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + ' · ' : ''}${rangeLabel(cur.dates)}</span></h2>${seg}${VIEWER ? '' : `<span class="h-tools">${SIM_AT == null ? '<button type="button" class="btn btn-sm btn-ghost" id="sim-btn">▶ הדמיה</button>' : ''}<button type="button" class="btn btn-sm btn-ghost" id="clock-btn">⏱ שעון סימולציה</button></span>`}</div>${chips}` +
+  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + ' · ' : ''}${rangeLabel(cur.dates)}</span></h2>${seg}${homeTools()}</div>${chips}` +
     (rounds.length ? '' : `<div class="card h-empty"><p><b>${evBadge(cur, evs)}</b></p><p class="muted">הראונדים וסדרי העלייה יתווספו כשיתפרסמו.${ev.place ? '' : ' המיקום עוד לא פורסם.'}</p></div>`) +
     finalCards(cur, ei) + days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
 }
@@ -870,7 +901,7 @@ function renderHomeDetail(seg, fromList, auto = null) {
 function intlCard(r) {
   if (r.combo) return comboCard(r);
   const ph = ifscPhase(r), res = resultsOf(r.id), rk = res ? rankedOf(r.id) : null;
-  const st = roundStart(r), ilDay = dayIn(st), when = `${ilDay !== r.date ? dayLabel(ilDay) + ' ' : ''}${fmtHM(st)}`; // Israel time
+  const st = roundStart(r), ilDay = dayIn(st), when = r.noTime ? 'תוצאות סופיות' : `${ilDay !== r.date ? dayLabel(ilDay) + ' ' : ''}${fmtHM(st)}`; // Israel time (3.13.0 saved past rounds: no time)
   const badge = { live: '<span class="hb live">חי עכשיו</span>', before: `<span class="hb soon">בקרוב · ${fmtHM(st)}</span>`, after: '<span class="hb done">הסתיים</span>' }[ph];
   const isr = (rk || []).filter(isIsr).map(x => `<li><b>🇮🇱 ${esc(x.name)}</b> <span>${x.rank ? `מקום ${x.rank}` : res.live ? gw(r.id, 'עוד לא טיפס', 'עוד לא טיפסה') : gw(r.id, 'לא התחיל', 'לא התחילה')}</span></li>`).join('');
   return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
@@ -889,7 +920,7 @@ function comboCard(r) {
   const n = gs.reduce((s, g) => s + (resultsOf(g.id)?.rows.length || 0), 0), started = gs.some(g => resultsOf(g.id)?.started);
   return `<button type="button" class="h-card card combo-card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(r.title)}</h3>${started ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
-      <p class="muted small">${ilDay !== r.date ? dayLabel(ilDay) + ' ' : ''}${fmtHM(st)} · ${r.boulders} בולדרים · ${gs.length} קבוצות${n ? ` · ${n} ${gw(r.id, 'מתחרים', 'מתחרות')}` : ''}</p>
+      <p class="muted small">${r.noTime ? 'תוצאות סופיות' : `${ilDay !== r.date ? dayLabel(ilDay) + ' ' : ''}${fmtHM(st)}`} · ${r.boulders} בולדרים · ${gs.length} קבוצות${n ? ` · ${n} ${gw(r.id, 'מתחרים', 'מתחרות')}` : ''}</p>
       ${isr ? `<ul class="h-mine">${isr}</ul>` : ''}
     </button>`;
 }
@@ -923,7 +954,7 @@ function render() {
   const s = stateAt(r, now(), off(r.id));
   $('#clock').textContent = fmtClock(now());
   $('#event-title').textContent = evName(evOf(r));
-  $('#round-sub').textContent = `${r.ifsc ? `${dayLabel(dayIn(roundStart(r)))} ${fmtHM(roundStart(r))}` : dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים${r.ifsc ? '' : ` · סבב ${fmtDur(r.slotSec0 * 1000)}`}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
+  $('#round-sub').textContent = `${r.ifsc && !r.noTime ? `${dayLabel(dayIn(roundStart(r)))} ${fmtHM(roundStart(r))}` : dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים${r.ifsc ? '' : ` · סבב ${fmtDur(r.slotSec0 * 1000)}`}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
   // 3.11.0 international round: board (photos + tags) + results only — no clock, start list, "mine", notes (CSS)
   document.body.classList.toggle('intl-round', !!r.ifsc);
   $('#mine-h').textContent = r.ifsc ? 'תוצאות' : MINE_H;
@@ -1874,6 +1905,8 @@ function exportFile(list) {
 
 function start() {
   DATA.rounds = withCombos(DATA.rounds); // 3.12.0: combined A + B entries for rounds split into groups
+  // 3.13.0: saved results of finished international competitions → same path as a World Climbing answer
+  for (const [id, d] of Object.entries(DATA.ifscData || {})) { IFSC[id] = { data: null, res: null, at: Date.now(), err: false, busy: false, seen: null }; applyIfsc(id, d); }
   for (const [id, res] of Object.entries(DATA.results || {})) if (res.final == null) res.final = lastRound(id); // a results file without `final`
   VIEWER = DATA.role === 'viewer';
   MINE_H = $('#mine-h').textContent;
@@ -1894,10 +1927,20 @@ function start() {
     if (d.page) { setPage(d.page); return; }
     if (d.final) { const [ev, key, from] = d.final.split(':'); homeFinal = { ev: Number(ev), key, from }; render(); window.scrollTo(0, 0); return; }
     if (b.id === 'final-back') { if (homeFinal.from === 'list') { homeOpenEvent = null; homeListPicked = true; } else homeOpenEvent = homeFinal.ev; homeFinal = null; render(); return; }
-    if (d.ev != null) { homeOpenEvent = Number(d.ev); render(); return; }
-    if (b.id === 'home-back') { homeOpenEvent = null; homeListPicked = true; render(); return; }
+    if (d.season) { homeSeason = d.season; homeListPicked = true; render(); window.scrollTo(0, 0); return; }
+    if (b.id === 'season-back') { homeSeason = null; homeListPicked = true; render(); window.scrollTo(0, 0); return; }
+    if (d.filt) { // 3.14.0 chip toggle: a row with nothing selected = all on; selecting every option = back to all ([])
+      const [k, v] = d.filt.split(':'), opts = filterOptions(homeEvents().filter(x => seasonOf(x) === homeSeason).map(x => x.event))[k];
+      const eff = effectiveFilter(evFilter, { [k]: opts })[k], cur = eff.length ? eff : opts, next = cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v];
+      evFilter = { ...evFilter, [k]: opts.every(x => next.includes(x)) ? [] : next }; saveFilter(); render(); return;
+    }
+    if (b.id === 'filt-reset') { evFilter = { disc: [], type: [], age: [] }; saveFilter(); render(); return; }
+    if (d.ev != null) { homeFrom = homeSeason; homeOpenEvent = Number(d.ev); render(); window.scrollTo(0, 0); return; }
+    if (b.id === 'home-back') { // auto-opened on a competition day (homeOpenEvent null) → back to that competition's season list
+      const auto = homeOpenEvent == null ? homeEvents()[compDayIdx()] : null;
+      homeSeason = auto ? seasonOf(auto) : homeFrom; homeOpenEvent = null; homeListPicked = true; render(); return; }
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
-    else if (b.id === 'home-btn') { homeOpenEvent = null; homeListPicked = false; homeFinal = null; showScreen('home'); }
+    else if (b.id === 'home-btn') { homeOpenEvent = null; homeListPicked = false; homeFinal = null; homeSeason = null; homeFrom = null; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
     else if (d.photo) openPhoto(d.phRound || ($('#photos-dlg').open ? gridRound : current), Number(d.photo));
     else if (b.id === 'photos-btn') openPhotos();

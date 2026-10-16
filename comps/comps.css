@@ -1141,3 +1141,13 @@ body.combo-round #photos-btn, body.combo-round #tags-btn { display: none !import
 .fc .bar.appeal .fill-wrap { outline: 2.5px solid var(--appeal); outline-offset: 1px; }
 .fc .bar.appeal .lb::after { content: ' · ערעור'; color: var(--appeal); font-weight: 800; }
 .ltoast.appeal { background: var(--appeal); }
+
+/* ---- 3.14.0 season catalog: season cards, now strip, filter chips, code badge ---- */
+.season-cards { display: grid; gap: 10px; }
+.season-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 16px; text-align: start; font: inherit; color: inherit; cursor: pointer; }
+.season-card .ev-main b { font-size: 17px; }
+.season-card .chev { width: 8px; height: 8px; flex: none; margin-inline-start: auto; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(135deg); }
+.now-strip { display: grid; gap: 6px; margin-bottom: 14px; }
+.ev-filters { display: grid; gap: 8px; margin-bottom: 12px; }
+.ev-filter { flex-wrap: wrap; justify-self: start; max-width: 100%; }
+.ev-code { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .03em; padding: 0 6px; border-radius: 6px; border: 1.5px solid var(--border); margin-inline-end: 6px; unicode-bidi: isolate; } /* not direction:ltr — that flips margin-inline-end to the wrong side in RTL */

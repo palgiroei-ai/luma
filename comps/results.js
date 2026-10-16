@@ -46,7 +46,7 @@ export function analyze(ranked, row, full = ranked, q0 = null) {
   ranked = ranked.map(r => (r.bs.includes(null) ? { ...r, bs: bsOf(r) } : r));
   if (row.bs.includes(null)) row = ranked.find(r => r.bib === row.bib);
   const ok = ranked.filter(r => r.rank != null), n = ok.length;
-  const all = full.filter(r => r.rank != null), q = q0 != null ? Math.min(q0, all.length) : quota(all.length), cutScore = all[q - 1].score;
+  const all = full.filter(r => r.rank != null), q = q0 > 0 ? Math.min(q0, all.length) : quota(all.length), cutScore = all[q - 1].score;
   const overall = all.find(x => x.bib === row.bib) || row;
   const i = ok.indexOf(row);
   const above = ok.slice(0, i).reverse().find(x => x.score > row.score) || null;
