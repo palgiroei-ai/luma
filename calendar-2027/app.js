@@ -7,7 +7,7 @@ const DOW = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
 const DOW_LONG = ['יום א׳', 'יום ב׳', 'יום ג׳', 'יום ד׳', 'יום ה׳', 'יום ו׳', 'שבת'];
 const DISC = { boulder: 'בולדר', lead: 'הובלה', speed: 'מהירות' };
 const AGE = { youth: 'נוער', senior: 'בוגרים' };
-const ACADEMY = new Set(['strength', 'climbing', 'camp']);
+let ACADEMY;      // academy category keys (age/discipline filters don't apply)
 const TRAINING = new Set(['strength', 'climbing']);
 const NARROW = 760;
 
@@ -68,6 +68,7 @@ async function unlock(code) {
   if (!data) return false;
   D = data;
   CAT = Object.fromEntries(D.categories.map(c => [c.key, c]));
+  ACADEMY = new Set(D.categories.filter(c => c.group === 'academy').map(c => c.key));
   store.set(KEY.code, code);
   return true;
 }
