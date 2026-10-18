@@ -1,20 +1,30 @@
+@font-face { font-family: 'HeeboPalgi'; font-style: normal; font-weight: 400 800; font-display: swap; size-adjust: 90%;
+  src: url('fonts/heebo-hebrew.woff2') format('woff2');
+  unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F; }
+@font-face { font-family: 'HeeboPalgi'; font-style: normal; font-weight: 400 800; font-display: swap; size-adjust: 90%;
+  src: url('fonts/heebo-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'HeeboPalgi'; font-style: normal; font-weight: 400 800; font-display: swap; size-adjust: 90%;
+  src: url('fonts/heebo-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
 :root {
   --chalk: #F5F1EA;
-  --navy: #14243B;
-  --navy-2: #1D3150;
-  --copper: #C0743A;
-  --copper-text: #935427;
-  --copper-bg: #F6E4D2;
-  --border: #E4DCCF;
+  --navy: #2E1A47;
+  --navy-2: #432A63;
+  --copper: #8B5E3C;
+  --copper-text: #7A512F;
+  --copper-bg: #F6E6DA;
+  --border: #E5DDD0;
   --line: #EEE8DD;
   --card: #FFFFFF;
-  --muted: #5B6676;
+  --muted: #6F6479;
   --danger: #B3261E;
   --danger-bg: #FBE3E1;
   --ok: #2E6B4E;
   --appeal: #B06F00; /* 3.12.2: World Climbing appeal — amber */
   --live: #C62828; /* 3.4.0: live (provisional) results — red, chosen by Roei */
-  --primary: #14243B;
+  --primary: #2E1A47;
   --on-primary: #FFFFFF;
   --added: #2F5DA8;
   --added-bg: #E2EBF8;
@@ -24,11 +34,11 @@
   --st-coord: #7F5400; --st-coord-bg: #FAF0D7;
   --st-elec: #6730D0; --st-elec-bg: #EEE6FC;
   /* 3.10.0 final results: copper (Palgi accent), darker for white text */
-  --fin: #975425; --fin-bg: #F6E4D2; --on-fin: #FFFFFF;
+  --fin: #8B5E3C; --fin-bg: #F6E6DA; --on-fin: #FFFFFF;
   --radius: 14px;
-  --shadow: 0 1px 2px rgba(20, 36, 59, .05), 0 8px 24px rgba(20, 36, 59, .06);
-  --font: 'Heebo', system-ui, sans-serif;
-  --font-brand: 'Jost', 'Heebo', sans-serif;
+  --shadow: 0 1px 2px rgba(46, 26, 71, .05), 0 8px 24px rgba(46, 26, 71, .06);
+  --font: 'HeeboPalgi', system-ui, sans-serif;
+  --font-brand: 'Jost', 'HeeboPalgi', sans-serif;
   color-scheme: light;
 }
 
@@ -88,7 +98,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 
 
 .alert-stack { position: fixed; top: 70px; inset-inline: 16px; z-index: 50; display: grid; gap: 8px; pointer-events: none; }
-.alert { pointer-events: auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-radius: 12px; font-size: 20px; font-weight: 700; box-shadow: 0 10px 30px rgba(20, 36, 59, .25); animation: pop .3s ease-out; }
+.alert { pointer-events: auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-radius: 12px; font-size: 20px; font-weight: 700; box-shadow: 0 10px 30px rgba(46, 26, 71, .25); animation: pop .3s ease-out; }
 .alert.soon { background: var(--copper); color: #fff; }
 .alert.now { background: var(--danger); color: #fff; animation: pop .3s ease-out, pulse 1s ease-in-out 6; }
 .alert button { background: rgba(255,255,255,.2); border: 0; border-radius: 50%; width: 36px; height: 36px; color: #fff; font-size: 18px; cursor: pointer; flex: none; }
@@ -186,8 +196,8 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .log.appeal { border-inline-start: 5px solid var(--danger); }
 
 /* dialogs */
-.dlg { border: 0; border-radius: var(--radius); padding: 0; width: min(520px, calc(100vw - 32px)); box-shadow: 0 20px 60px rgba(20, 36, 59, .3); }
-.dlg::backdrop { background: rgba(20, 36, 59, .35); }
+.dlg { border: 0; border-radius: var(--radius); padding: 0; width: min(520px, calc(100vw - 32px)); box-shadow: 0 20px 60px rgba(46, 26, 71, .3); }
+.dlg::backdrop { background: rgba(46, 26, 71, .35); }
 .dlg form { padding: 20px; display: grid; gap: 12px; }
 .dlg h2 { font-size: 20px; font-weight: 800; }
 .dlg p { margin: 0; }
@@ -222,7 +232,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   .powered { display: none; }
 }
 .nw { white-space: nowrap; }
-.sim-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 16px 8px; padding: 10px 14px; border-radius: 12px; background: #2B3F5E; color: #fff; }
+.sim-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 16px 8px; padding: 10px 14px; border-radius: 12px; background: var(--navy-2); color: #fff; }
 .sim-bar .btn-light { background: #fff; color: var(--navy); text-decoration: none; margin-inline-start: auto; }
 .full .sync-btn { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
 .full tr.st-done .sync-btn:not(.appeal-btn) { opacity: .5; }
@@ -406,7 +416,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .push-switch { position: relative; flex: none; width: 52px; height: 32px; padding: 0; border: none; border-radius: 999px; background: var(--border); cursor: pointer; transition: background .2s; }
 .push-switch[aria-checked="true"] { background: #1E7A4C; }
 .push-switch:disabled { opacity: .5; cursor: default; }
-.push-switch-knob { position: absolute; top: 3px; inset-inline-start: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(20, 36, 59, .3); transition: inset-inline-start .2s; }
+.push-switch-knob { position: absolute; top: 3px; inset-inline-start: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(46, 26, 71, .3); transition: inset-inline-start .2s; }
 .push-switch[aria-checked="true"] .push-switch-knob { inset-inline-start: 23px; }
 
 /* footer — same as the Wingate app: "version · Powered by LUMA · By Roei Palgi" */
@@ -513,6 +523,7 @@ body:not(.viewer) .viewer-only { display: none !important; }
 
 /* home: competitions without rounds yet, "in N days" badge, LTR dates */
 .hb.later { background: var(--line); color: var(--muted); }
+.tbd { font-size: 11px; font-weight: 400; color: var(--muted); } /* 3.15.0: "משוער" next to a date / place not final yet */
 .ev-dates { unicode-bidi: isolate; }
 .h-empty { padding: 16px; display: grid; gap: 6px; } .h-empty p { margin: 0; }
 #set-title:focus { outline: none; }
@@ -1115,6 +1126,17 @@ body.intl-round #round-screen .mid, body.intl-round #par, body.intl-round .sec-h
 .res-tbl .flag { font-size: 1.05em; }
 .intl-wait { padding: 18px 4px; }
 @media (max-width: 600px) { .res-tbl .n .fn { display: none; } }
+
+/* 3.16.0 saved lead rounds: no board / photos / tags; table = rank · climber · height per route (+ route place) · score */
+body.lead-round #board, body.lead-round #photos-btn, body.lead-round #tags-btn { display: none !important; }
+.lead-tbl { min-width: 0; }
+@media (max-width: 600px) { .res-tbl.lead-tbl td.n small { display: block; } }
+.lead-tbl td.lh, .lead-tbl td.tt { white-space: nowrap; }
+.lead-tbl td.lh { font-weight: 700; font-size: 15px; width: 84px; }
+.lead-tbl td.lh small { display: block; color: var(--muted); font-size: 11px; font-weight: 500; }
+.lead-tbl td.top bdi { display: inline-block; padding: 1px 7px; border-radius: 6px; background: var(--ok); color: var(--chalk); font-size: 13px; }
+.lead-tbl td.tm { color: var(--muted); font-size: 13px; width: 56px; direction: ltr; }
+.lead-tbl th.lh, .lead-tbl th.tm { width: 84px; }
 
 /* 3.12.0 combined A + B (split quals groups): two labeled boulder rows; the groups' tables side by side when wide (A on the right) */
 body.combo-round #photos-btn, body.combo-round #tags-btn { display: none !important; }

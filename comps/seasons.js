@@ -1,16 +1,27 @@
 // 3.11.0 (Roei 2026-10-16): the events list is split into seasons. 3.12.3 (Roei): by time — international 2025-6 first,
-// then the current national season (order: intl 2025-6, then national). An event without `season` (payload from an older build) counts as national.
-export const SEASONS = [
-  { id: 'intl-2025-26', label: 'עונה בינלאומית 2025-6' },
-  { id: 'nat-2026-27', label: 'עונה לאומית 2026-7' },
-];
+// then the current national season. 3.15.0: the season list comes from the events present (app events can bring new
+// seasons): ids 'intl-YYYY-YY' / 'nat-YYYY-YY', ordered by when each season starts — intl-Y = calendar year Y+1 (the app's
+// rule), nat-Y = from 1 September Y. An event without `season` (payload from an older build) counts as national 2026-7.
 const NAT = 'nat-2026-27';
-const seasonIdx = id => { const i = SEASONS.findIndex(s => s.id === (id || NAT)); return i < 0 ? SEASONS.length : i; };
-export const seasonLabel = id => SEASONS[seasonIdx(id)]?.label || '';
+const SEASON_RE = /^(intl|nat)-(\d{4})-(\d{2})$/;
+const sid = id => id || NAT;
+// 'intl-2025-26' → '2026-01-01', 'nat-2026-27' → '2026-09-01' (unknown ids sort last)
+const seasonStart = id => { const m = SEASON_RE.exec(sid(id)); return !m ? '9999' : m[1] === 'intl' ? `${Number(m[2]) + 1}-01-01` : `${m[2]}-09-01`; };
+// second year: one digit when its tens digit is the first year's ("2025-6"), else both digits ("2029-30")
+const yearTail = (y, yy) => (Math.floor((Number(y) % 100) / 10) === Math.floor(Number(yy) / 10) ? String(Number(yy) % 10) : yy);
+export const seasonLabel = id => { const m = SEASON_RE.exec(sid(id)); return m ? `${m[1] === 'intl' ? 'עונה בינלאומית' : 'עונה לאומית'} ${m[2]}-${yearTail(m[2], m[3])}` : ''; };
+const seasonCmp = (a, b) => (seasonStart(a) < seasonStart(b) ? -1 : seasonStart(a) > seasonStart(b) ? 1 : sid(a) < sid(b) ? -1 : sid(a) > sid(b) ? 1 : 0);
+// events → [{ id, label }] of the seasons they use, in season order
+export function seasonsOf(events) {
+  return [...new Set(events.map(e => sid(e?.season)))].sort(seasonCmp).map(id => ({ id, label: seasonLabel(id) }));
+}
 // items { event, dates } → season order, then by first date (stable); the app's event indices (data-ev) follow this order
 export function bySeason(list) {
-  return [...list].sort((a, b) => seasonIdx(a.event.season) - seasonIdx(b.event.season) || (a.dates[0] < b.dates[0] ? -1 : a.dates[0] > b.dates[0] ? 1 : 0));
+  return [...list].sort((a, b) => seasonCmp(a.event.season, b.event.season) || (a.dates[0] < b.dates[0] ? -1 : a.dates[0] > b.dates[0] ? 1 : 0));
 }
+// 3.15.0: an event the Palgi app cancelled keeps its card with a "בוטל" tag; date / place not final yet → "משוער"
+export const CANCEL_TAG = '<span class="hb done">בוטל</span>';
+export const tbdMark = on => (on ? ' <span class="tbd">משוער</span>' : '');
 
 export const TYPES = { wc: 'גביע עולם', ec: 'גביע אירופה', wch: 'אליפות עולם', ech: 'אליפות אירופה', league: 'ליגה', ich: 'אליפות ישראל' };
 const PLURAL = { wc: 'גביעי עולם', ec: 'גביעי אירופה', wch: 'אליפויות עולם', ech: 'אליפויות אירופה', league: 'ליגות', ich: 'אליפויות ישראל' };

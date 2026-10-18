@@ -8,13 +8,12 @@ import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
-import { ifscResults, fetchIfsc, isIsr, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS, lastName, appealsOf, appealNearLine, appealEvents } from './ifsc.js';
-import { bySeason, seasonLabel, SEASONS, evCode, filterOptions, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
+import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, isIsr, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS, lastName, appealsOf, appealNearLine, appealEvents } from './ifsc.js';
+import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evCode, filterOptions, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.14.0';
+export const APP_VERSION = '3.17.1';
 
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // ---- clock (?at=2026-10-13T10:30:00&speed=10 → simulated clock for previews) ----
 const params = new URLSearchParams(location.search);
@@ -141,6 +140,7 @@ const rankCache = {};
 function rankedOf(id) {
   const res = resultsOf(id); if (!res) return null;
   if (rankCache[id]?.res === res) return rankCache[id].v;
+  if (res.lead) return (rankCache[id] = { res, v: leadRanked(res.rows) }).v; // 3.16.0 lead: World Climbing's place only
   const v = rankRows(res.rows, prevRankOf(id));
   return (rankCache[id] = { res, v: res.intl ? ifscRanked(v) : v }).v; // international: the place = IFSC's rank (review 2026-10-16)
 }
@@ -215,7 +215,7 @@ async function pollIfsc(id, force = false) {
   s.at = Date.now(); s.busy = false; render();
 }
 function applyIfsc(id, d) {
-  const s = IFSC[id], res = ifscResults(d), r = round(id);
+  const s = IFSC[id], res = ifscAnyResults(d), r = round(id); // 3.16.0: saved lead rounds too
   if (venueDay(r) > r.date) { res.live = false; res.complete = true; } // safety net: the venue's day is over = finished
   if (r.adv) res.final = false; // 3.12.1: a qualifying line (r.adv advance; split groups: per group)
   res.source = r.ifscStatic ? 'World Climbing (IFSC) · תוצאות סופיות' : `World Climbing (IFSC) · עודכן ${fmtHM(res.updated || Date.now())}`;
@@ -243,7 +243,6 @@ function ifscWanted() {
   if (ev) return ev.event.intl ? ev.rounds.filter(want).map(r => r.id) : [];
   return evs.filter(e => e.event.intl).flatMap(e => e.rounds.filter(want).map(r => r.id));
 }
-const genderOf = id => (/-w(-|$)/.test(id) ? 'W' : 'M');
 // 3.9.1: wording by the round's gender (women's rounds: מטפסת, סיימה, לא התחילה…)
 const gw = (id, m, f) => (genderOf(id) === 'W' ? f : m);
 let resFem = false; // set by renderResults for the result cards built inside it
@@ -318,6 +317,7 @@ function renderBoard(r, s, el = $('#board')) {
     patch(el, r.combo.map(id => { const g = round(id); tmp._html = null; renderBoard(g, null, tmp); return `<div class="combo-board"><b class="combo-h">קבוצה ${esc(g.group)}</b>${tmp.innerHTML}</div>`; }).join(''));
     return;
   }
+  if (r.lead) { patch(el, ''); return; } // 3.16.0 lead: no boulder cards / photos / tags (body.lead-round hides the board)
   if (r.ifsc) { // 3.11.0 international round: no start list here — the boulders with photos + tags (coach adds, viewers see)
     for (let b = 1; b <= r.boulders; b++) { const th = thumb(b), add = th ? '' : addSpot(b);
       cells.push(`<div class="lane boulder${th ? ' has-ph' : add ? ' no-ph' : ''}"><div class="lane-label">${label(b, th, add)}</div>${boardTag(r.id, b)}</div>`); }
@@ -565,6 +565,7 @@ function intlName(n) {
 // cards (one group inside the combined A + B screen); isrKey = whose "רק ישראלים" choice applies
 function renderResults(r, part = null, isrKey = r.id) {
   resFem = genderOf(r.id) === 'W';
+  if (resultsOf(r.id).lead) return renderLead(r, part, isrKey);
   const res = resultsOf(r.id), full = rankedOf(r.id), g = genderOf(r.id);
   if (res.intl && !res.rows.length) return part === 'cards' ? '' : `<p class="muted intl-wait">סדר העלייה לסבב הזה עוד לא פורסם ב-World Climbing. התוצאות יופיעו כאן כשהסבב יתחיל.</p>`;
   const opts = catOptions(res.rows, g), opt = opts.find(o => o.key === resCat[r.id]) || opts[0];
@@ -625,6 +626,24 @@ function renderResults(r, part = null, isrKey = r.id) {
     <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. ${intl ? '' : 'תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. '}${intl ? `הדירוג לפי World Climbing (של הסבב הזה בלבד). ${r.adv ? `עולים לסבב הבא: ${r.adv}${r.group ? ' מכל קבוצה' : ''}; תיקו על המקום האחרון — לפי World Climbing.` : 'סבב אחרון — אין סבב המשך.'}` : res.final ? 'סבב אחרון בתחרות — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
   </div>`;
 }
+// 3.16.0 saved lead round (World Climbing format): rank, climber + country, height per route ("+" = a move past the
+// hold; quals: route place in brackets + combined points), Israelis highlighted, "רק ישראלים", qualifying line. No cards.
+function renderLead(r, part, isrKey) {
+  if (part === 'cards') return '';
+  const res = resultsOf(r.id), fem = resFem, nIsr = res.rows.filter(isIsr).length, onlyIsr = !!(nIsr && resIsr[isrKey]);
+  const chips = !part && nIsr ? `<div class="seg res-cats" role="group" aria-label="סינון"><button type="button" data-resisr="0" aria-pressed="${!onlyIsr}">כולם</button><button type="button" data-resisr="1" aria-pressed="${onlyIsr}">🇮🇱 ${fem ? 'רק ישראליות' : 'רק ישראלים'}</button></div>` : '';
+  const last = /-f$/.test(r.id);
+  return `<div class="res lead-res">${chips}
+    <div class="res-head"><span class="muted small">מקור: ${esc(res.source)}</span></div>
+    ${nIsr ? '' : `<p class="muted">${fem ? 'אין ישראליות בסבב הזה.' : 'אין ישראלים בסבב הזה.'}</p>`}
+    <div class="card"><div class="tbl-head"><b>${onlyIsr ? (fem ? 'הישראליות' : 'הישראלים') : fem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">שורה מסומנת = ${fem ? 'ישראליות' : 'ישראלים'}</span></div>
+      <div class="tbl-wrap">${leadTableHtml(rankedOf(r.id), { nR: r.boulders, adv: r.adv || 0, onlyIsr, fem, nameHtml: intlName })}</div></div>
+    <p class="muted small">גובה = מספר האחיזה האחרונה שהוחזקה; <bdi dir="ltr">+</bdi> = תנועה ממנה הלאה; TOP = עד סוף המסלול. ${r.boulders > 1 ? 'במוקדמות: ניקוד משולב של המסלולים (נמוך יותר = טוב יותר), ובסוגריים המקום בכל מסלול. ' : ''}הדירוג לפי World Climbing. ${r.adv ? `עולים לסבב הבא: ${r.adv}.` : last ? 'סבב אחרון — אין סבב המשך.' : ''}</p>
+  </div>`;
+}
+// 3.16.0: lead rounds count routes, boulder rounds boulders
+const unitsOf = r => (r.lead ? (r.boulders === 1 ? 'מסלול אחד' : `${r.boulders} מסלולים`) : `${r.boulders} בולדרים`);
+
 // 3.12.0 combined A + B (Roei): the Israelis' cards of both groups on top (coach), then each group's own table — side by
 // side on wide screens (A on the right), stacked on narrow ones. Rankings are never merged.
 function renderCombo(r) {
@@ -757,6 +776,7 @@ function rangeLabel(dates) {
 }
 // only the nearest upcoming competition is "בקרוב"; later ones count the days
 function evBadge(ev, evs) {
+  if (ev.event.cancelled) return CANCEL_TAG;
   const ph = evPhase(ev);
   if (ph === 'live') return ev.rounds.length ? '<span class="hb live">חי עכשיו</span>' : '<span class="hb live">היום</span>';
   if (ph === 'after') return '<span class="hb done">הסתיים</span>';
@@ -828,7 +848,7 @@ const homeTools = () => (VIEWER ? '' : `<span class="h-tools">${SIM_AT == null ?
 // one competition row of the home list (data-ev = its index in homeEvents()); 3.14.0: + the Hub-style code (WC-B) for international
 function evRowHtml(ev, i, evs, t) {
   const ph = evPhase(ev, t), badge = evBadge(ev, evs), code = evCode(ev.event);
-  const meta = [ev.event.place && esc(ev.event.place), (code ? `<span class="ev-code">${code}</span>` : '') + rangeLabel(ev.dates), ev.rounds.length ? `${ev.rounds.length} ראונדים` : 'הראונדים יתווספו בהמשך'].filter(Boolean).join(' · ');
+  const meta = [ev.event.place && esc(ev.event.place) + tbdMark(ev.event.placeTbd), (code ? `<span class="ev-code">${code}</span>` : '') + rangeLabel(ev.dates) + tbdMark(ev.event.dateTbd), ev.rounds.length ? `${ev.rounds.length} ראונדים` : 'הראונדים יתווספו בהמשך'].filter(Boolean).join(' · ');
   const people = new Set(ev.rounds.flatMap(r => (r.ifsc ? (ifscRes(r.id)?.rows || []).filter(isIsr).map(x => x.name) : mineOf(r.id).map(m => r.slots[m.k].name))));
   const ovl = ev.rounds.reduce((n, r) => n + (mineOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
   const fin = finalsReady(ev);
@@ -844,7 +864,7 @@ function renderHomeList(seg) {
   if (homeSeason == null) { // level 1: now strip + season cards
     const ni = pickNow(evs, ev => evPhase(ev, t), ev => evToday(ev.event));
     const strip = ni < 0 ? '' : `<section class="now-strip"><h3 class="season-h">עכשיו</h3>${evRowHtml(evs[ni], ni, evs, t)}</section>`;
-    const cards = SEASONS.map(s => {
+    const cards = seasonsOf(evs.map(x => x.event)).map(s => {
       const items = evs.filter(x => seasonOf(x) === s.id); if (!items.length) return '';
       const withRes = items.filter(x => x.rounds.some(r => resultsOf(r.id)?.started)).length;
       return `<button type="button" class="card season-card" data-season="${s.id}"><span class="ev-main"><b>${esc(s.label)}</b>
@@ -892,7 +912,7 @@ function renderHomeDetail(seg, fromList, auto = null) {
       ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} סבבים של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
-  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + ' · ' : ''}${rangeLabel(cur.dates)}</span></h2>${seg}${homeTools()}</div>${chips}` +
+  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + tbdMark(ev.placeTbd) + ' · ' : ''}${rangeLabel(cur.dates)}${tbdMark(ev.dateTbd)}</span></h2>${seg}${homeTools()}</div>${chips}` +
     (rounds.length ? '' : `<div class="card h-empty"><p><b>${evBadge(cur, evs)}</b></p><p class="muted">הראונדים וסדרי העלייה יתווספו כשיתפרסמו.${ev.place ? '' : ' המיקום עוד לא פורסם.'}</p></div>`) +
     finalCards(cur, ei) + days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
 }
@@ -906,7 +926,7 @@ function intlCard(r) {
   const isr = (rk || []).filter(isIsr).map(x => `<li><b>🇮🇱 ${esc(x.name)}</b> <span>${x.rank ? `מקום ${x.rank}` : res.live ? gw(r.id, 'עוד לא טיפס', 'עוד לא טיפסה') : gw(r.id, 'לא התחיל', 'לא התחילה')}</span></li>`).join('');
   return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(r.title)}</h3>${res?.started ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
-      <p class="muted small">${when} · ${r.boulders} בולדרים${res?.rows.length ? ` · ${res.rows.length} ${gw(r.id, 'מתחרים', 'מתחרות')}` : ''}</p>
+      <p class="muted small">${when} · ${unitsOf(r)}${res?.rows.length ? ` · ${res.rows.length} ${gw(r.id, 'מתחרים', 'מתחרות')}` : ''}</p>
       ${isr ? `<ul class="h-mine">${isr}</ul>` : `<p class="muted small">${res && res.rows.length ? gw(r.id, 'אין ישראלים בסבב', 'אין ישראליות בסבב') : ''}</p>`}
     </button>`;
 }
@@ -938,7 +958,7 @@ function render() {
   applyDelays();
   if (DATA.rounds.some(r => r.ifsc)) ifscWanted().forEach(id => pollIfsc(id)); // 3.11.0: each round waits 15 s between fetches itself
   if (screen === 'home') {
-    document.body.classList.remove('intl-round', 'combo-round');
+    document.body.classList.remove('intl-round', 'combo-round', 'lead-round');
     $('#clock').textContent = fmtClock(now());
     $('#event-title').textContent = evName(homeEvents()[homeFinal?.ev ?? homeOpenEvent ?? focusEventIdx()].event);
     $('#round-sub').textContent = `מסך ראשי${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
@@ -954,9 +974,10 @@ function render() {
   const s = stateAt(r, now(), off(r.id));
   $('#clock').textContent = fmtClock(now());
   $('#event-title').textContent = evName(evOf(r));
-  $('#round-sub').textContent = `${r.ifsc && !r.noTime ? `${dayLabel(dayIn(roundStart(r)))} ${fmtHM(roundStart(r))}` : dayLabel(r.date)} · ${r.title} · ${r.boulders} בולדרים${r.ifsc ? '' : ` · סבב ${fmtDur(r.slotSec0 * 1000)}`}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
+  $('#round-sub').textContent = `${r.ifsc && !r.noTime ? `${dayLabel(dayIn(roundStart(r)))} ${fmtHM(roundStart(r))}` : dayLabel(r.date)} · ${r.title} · ${unitsOf(r)}${r.ifsc ? '' : ` · סבב ${fmtDur(r.slotSec0 * 1000)}`}${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
   // 3.11.0 international round: board (photos + tags) + results only — no clock, start list, "mine", notes (CSS)
   document.body.classList.toggle('intl-round', !!r.ifsc);
+  document.body.classList.toggle('lead-round', !!r.lead);
   $('#mine-h').textContent = r.ifsc ? 'תוצאות' : MINE_H;
   renderTabs(); renderBoard(r, s); renderTimer(r, s); renderNext(r, s); renderPar(r);
   const rb = $('[data-view="results"]'), rs = resultsOf(r.id), lv = !!rs?.live;

@@ -13,6 +13,43 @@ export function ifscResults(d) {
     complete: d.status === 'finished' || (total > 0 && done === total), updated: d.updated || null, final: true, intl: true };
 }
 
+// 3.16.0 lead (saved rounds only): { lead, nR, rows: [{ bib, name, country, ifscRank, score, rs?, time? }] } → results
+// shape. No boulder cells (bs []) — places, cards and the table come from World Climbing's own rank and score text.
+export function ifscLeadResults(d) {
+  const rows = (d.rows || []).map(x => ({ bib: x.bib, name: x.name, club: x.country, country: x.country, cat: null, ifscRank: x.ifscRank ?? null, score: x.score ?? null,
+    ...(x.rs ? { rs: x.rs } : {}), ...(x.time != null ? { time: x.time } : {}), bs: [] }));
+  const started = rows.filter(r => r.ifscRank != null).length;
+  return { rows, status: d.status, live: d.status !== 'finished', done: started, total: rows.length, started, complete: d.status === 'finished',
+    updated: d.updated || null, final: true, intl: true, lead: true, nR: d.nR || 1 };
+}
+// round id → 'W' | 'M' (3.16.0: youth ids too — w2004l-w19-q)
+export const genderOf = id => (/-w\d*(-|$)/.test(id) ? 'W' : 'M');
+export const ifscAnyResults = d => (d.lead ? ifscLeadResults(d) : ifscResults(d));
+// place = World Climbing's rank; order follows it, non-starters last (stable)
+export const leadRanked = rows => rows.map((x, i) => [{ ...x, rank: x.ifscRank ?? null }, i])
+  .sort(([a, i], [b, j]) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || i - j).map(([x]) => x);
+
+export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const isTop = s => /^top$/i.test(String(s || ''));
+const fmtTime = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+// the lead table (World Climbing format): # · climber (country) · per route height + route place (quals) · score / height
+// (· time when given). ranked = leadRanked(); adv = how many go on (qualifying line before the first one out).
+export function leadTableHtml(ranked, { nR = 1, adv = 0, onlyIsr = false, fem = false, nameHtml = esc } = {}) {
+  const multi = nR > 1, hasTime = !multi && ranked.some(x => x.time != null);
+  const span = 3 + (multi ? nR : 0) + (hasTime ? 1 : 0);
+  const sc = (s, cls) => `<td class="${cls}${isTop(s) ? ' top' : ''}">${s == null ? '–' : `<bdi dir="ltr">${esc(s)}</bdi>`}`;
+  let cut = false;
+  const body = (onlyIsr ? ranked.filter(isIsr) : ranked).map(x => {
+    let pre = '';
+    if (adv && !cut && x.rank != null && x.rank > adv) { cut = true; pre = `<tr class="cut"><td colspan="${span}">קו העלייה לסבב הבא · ${adv} עולים</td></tr>`; }
+    const name = `<td class="n"><b>${isIsr(x) ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : ''}${nameHtml(x.name)}</b><small>${esc(x.club)}</small></td>`;
+    if (x.rank == null) return pre + `<tr${isIsr(x) ? ' class="mine"' : ''}><td class="rk">–</td>${name}<td colspan="${span - 2}" class="muted small">${fem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td></tr>`;
+    const routes = multi ? Array.from({ length: nR }, (_, j) => { const r = x.rs?.[j]; return sc(r?.[0], 'lh') + (r?.[1] != null ? `<small>(${r[1]})</small>` : '') + '</td>'; }).join('') : '';
+    return pre + `<tr${isIsr(x) ? ' class="mine"' : ''}><td class="rk">${x.rank}</td>${name}${routes}${sc(x.score, 'tt')}</td>${hasTime ? `<td class="tm">${x.time != null ? fmtTime(x.time) : ''}</td>` : ''}</tr>`;
+  }).join('');
+  return `<table class="res-tbl lead-tbl"><thead><tr><th class="rk">#</th><th class="n">${fem ? 'מטפסת' : 'מטפס'}</th>${multi ? Array.from({ length: nR }, (_, j) => `<th class="lh">מסלול ${j + 1}</th>`).join('') : ''}<th class="tt">${multi ? 'ניקוד' : 'גובה'}</th>${hasTime ? '<th class="tm">זמן</th>' : ''}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
 // rankRows() output → the place IFSC shows (review 2026-10-16: their tie-breaks win), ours only where IFSC has none;
 // a row we count as not started stays unranked (it has no score). Re-sorted by that place, unranked last (stable).
 export function ifscRanked(ranked) {
