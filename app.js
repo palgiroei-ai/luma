@@ -5,6 +5,18 @@
   document.documentElement.classList.add('js');
   var reveals = document.querySelectorAll('.reveal');
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---- promo video: plays muted while at least half of it is on screen, pauses when scrolled away (Roei 2026-10-19).
+  // Reduced motion: no autoplay, the controls stay.
+  var promo = document.getElementById('promo-video');
+  if (promo && !reduce && 'IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { var playing = promo.play(); if (playing && playing.catch) playing.catch(function () {}); }
+        else promo.pause();
+      });
+    }, { threshold: 0.5 }).observe(promo);
+  }
   if (reduce || !('IntersectionObserver' in window)) {
     reveals.forEach(function (el) { el.classList.add('is-visible'); });
   } else {
