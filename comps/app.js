@@ -8,10 +8,10 @@ import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
-import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, isIsr, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS, lastName, appealsOf, appealNearLine, appealEvents } from './ifsc.js';
-import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evCode, filterOptions, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
+import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, isIsr, intlMineByBib, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS, lastName, appealsOf, appealNearLine, appealEvents } from './ifsc.js';
+import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evCode, evTone, filterOptions, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.17.1';
+export const APP_VERSION = '3.18.0';
 
 const $ = s => document.querySelector(s);
 
@@ -236,7 +236,7 @@ const venueDay = r => evToday(evOf(r));
 function ifscWanted() {
   if (screen === 'round') { const r = round(current); return r?.ifsc ? ifscIds(r) : []; }
   if (homeFinal) return [];
-  const evs = homeEvents(), i = homeOpenEvent ?? (homeListPicked ? -1 : compDayIdx()), ev = evs[i];
+  const evs = homeEvents(), ev = homeOpenEvent == null ? null : evs[homeOpenEvent];
   // home (competition or list): once per app open, then every 15 s only from 10 min before a round's start until it is
   // done (review 2026-10-16 + 3.11.1: 7 rounds × every client was too much)
   const want = r => r.ifsc && !r.combo && (!IFSC[r.id]?.at || (now() >= roundStart(r) - IFSC_EARLY_MS && ifscPhase(r) !== 'after'));
@@ -573,13 +573,15 @@ function renderResults(r, part = null, isrKey = r.id) {
   const ranked = sub.length === full.length ? full : sub; // a view of everyone = the overall ranking (no "כללי")
   const overallOf = Object.fromEntries(full.map(x => [x.bib, x.rank]));
   const ok = ranked.filter(x => x.rank != null), nB = r.boulders;
-  const intl = !!res.intl; // 3.11.0 international round: Israelis = "mine"; analysis cards + boulder stats coach only
-  const whoByBib = {};
-  if (intl) for (const x of res.rows) { if (isIsr(x)) whoByBib[x.bib] = { short: x.name.split(' ')[0], isr: true }; }
+  // 3.11.0 international round: Israelis highlighted; analysis cards + boulder stats coach only. 3.18.0 (Roei): the cards and
+  // the per-boulder dots are my athletes only (World Climbing name from the Palgi app), not every Israeli
+  const intl = !!res.intl;
+  let whoByBib = {};
+  if (intl) whoByBib = intlMineByBib(res.rows, DATA.intlMine);
   else for (const m of mineOf(r.id)) { const s = r.slots[m.k]; if (s) whoByBib[s.bib] = m; }
-  const nIsr = Object.keys(whoByBib).length, onlyIsr = intl && nIsr && resIsr[isrKey];
-  const chips = opts.length > 1 ? `<div class="seg res-cats" role="group" aria-label="קטגוריה">${opts.map(o => `<button type="button" data-rescat="${o.key}" aria-pressed="${o === opt}">${esc(o.label)}</button>`).join('')}</div>`
-    : intl && nIsr ? `<div class="seg res-cats" role="group" aria-label="סינון"><button type="button" data-resisr="0" aria-pressed="${!onlyIsr}">כולם</button><button type="button" data-resisr="1" aria-pressed="${!!onlyIsr}">🇮🇱 רק ישראלים</button></div>` : '';
+  const nIsr = intl ? res.rows.filter(isIsr).length : 0, onlyIsr = !!(intl && nIsr && resIsr[isrKey]);
+  const chips = opts.length > 1 ? `<div class="seg res-cats" role="group" aria-label="קטגוריה">${opts.map(o => `<button type="button" data-rescat="${o.key}" aria-pressed="${o === opt}">${esc(o.label)}</button>`).join('')}</div>` : '';
+  const isrChips = intl && nIsr && part !== 'cards' ? isrSeg(onlyIsr, resFem) : ''; // 3.18.0: right above the table (each group's own in A + B, same choice)
   const analysis = !(intl && VIEWER);
   const running = res.live && !res.complete;
   // 3.8.0: who is on the wall right now (rotation model + calibration) → label next to the name + frame on that boulder
@@ -591,7 +593,7 @@ function renderResults(r, part = null, isrKey = r.id) {
   const mine = (running ? ranked : ok).filter(x => whoByBib[x.bib]);
   if (part === 'cards') return analysis ? mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full, intl && q > 0 ? q : null)).join('') : '';
   const cards = !analysis || part ? '' : mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full, intl && q > 0 ? q : null)).join('')}</div>`
-    : `<p class="muted">${intl ? (res.rows.length ? 'אין ישראלים בסבב הזה.' : '') : VIEWER ? 'אין ספורטאים מהפלגיה בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
+    : `<p class="muted">${intl && !nIsr ? (res.rows.length ? gw(r.id, 'אין ישראלים בסבב הזה.', 'אין ישראליות בסבב הזה.') : '') : VIEWER ? 'אין ספורטאים מהפלגיה בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
     return `<div class="bs-row"><b>בולדר ${b.boulder}</b><div class="stack"><span class="t" style="width:${b.tops / b.n * 100}%"></span><span class="z" style="width:${b.zoneOnly / b.n * 100}%"></span></div>
@@ -604,13 +606,13 @@ function renderResults(r, part = null, isrKey = r.id) {
     return `<div class="cell ${k}${ex}"${ap ? ' title="בערעור"' : ''}>${ap ? '<span class="aptag">ערעור</span>' : ''}<span class="a">${k === 'n' ? '—' : (b[0] ? 'T' + b[0] + ' ' : '') + 'Z' + b[1]}</span><span class="s">${k === 'n' ? '—' : b[0] ? 'T' + b[0] : 'Z' + b[1]}</span><span class="p">${k === 'n' ? '0' : pts(b).toFixed(1)}</span></div>`; };
   let cutDone = false;
   const near = intl && q ? appealNearLine(full, q) : []; // 3.12.2: an open appeal that could move someone across the line
-  const rows = (onlyIsr ? ranked.filter(x => whoByBib[x.bib]) : ranked).map(x => {
-    const w = whoByBib[x.bib], cls = w ? (w.added ? 'mine added' : 'mine') : '';
+  const rows = (onlyIsr ? ranked.filter(isIsr) : ranked).map(x => {
+    const w = whoByBib[x.bib], isr = intl && isIsr(x), cls = w ? (w.added ? 'mine added' : 'mine') : isr ? 'isr' : '';
     let pre = '';
     if (!res.final && !cutDone && x.rank != null && overallOf[x.bib] > q) { cutDone = true; const ct = `קו העלייה לסבב הבא · ${q} עולים${ranked === full ? ` (${ok.length} התחילו)` : ' לפי הדירוג הכללי'}${near.length ? ` · <span class="ap-near">⚖️ ייתכן שינוי (ערעור של ${near.map(x => esc(lastName(x.name))).join(', ')})</span>` : ''}`;
       // 3.9.0: phone hides 2 columns → a cell spanning them would add a phantom column; one row per layout
       pre = `<tr class="cut cut-wide"><td colspan="${nB + 5}">${ct}</td></tr><tr class="cut cut-narrow"><td colspan="${nB + 3}">${ct}</td></tr>`; }
-    return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${w?.isr ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : ''}${intl ? intlName(x.name) : esc(x.name)}${w && !w.isr ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b>${wallTag(x.bib)}<small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
+    return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${isr ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : ''}${intl ? intlName(x.name) : esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b>${wallTag(x.bib)}<small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
       ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : resFem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td><td class="tz"></td><td class="tt">–</td>` : x.bs.map((b, j) => `<td>${cell(b, j, x.bib)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
   return `<div class="res${res.live ? ' is-live' : ''}">
@@ -621,7 +623,8 @@ function renderResults(r, part = null, isrKey = r.id) {
       <span class="legend"><span><i class="cell t lg">T</i> טופ</span><span><i class="cell z lg">Z</i> זון בלי טופ</span><span><i class="cell n lg">—</i> בלי זון</span><span class="muted">T2 = טופ בניסיון השני</span></span></div>
     ${cards}
     ${analysis ? `<div class="card bstats"><h3>הבולדרים בסבב: כמה הגיעו לטופ ולזון</h3>${stats}</div>` : ''}
-    <div class="card"><div class="tbl-head"><b>${onlyIsr ? (resFem ? 'הישראליות' : 'הישראלים') : resFem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">שורה מסומנת = ${intl ? (resFem ? 'ישראליות' : 'ישראלים') : VIEWER ? 'הפלגיה' : 'שלי'}</span></div>
+    ${isrChips}
+    <div class="card"><div class="tbl-head"><b>${onlyIsr ? (resFem ? 'הישראליות' : 'הישראלים') : resFem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">${intl ? (Object.keys(whoByBib).length ? `רקע = ${resFem ? 'ישראליות' : 'ישראלים'} · פס בצד = שלי` : `שורה מסומנת = ${resFem ? 'ישראליות' : 'ישראלים'}`) : `שורה מסומנת = ${VIEWER ? 'הפלגיה' : 'שלי'}`}</span></div>
       <div class="tbl-wrap"><table class="res-tbl"><thead><tr><th class="rk">#</th><th class="n">${resFem ? 'מטפסת' : 'מטפס'}</th><th class="bib">מס׳</th>${Array.from({ length: nB }, (_, j) => `<th class="bh"><span class="hl">בולדר </span><span class="hs">B</span>${j + 1}</th>`).join('')}<th class="tz">T / Z</th><th class="tt">ניקוד</th></tr></thead><tbody>${rows}</tbody></table></div></div>
     <p class="muted small">ניקוד: טופ 25, זון 10, מינוס 0.1 על כל ניסיון שנכשל לפני. ${intl ? '' : 'תיקו: השוואה לסבב הקודם (אם היה), אחר כך פחות ניסיונות לטופים, אחר כך פחות ניסיונות לזונים. '}${intl ? `הדירוג לפי World Climbing (של הסבב הזה בלבד). ${r.adv ? `עולים לסבב הבא: ${r.adv}${r.group ? ' מכל קבוצה' : ''}; תיקו על המקום האחרון — לפי World Climbing.` : 'סבב אחרון — אין סבב המשך.'}` : res.final ? 'סבב אחרון בתחרות — אין סבב המשך.' : `עולים: ${q} (לפי אמות המידה של ההתאחדות); תיקו על המקום האחרון עולה.`}</p>
   </div>`;
@@ -631,29 +634,33 @@ function renderResults(r, part = null, isrKey = r.id) {
 function renderLead(r, part, isrKey) {
   if (part === 'cards') return '';
   const res = resultsOf(r.id), fem = resFem, nIsr = res.rows.filter(isIsr).length, onlyIsr = !!(nIsr && resIsr[isrKey]);
-  const chips = !part && nIsr ? `<div class="seg res-cats" role="group" aria-label="סינון"><button type="button" data-resisr="0" aria-pressed="${!onlyIsr}">כולם</button><button type="button" data-resisr="1" aria-pressed="${onlyIsr}">🇮🇱 ${fem ? 'רק ישראליות' : 'רק ישראלים'}</button></div>` : '';
-  const last = /-f$/.test(r.id);
-  return `<div class="res lead-res">${chips}
+  const chips = !part && nIsr ? isrSeg(onlyIsr, fem) : '';
+  const last = /-f$/.test(r.id), mineBy = intlMineByBib(res.rows, DATA.intlMine), bibOf = Object.fromEntries(res.rows.filter(isIsr).map(x => [x.name, x.bib]));
+  const nameHtml = n => intlName(n) + (mineBy[bibOf[n]] ? ` <span class="tag">${esc(mineBy[bibOf[n]].short)}</span>` : ''); // 3.18.0: my athletes tagged
+  const mine = Object.keys(mineBy).length ? new Set(Object.keys(mineBy).map(Number)) : null;
+  return `<div class="res lead-res">
     <div class="res-head"><span class="muted small">מקור: ${esc(res.source)}</span></div>
     ${nIsr ? '' : `<p class="muted">${fem ? 'אין ישראליות בסבב הזה.' : 'אין ישראלים בסבב הזה.'}</p>`}
-    <div class="card"><div class="tbl-head"><b>${onlyIsr ? (fem ? 'הישראליות' : 'הישראלים') : fem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">שורה מסומנת = ${fem ? 'ישראליות' : 'ישראלים'}</span></div>
-      <div class="tbl-wrap">${leadTableHtml(rankedOf(r.id), { nR: r.boulders, adv: r.adv || 0, onlyIsr, fem, nameHtml: intlName })}</div></div>
+    ${chips}
+    <div class="card"><div class="tbl-head"><b>${onlyIsr ? (fem ? 'הישראליות' : 'הישראלים') : fem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">${mine ? `רקע = ${fem ? 'ישראליות' : 'ישראלים'} · פס בצד = שלי` : `שורה מסומנת = ${fem ? 'ישראליות' : 'ישראלים'}`}</span></div>
+      <div class="tbl-wrap">${leadTableHtml(rankedOf(r.id), { nR: r.boulders, adv: r.adv || 0, onlyIsr, fem, nameHtml, mine })}</div></div>
     <p class="muted small">גובה = מספר האחיזה האחרונה שהוחזקה; <bdi dir="ltr">+</bdi> = תנועה ממנה הלאה; TOP = עד סוף המסלול. ${r.boulders > 1 ? 'במוקדמות: ניקוד משולב של המסלולים (נמוך יותר = טוב יותר), ובסוגריים המקום בכל מסלול. ' : ''}הדירוג לפי World Climbing. ${r.adv ? `עולים לסבב הבא: ${r.adv}.` : last ? 'סבב אחרון — אין סבב המשך.' : ''}</p>
   </div>`;
 }
 // 3.16.0: lead rounds count routes, boulder rounds boulders
 const unitsOf = r => (r.lead ? (r.boulders === 1 ? 'מסלול אחד' : `${r.boulders} מסלולים`) : `${r.boulders} בולדרים`);
 
-// 3.12.0 combined A + B (Roei): the Israelis' cards of both groups on top (coach), then each group's own table — side by
+// 3.12.0 combined A + B (Roei): my athletes' cards of both groups on top (3.18.0) (coach), then each group's own table — side by
 // side on wide screens (A on the right), stacked on narrow ones. Rankings are never merged.
 function renderCombo(r) {
-  const gs = r.combo.map(round), anyIsr = gs.some(g => resultsOf(g.id)?.rows.some(isIsr)), only = !!resIsr[r.id];
-  const chips = anyIsr ? `<div class="seg res-cats" role="group" aria-label="סינון"><button type="button" data-resisr="0" aria-pressed="${!only}">כולם</button><button type="button" data-resisr="1" aria-pressed="${only}">🇮🇱 רק ישראלים</button></div>` : '';
+  const gs = r.combo.map(round);
   const cards = VIEWER ? '' : gs.map(g => (resultsOf(g.id) ? renderResults(g, 'cards', r.id) : '')).join('');
   const groups = gs.map(g => `<section class="combo-g"><h3 class="combo-h">קבוצה ${esc(g.group)}</h3>${resultsOf(g.id) ? renderResults(g, 'group', r.id)
     : `<p class="muted intl-wait">${IFSC[g.id]?.err ? 'אין חיבור כרגע לתוצאות של World Climbing — מנסה שוב…' : 'טוען תוצאות מ-World Climbing…'}</p>`}</section>`).join('');
-  return `<div class="res combo-res">${chips}${cards ? `<div class="focus">${cards}</div>` : ''}<div class="combo-grid">${groups}</div></div>`;
+  return `<div class="res combo-res">${cards ? `<div class="focus">${cards}</div>` : ''}<div class="combo-grid">${groups}</div></div>`;
 }
+// "כולם / רק ישראלים" (3.18.0: one place, right above the results table)
+const isrSeg = (only, fem) => `<div class="seg res-cats res-isr" role="group" aria-label="סינון"><button type="button" data-resisr="0" aria-pressed="${!only}">כולם</button><button type="button" data-resisr="1" aria-pressed="${only}">🇮🇱 ${fem ? 'רק ישראליות' : 'רק ישראלים'}</button></div>`;
 
 function appealText(a) {
   const r = round(a.round);
@@ -834,11 +841,8 @@ function renderFinal() {
 
 // 3.6.1 (Roei): no רשימה/מפורט switch — home = the list; on a competition day it opens straight on that
 // competition's detail ("‹ אירועים" goes to the list until the home button is tapped again)
-let homeListPicked = false;
-function compDayIdx() { return homeEvents().findIndex(ev => { const d = evToday(ev.event); return ev.dates[0] <= d && d <= ev.dates.at(-1); }); }
 function renderHome() {
   if (homeFinal) return renderFinal();
-  if (homeOpenEvent == null && !homeListPicked) { const i = compDayIdx(); if (i >= 0) return renderHomeDetail('', true, i); }
   if (homeOpenEvent == null) return renderHomeList('');
   renderHomeDetail('', true);
 }
@@ -850,11 +854,14 @@ function evRowHtml(ev, i, evs, t) {
   const ph = evPhase(ev, t), badge = evBadge(ev, evs), code = evCode(ev.event);
   const meta = [ev.event.place && esc(ev.event.place) + tbdMark(ev.event.placeTbd), (code ? `<span class="ev-code">${code}</span>` : '') + rangeLabel(ev.dates) + tbdMark(ev.event.dateTbd), ev.rounds.length ? `${ev.rounds.length} ראונדים` : 'הראונדים יתווספו בהמשך'].filter(Boolean).join(' · ');
   const people = new Set(ev.rounds.flatMap(r => (r.ifsc ? (ifscRes(r.id)?.rows || []).filter(isIsr).map(x => x.name) : mineOf(r.id).map(m => r.slots[m.k].name))));
+  // 3.18.0 (Roei): international → also how many of them are mine
+  const myIntl = ev.event.intl ? new Set(ev.rounds.flatMap(r => (r.ifsc ? Object.values(intlMineByBib(ifscRes(r.id)?.rows, DATA.intlMine)).map(m => m.short) : []))).size : 0;
   const ovl = ev.rounds.reduce((n, r) => n + (mineOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
   const fin = finalsReady(ev);
-  return `${fin ? `<div class="ev-item card ph-${ph}">` : ''}<button type="button" class="ev-row${fin ? '' : ' card'} ph-${ph}" data-ev="${i}">
+  const tone = `ev-t-${evTone(ev.event)}`;
+  return `${fin ? `<div class="ev-item card ${tone} ph-${ph}">` : ''}<button type="button" class="ev-row${fin ? '' : ' card'} ${tone} ph-${ph}" data-ev="${i}">
       <span class="ev-main"><b>${esc(evName(ev.event))}</b><span class="muted small">${meta}</span></span>
-      <span class="ev-side">${badge}<span class="small">${!ev.rounds.length || !people.size ? '' : `${people.size} ${ev.event.intl ? 'ישראלים' : VIEWER ? 'מהפלגיה' : 'שלי'}`}${ovl ? `${people.size ? ' · ' : ''}<span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>${fin ? `<button type="button" class="fin-btn" data-final="${i}:${finalsOf(ev)[0].key}:list">${CUP}תוצאות סופיות<span class="go" aria-hidden="true">‹</span></button></div>` : ''}`;
+      <span class="ev-side">${badge}<span class="small">${!ev.rounds.length || !people.size ? '' : `${people.size} ${ev.event.intl ? 'ישראלים' + (myIntl ? ` · ${myIntl} ${VIEWER ? 'מהפלגיה' : 'שלי'}` : '') : VIEWER ? 'מהפלגיה' : 'שלי'}`}${ovl ? `${people.size ? ' · ' : ''}<span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>${fin ? `<button type="button" class="fin-btn" data-final="${i}:${finalsOf(ev)[0].key}:list">${CUP}תוצאות סופיות<span class="go" aria-hidden="true">‹</span></button></div>` : ''}`;
 }
 const seasonOf = ev => ev.event.season || 'nat-2026-27';
 // 3.14.0 (Roei): home list in two levels — seasons ("עכשיו" strip + a card per season), then one season's competitions
@@ -876,7 +883,8 @@ function renderHomeList(seg) {
   const all = evs.map((ev, i) => ({ ev, i })).filter(x => seasonOf(x.ev) === homeSeason);
   const intl = homeSeason.startsWith('intl');
   const opts = intl ? filterOptions(all.map(x => x.ev.event)) : null, ef = intl ? effectiveFilter(evFilter, opts) : null;
-  const row = (k, labels) => (opts[k].length < 2 ? '' : `<div class="seg ev-filter" role="group" aria-label="${{ disc: 'ענף', type: 'סוג תחרות', age: 'גיל' }[k]}">${opts[k].map(v =>
+  // 3.18.0 (Roei): a label per row + light "choice" buttons (were three heavy navy segmented bars)
+  const row = (k, labels) => (opts[k].length < 2 ? '' : `<div class="ev-filter" role="group" aria-label="${{ disc: 'ענף', type: 'סוג תחרות', age: 'גיל' }[k]}"><span class="ev-filter-k">${{ disc: 'ענף', type: 'סוג', age: 'גיל' }[k]}</span>${opts[k].map(v =>
     `<button type="button" data-filt="${k}:${v}" aria-pressed="${!ef[k].length || ef[k].includes(v)}">${esc(labels[v])}</button>`).join('')}</div>`);
   const shown = intl ? filterEvents(all.map(x => ({ ...x, event: x.ev.event })), ef) : all;
   const body = shown.length ? shown.map(x => evRowHtml(x.ev, x.i, evs, t)).join('')
@@ -890,9 +898,9 @@ const hm = s => s.replace(/^0/, '');
 const isoRow = r => (r.iso ? `<div class="iso"><span class="iso-k">בידוד</span><span class="iso-t"><b>${hm(r.iso.open)}</b> נפתח</span><span class="iso-ar">←</span><span class="iso-t close"><b>${hm(r.iso.close)}</b> נסגר</span>${
   r.iso.preview ? `<span class="iso-sep"></span><span class="iso-k">צפייה במסלולים</span><span class="iso-t"><b>${esc(r.iso.preview)}</b></span>` : ''}</div>` : '');
 
-function renderHomeDetail(seg, fromList, auto = null) {
+function renderHomeDetail(seg, fromList) {
   const t = now();
-  const evs = homeEvents(); const ei = homeOpenEvent ?? auto ?? focusEventIdx(); const cur = evs[Math.min(ei, evs.length - 1)]; const { event: ev, rounds } = cur;
+  const evs = homeEvents(); const ei = homeOpenEvent ?? focusEventIdx(); const cur = evs[Math.min(ei, evs.length - 1)]; const { event: ev, rounds } = cur;
   const days = [...new Set(rounds.map(r => r.date))].sort();
   const chips = !fromList && evs.length > 1 ? `<div class="ev-chips" role="group" aria-label="תחרות">${evs.map((e, i) => {
     const d0 = new Date(e.dates[0] + 'T12:00:00');
@@ -923,7 +931,8 @@ function intlCard(r) {
   const ph = ifscPhase(r), res = resultsOf(r.id), rk = res ? rankedOf(r.id) : null;
   const st = roundStart(r), ilDay = dayIn(st), when = r.noTime ? 'תוצאות סופיות' : `${ilDay !== r.date ? dayLabel(ilDay) + ' ' : ''}${fmtHM(st)}`; // Israel time (3.13.0 saved past rounds: no time)
   const badge = { live: '<span class="hb live">חי עכשיו</span>', before: `<span class="hb soon">בקרוב · ${fmtHM(st)}</span>`, after: '<span class="hb done">הסתיים</span>' }[ph];
-  const isr = (rk || []).filter(isIsr).map(x => `<li><b>🇮🇱 ${esc(x.name)}</b> <span>${x.rank ? `מקום ${x.rank}` : res.live ? gw(r.id, 'עוד לא טיפס', 'עוד לא טיפסה') : gw(r.id, 'לא התחיל', 'לא התחילה')}</span></li>`).join('');
+  const my = intlMineByBib(res?.rows, DATA.intlMine), tag = x => (my[x.bib] ? ` <span class="tag">${esc(my[x.bib].short)}</span>` : '');
+  const isr = (rk || []).filter(isIsr).map(x => `<li><b>🇮🇱 ${esc(x.name)}${tag(x)}</b> <span>${x.rank ? `מקום ${x.rank}` : res.live ? gw(r.id, 'עוד לא טיפס', 'עוד לא טיפסה') : gw(r.id, 'לא התחיל', 'לא התחילה')}</span></li>`).join('');
   return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(r.title)}</h3>${res?.started ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
       <p class="muted small">${when} · ${unitsOf(r)}${res?.rows.length ? ` · ${res.rows.length} ${gw(r.id, 'מתחרים', 'מתחרות')}` : ''}</p>
@@ -935,8 +944,8 @@ function intlCard(r) {
 function comboCard(r) {
   const ph = ifscPhase(r), gs = r.combo.map(round), st = roundStart(r), ilDay = dayIn(st);
   const badge = { live: '<span class="hb live">חי עכשיו</span>', before: `<span class="hb soon">בקרוב · ${fmtHM(st)}</span>`, after: '<span class="hb done">הסתיים</span>' }[ph];
-  const isr = gs.flatMap(g => { const res = resultsOf(g.id); return (res ? rankedOf(g.id) : []).filter(isIsr).map(x =>
-    `<li><b>🇮🇱 ${esc(x.name)}</b> <span>${x.rank ? `מקום ${x.rank}` : res.live ? gw(g.id, 'עוד לא טיפס', 'עוד לא טיפסה') : gw(g.id, 'לא התחיל', 'לא התחילה')} · ${esc(g.group)}</span></li>`); }).join('');
+  const isr = gs.flatMap(g => { const res = resultsOf(g.id), my = intlMineByBib(res?.rows, DATA.intlMine); return (res ? rankedOf(g.id) : []).filter(isIsr).map(x =>
+    `<li><b>🇮🇱 ${esc(x.name)}${my[x.bib] ? ` <span class="tag">${esc(my[x.bib].short)}</span>` : ''}</b> <span>${x.rank ? `מקום ${x.rank}` : res.live ? gw(g.id, 'עוד לא טיפס', 'עוד לא טיפסה') : gw(g.id, 'לא התחיל', 'לא התחילה')} · ${esc(g.group)}</span></li>`); }).join('');
   const n = gs.reduce((s, g) => s + (resultsOf(g.id)?.rows.length || 0), 0), started = gs.some(g => resultsOf(g.id)?.started);
   return `<button type="button" class="h-card card combo-card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(r.title)}</h3>${started ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
@@ -1937,8 +1946,8 @@ function start() {
   document.querySelectorAll('.app-ver').forEach(el => { el.textContent = APP_VERSION; });
   current = params.get('round') && round(params.get('round')) ? params.get('round') : pickDefaultRound();
   if (SIM_AT != null) $('#sim-bar').hidden = false;
-  const liveNow = DATA.rounds.some(r => r.slots.length && stateAt(r, now(), off(r.id)).phase === 'live');
-  screen = params.get('round') || liveNow ? 'round' : 'home';
+  // 3.18.0 (Roei): always opens on home (seasons + "עכשיו"), also during a live round; a link to a round opens it
+  screen = params.get('round') ? 'round' : 'home';
   $('#home').hidden = screen !== 'home'; $('#round-screen').hidden = screen !== 'round';
   $('#home-btn').setAttribute('aria-pressed', String(screen === 'home'));
   if (screen === 'round') openRoundView(); // a link to a finished round with results opens on them
@@ -1947,9 +1956,9 @@ function start() {
     const d = b.dataset;
     if (d.page) { setPage(d.page); return; }
     if (d.final) { const [ev, key, from] = d.final.split(':'); homeFinal = { ev: Number(ev), key, from }; render(); window.scrollTo(0, 0); return; }
-    if (b.id === 'final-back') { if (homeFinal.from === 'list') { homeOpenEvent = null; homeListPicked = true; } else homeOpenEvent = homeFinal.ev; homeFinal = null; render(); return; }
-    if (d.season) { homeSeason = d.season; homeListPicked = true; render(); window.scrollTo(0, 0); return; }
-    if (b.id === 'season-back') { homeSeason = null; homeListPicked = true; render(); window.scrollTo(0, 0); return; }
+    if (b.id === 'final-back') { if (homeFinal.from === 'list') homeOpenEvent = null; else homeOpenEvent = homeFinal.ev; homeFinal = null; render(); return; }
+    if (d.season) { homeSeason = d.season; render(); window.scrollTo(0, 0); return; }
+    if (b.id === 'season-back') { homeSeason = null; render(); window.scrollTo(0, 0); return; }
     if (d.filt) { // 3.14.0 chip toggle: a row with nothing selected = all on; selecting every option = back to all ([])
       const [k, v] = d.filt.split(':'), opts = filterOptions(homeEvents().filter(x => seasonOf(x) === homeSeason).map(x => x.event))[k];
       const eff = effectiveFilter(evFilter, { [k]: opts })[k], cur = eff.length ? eff : opts, next = cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v];
@@ -1957,11 +1966,9 @@ function start() {
     }
     if (b.id === 'filt-reset') { evFilter = { disc: [], type: [], age: [] }; saveFilter(); render(); return; }
     if (d.ev != null) { homeFrom = homeSeason; homeOpenEvent = Number(d.ev); render(); window.scrollTo(0, 0); return; }
-    if (b.id === 'home-back') { // auto-opened on a competition day (homeOpenEvent null) → back to that competition's season list
-      const auto = homeOpenEvent == null ? homeEvents()[compDayIdx()] : null;
-      homeSeason = auto ? seasonOf(auto) : homeFrom; homeOpenEvent = null; homeListPicked = true; render(); return; }
+    if (b.id === 'home-back') { homeSeason = homeFrom; homeOpenEvent = null; render(); return; }
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
-    else if (b.id === 'home-btn') { homeOpenEvent = null; homeListPicked = false; homeFinal = null; homeSeason = null; homeFrom = null; showScreen('home'); }
+    else if (b.id === 'home-btn') { homeOpenEvent = null; homeFinal = null; homeSeason = null; homeFrom = null; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
     else if (d.photo) openPhoto(d.phRound || ($('#photos-dlg').open ? gridRound : current), Number(d.photo));
     else if (b.id === 'photos-btn') openPhotos();

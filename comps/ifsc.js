@@ -4,6 +4,13 @@
 // work unchanged. Israelis (country ISR) play the part of "my athletes".
 export const ISR = 'ISR';
 export const isIsr = r => r?.country === ISR;
+// 3.18.0 (Roei): my athletes among them, by the World Climbing name the Palgi app confirmed (DATA.intlMine [{ wcName, short }]);
+// case, accents and spaces ignored. → { bib: { short, isr: true } }
+export const wcKey = s => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+export function intlMineByBib(rows, list) {
+  const by = new Map((list || []).map(a => [wcKey(a.wcName), a]));
+  return Object.fromEntries((rows || []).filter(isIsr).flatMap(x => (by.has(wcKey(x.name)) ? [[x.bib, { short: by.get(wcKey(x.name)).short, isr: true }]] : [])));
+}
 export const IFSC_POLL_MS = 15000;
 
 export function ifscResults(d) {
@@ -34,18 +41,20 @@ const isTop = s => /^top$/i.test(String(s || ''));
 const fmtTime = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 // the lead table (World Climbing format): # · climber (country) · per route height + route place (quals) · score / height
 // (· time when given). ranked = leadRanked(); adv = how many go on (qualifying line before the first one out).
-export function leadTableHtml(ranked, { nR = 1, adv = 0, onlyIsr = false, fem = false, nameHtml = esc } = {}) {
+// 3.18.0: mine = Set of my athletes' bibs → they get the marked row, other Israelis a plain tint ('isr'); without it every Israeli is marked
+export function leadTableHtml(ranked, { nR = 1, adv = 0, onlyIsr = false, fem = false, nameHtml = esc, mine = null } = {}) {
   const multi = nR > 1, hasTime = !multi && ranked.some(x => x.time != null);
   const span = 3 + (multi ? nR : 0) + (hasTime ? 1 : 0);
   const sc = (s, cls) => `<td class="${cls}${isTop(s) ? ' top' : ''}">${s == null ? '–' : `<bdi dir="ltr">${esc(s)}</bdi>`}`;
   let cut = false;
+  const rowCls = x => (mine ? (mine.has(x.bib) ? ' class="mine"' : isIsr(x) ? ' class="isr"' : '') : isIsr(x) ? ' class="mine"' : '');
   const body = (onlyIsr ? ranked.filter(isIsr) : ranked).map(x => {
     let pre = '';
     if (adv && !cut && x.rank != null && x.rank > adv) { cut = true; pre = `<tr class="cut"><td colspan="${span}">קו העלייה לסבב הבא · ${adv} עולים</td></tr>`; }
     const name = `<td class="n"><b>${isIsr(x) ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : ''}${nameHtml(x.name)}</b><small>${esc(x.club)}</small></td>`;
-    if (x.rank == null) return pre + `<tr${isIsr(x) ? ' class="mine"' : ''}><td class="rk">–</td>${name}<td colspan="${span - 2}" class="muted small">${fem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td></tr>`;
+    if (x.rank == null) return pre + `<tr${rowCls(x)}><td class="rk">–</td>${name}<td colspan="${span - 2}" class="muted small">${fem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td></tr>`;
     const routes = multi ? Array.from({ length: nR }, (_, j) => { const r = x.rs?.[j]; return sc(r?.[0], 'lh') + (r?.[1] != null ? `<small>(${r[1]})</small>` : '') + '</td>'; }).join('') : '';
-    return pre + `<tr${isIsr(x) ? ' class="mine"' : ''}><td class="rk">${x.rank}</td>${name}${routes}${sc(x.score, 'tt')}</td>${hasTime ? `<td class="tm">${x.time != null ? fmtTime(x.time) : ''}</td>` : ''}</tr>`;
+    return pre + `<tr${rowCls(x)}><td class="rk">${x.rank}</td>${name}${routes}${sc(x.score, 'tt')}</td>${hasTime ? `<td class="tm">${x.time != null ? fmtTime(x.time) : ''}</td>` : ''}</tr>`;
   }).join('');
   return `<table class="res-tbl lead-tbl"><thead><tr><th class="rk">#</th><th class="n">${fem ? 'מטפסת' : 'מטפס'}</th>${multi ? Array.from({ length: nR }, (_, j) => `<th class="lh">מסלול ${j + 1}</th>`).join('') : ''}<th class="tt">${multi ? 'ניקוד' : 'גובה'}</th>${hasTime ? '<th class="tm">זמן</th>' : ''}</tr></thead><tbody>${body}</tbody></table>`;
 }

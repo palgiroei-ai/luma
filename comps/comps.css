@@ -35,6 +35,8 @@
   --st-elec: #6730D0; --st-elec-bg: #EEE6FC;
   /* 3.10.0 final results: copper (Palgi accent), darker for white text */
   --fin: #8B5E3C; --fin-bg: #F6E6DA; --on-fin: #FFFFFF;
+  /* 3.18.0: event-type colours (the Palgi app's season table) */
+  --ev-wc: #1F5FA8; --ev-ec: #A04E16; --ev-eyc: #2F7A32; --ev-ch: #7E6407; --ev-il: #A93B29;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(46, 26, 71, .05), 0 8px 24px rgba(46, 26, 71, .06);
   --font: 'HeeboPalgi', system-ui, sans-serif;
@@ -332,7 +334,8 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   --live: #FF8A80;
   --appeal: #F0A91A;
 }
-:root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) { --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); color-scheme: dark; }
+:root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) { --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); color-scheme: dark;
+  --ev-wc: #8DB8F2; --ev-ec: #F2A672; --ev-eyc: #8FD18A; --ev-ch: #E8C85C; --ev-il: #F2917F; }
 :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .btn-primary, :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .cbtn-main, :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .tabs button[aria-pressed="true"],
 :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .home-tab[aria-pressed="true"], :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 :root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .lane.mine { color: #fff; }
@@ -451,6 +454,11 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .h-back { color: var(--copper-text); }
 .ev-list { display: grid; gap: 10px; }
 .ev-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; text-align: start; font: inherit; color: inherit; cursor: pointer; border-inline-start: 5px solid var(--border); }
+.ev-row.ev-t-wc, .ev-item.ev-t-wc { border-inline-start-color: var(--ev-wc); }
+.ev-row.ev-t-ec, .ev-item.ev-t-ec { border-inline-start-color: var(--ev-ec); }
+.ev-row.ev-t-eyc, .ev-item.ev-t-eyc { border-inline-start-color: var(--ev-eyc); }
+.ev-row.ev-t-ch, .ev-item.ev-t-ch { border-inline-start-color: var(--ev-ch); }
+.ev-row.ev-t-il, .ev-item.ev-t-il { border-inline-start-color: var(--ev-il); }
 .ev-row.ph-live { border-inline-start-color: var(--danger); }
 .ev-row.ph-after { opacity: .7; }
 .ev-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
@@ -858,6 +866,8 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .res-tbl tr.mine.added td { background: color-mix(in srgb, var(--added-bg) 60%, var(--card)); }
 .res-tbl tr.mine.added td:first-child { box-shadow: inset -4px 0 0 var(--added); }
 .res-tbl tr.mine.added .tag { background: var(--added); }
+.res-tbl tr.isr td { background: color-mix(in srgb, var(--copper-bg) 60%, var(--card)); } /* 3.18.0: an Israeli who is not mine — no side bar */
+.h-mine .tag { font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 6px; background: var(--copper); color: #fff; margin-inline-start: 4px; vertical-align: 1px; }
 .res-tbl tr.cut td { background: var(--line); color: var(--copper-text); font-weight: 700; font-size: 13px; padding: 4px; }
 .res-tbl td.rk { font-weight: 800; font-size: 17px; width: 44px; }
 .res-tbl td.n b { font-weight: 600; display: block; } .res-tbl td.n small { color: var(--muted); font-size: 12px; }
@@ -1073,6 +1083,7 @@ body:not(.viewer) .viewer-only { display: none !important; }
    screen, and the final table (R2 / R1 = which round decided the place) */
 .cup { width: 1.1em; height: 1.1em; flex: none; vertical-align: -0.15em; }
 .ev-item { display: grid; padding-bottom: 12px; border-inline-start: 5px solid var(--border); }
+.ev-item.ev-t-wc, .ev-item.ev-t-ec, .ev-item.ev-t-eyc, .ev-item.ev-t-ch, .ev-item.ev-t-il { border-inline-start-width: 5px; }
 .ev-item.ph-live { border-inline-start-color: var(--danger); }
 .ev-item .ev-row { background: transparent; border: 0; border-radius: var(--radius); }
 .fin-btn { all: unset; box-sizing: border-box; cursor: pointer; justify-self: start; margin-inline: 16px; display: inline-flex; align-items: center; gap: 7px;
@@ -1170,6 +1181,9 @@ body.combo-round #photos-btn, body.combo-round #tags-btn { display: none !import
 .season-card .ev-main b { font-size: 17px; }
 .season-card .chev { width: 8px; height: 8px; flex: none; margin-inline-start: auto; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(135deg); }
 .now-strip { display: grid; gap: 6px; margin-bottom: 14px; }
-.ev-filters { display: grid; gap: 8px; margin-bottom: 12px; }
-.ev-filter { flex-wrap: wrap; justify-self: start; max-width: 100%; }
+.ev-filters { display: grid; gap: 8px; margin-bottom: 14px; }
+.ev-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ev-filter-k { font-size: 12px; font-weight: 600; color: var(--muted); min-width: 2.6em; }
+.ev-filter button { font: inherit; font-size: 14px; font-weight: 500; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--muted); cursor: pointer; }
+.ev-filter button[aria-pressed="true"] { background: var(--copper-bg); border-color: var(--copper); color: var(--navy); font-weight: 600; }
 .ev-code { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .03em; padding: 0 6px; border-radius: 6px; border: 1.5px solid var(--border); margin-inline-end: 6px; unicode-bidi: isolate; } /* not direction:ltr — that flips margin-inline-end to the wrong side in RTL */

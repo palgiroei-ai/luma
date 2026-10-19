@@ -29,6 +29,12 @@ export const AGES = { senior: 'בוגרים', youth: 'נוער' };
 export const DISC = { B: 'בולדר', L: 'הובלה' };
 // 3.14.0 (Roei): catalog fields; an older payload without them → national = league, international = World Cup, seniors, boulder
 export const evMeta = e => ({ type: e?.type || (e?.intl ? 'wc' : 'league'), age: e?.age || 'senior', disc: e?.disc?.length ? e.disc : ['B'] });
+// 3.18.0 (Roei): a competition's colour = the Palgi app's season colours — World Cup blue, European Cup orange, European
+// Youth Cup green, championships (world / Europe / Israel) gold, league red
+export function evTone(e) {
+  const m = evMeta(e);
+  return m.type === 'ec' ? (m.age === 'youth' ? 'eyc' : 'ec') : ['wch', 'ech', 'ich'].includes(m.type) ? 'ch' : m.type === 'league' ? 'il' : 'wc';
+}
 const CODE = { wc: 'WC', ec: 'EC', wch: 'WCH', ech: 'ECH' };
 export function evCode(e) {
   const m = evMeta(e), c = CODE[m.type]; if (!c) return '';
