@@ -11,7 +11,7 @@ import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, isIsr, intlMineByBib, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS, lastName, appealsOf, appealNearLine, appealEvents } from './ifsc.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evCode, evTone, filterOptions, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.18.0';
+export const APP_VERSION = '3.18.1';
 
 const $ = s => document.querySelector(s);
 

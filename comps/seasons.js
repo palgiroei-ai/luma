@@ -1,15 +1,15 @@
-// 3.11.0 (Roei 2026-10-16): the events list is split into seasons. 3.12.3 (Roei): by time — international 2025-6 first,
+// 3.11.0 (Roei 2026-10-16): the events list is split into seasons. 3.12.3 (Roei): by time — international (intl-2025-26) first,
 // then the current national season. 3.15.0: the season list comes from the events present (app events can bring new
 // seasons): ids 'intl-YYYY-YY' / 'nat-YYYY-YY', ordered by when each season starts — intl-Y = calendar year Y+1 (the app's
-// rule), nat-Y = from 1 September Y. An event without `season` (payload from an older build) counts as national 2026-7.
+// rule), nat-Y = from 1 September Y. An event without `season` (payload from an older build) counts as national nat-2026-27.
 const NAT = 'nat-2026-27';
 const SEASON_RE = /^(intl|nat)-(\d{4})-(\d{2})$/;
 const sid = id => id || NAT;
 // 'intl-2025-26' → '2026-01-01', 'nat-2026-27' → '2026-09-01' (unknown ids sort last)
 const seasonStart = id => { const m = SEASON_RE.exec(sid(id)); return !m ? '9999' : m[1] === 'intl' ? `${Number(m[2]) + 1}-01-01` : `${m[2]}-09-01`; };
-// second year: one digit when its tens digit is the first year's ("2025-6"), else both digits ("2029-30")
-const yearTail = (y, yy) => (Math.floor((Number(y) % 100) / 10) === Math.floor(Number(yy) / 10) ? String(Number(yy) % 10) : yy);
-export const seasonLabel = id => { const m = SEASON_RE.exec(sid(id)); return m ? `${m[1] === 'intl' ? 'עונה בינלאומית' : 'עונה לאומית'} ${m[2]}-${yearTail(m[2], m[3])}` : ''; };
+// 3.18.1 (Roei): a season is named by ONE year — international = its calendar year ('intl-2025-26' → 2026), national = the
+// international season it leads into ('nat-2026-27', Sept 2026–Aug 2027 → 2027). Both = the id's first year + 1; ids unchanged.
+export const seasonLabel = id => { const m = SEASON_RE.exec(sid(id)); return m ? `${m[1] === 'intl' ? 'עונה בינלאומית' : 'עונה לאומית'} ${Number(m[2]) + 1}` : ''; };
 const seasonCmp = (a, b) => (seasonStart(a) < seasonStart(b) ? -1 : seasonStart(a) > seasonStart(b) ? 1 : sid(a) < sid(b) ? -1 : sid(a) > sid(b) ? 1 : 0);
 // events → [{ id, label }] of the seasons they use, in season order
 export function seasonsOf(events) {
