@@ -3,15 +3,17 @@ import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, delayOf
 import { store } from './store.js';
 import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
-import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats, isLastRound, finalStandings } from './results.js';
+import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats, isLastRound, finalStandings, tzText } from './results.js';
 import { setupInstall } from './install.js';
 import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, isIsr, intlMineByBib, ifscRanked, ifscPhaseOf, withCombos, IFSC_POLL_MS, lastName, appealsOf, appealNearLine, appealEvents } from './ifsc.js';
+import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openTarget } from './entry.js';
+import { myHistory, catParts } from './mine.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evCode, evTone, filterOptions, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.18.1';
+export const APP_VERSION = '3.19.0';
 
 const $ = s => document.querySelector(s);
 
@@ -62,12 +64,16 @@ async function unlock(code) {
 
 setupInstall(() => VIEWER || !$("#gate").hidden); // before boot: the gate link works before login; there the role is unknown → no alerts step
 
-async function boot() {
-  if (store.code) {
-    const d = await unlock(store.code);
-    if (d && d !== 'nodata') { DATA = d; return start(); }
-  }
+// stage A (2026-10-23): opened from the Palgi app (#entry=<pass>) → the app Worker answers with the code + role.
+// Anything wrong (expired / used / forged pass, no connection) → the gate with "פתחו שוב מהאפליקציה" — never a blank
+// screen, never the code stored from an earlier visit. A pass for an athlete / viewer must open the viewer file.
+function showGate(err, fromApp = false) {
   $('#gate').hidden = false;
+  if (err) { $('#gate-error').textContent = err; $('#gate-error').hidden = false; }
+  if (fromApp) document.querySelectorAll('#gate [data-install-open]').forEach(el => { el.hidden = true; }); // the app's origin: no portal icon
+}
+const NODATA = 'אין חיבור לנתונים כרגע. בדוק אינטרנט ונסה שוב.';
+async function boot() {
   $('#gate-form').addEventListener('submit', async e => {
     e.preventDefault();
     $('#gate-btn').disabled = true;
@@ -75,15 +81,35 @@ async function boot() {
     const d = await unlock(code);
     $('#gate-btn').disabled = false;
     if (!d || d === 'nodata') {
-      $('#gate-error').textContent = d === 'nodata' ? 'אין חיבור לנתונים כרגע. בדוק אינטרנט ונסה שוב.' : 'הקוד שגוי, נסה שוב.';
+      $('#gate-error').textContent = d === 'nodata' ? NODATA : 'הקוד שגוי, נסה שוב.';
       $('#gate-error').hidden = false; return;
     }
     DATA = d;
     store.code = code;
+    store.appEntry = null; // a typed code = the code path (no "שלי", no link back to the app)
     $('#gate').hidden = true;
     start();
   });
+  if (isEntry(location.hash)) {
+    // a new pass replaces whoever entered from the app before: drop that identity first, so a refused pass + a later plain
+    // reload lands on the gate, never on the previous athlete / coach. A typed code (iPad, parents) never has appEntry.
+    if (store.appEntry) store.logout();
+    const e = await takeEntry();
+    const d = e ? await unlock(e.code) : null;
+    if (d && d !== 'nodata' && (e.role === 'coach' || d.role === 'viewer')) {
+      store.code = e.code; store.appEntry = { role: e.role, athlete: e.athlete };
+      DATA = d; return start();
+    }
+    return showGate(d === 'nodata' ? NODATA : ENTRY_FAIL, true);
+  }
+  if (store.code) {
+    const d = await unlock(store.code);
+    if (d && d !== 'nodata') { DATA = d; return start(); }
+  }
+  showGate(null, !!store.appEntry);
 }
+// the app opened the portal again while this page is open (same document, only the hash changed) → take the new pass
+addEventListener('hashchange', () => { if (isEntry(location.hash)) location.reload(); });
 
 // ---- helpers over data ----
 const round = id => DATA.rounds.find(r => r.id === id);
@@ -91,6 +117,8 @@ const round = id => DATA.rounds.find(r => r.id === id);
 const EVENTS = () => DATA.events || [{ id: 'bl1', ...DATA.event }];
 // competition name as shown: championships get a trophy before the name (Roei 2026-10-13)
 const evName = e => (e?.champ ? '🏆 ' : '') + (e?.title || '');
+// a title of ' · ' parts ("גביע עולם · בולדר · Arco, ITA"): each part isolated, so a Latin place never splits in RTL
+const bidiParts = s => String(s || '').split(' · ').map(x => `<bdi${/[A-Za-z]/.test(x) ? ' class="lat"' : ''}>${esc(x)}</bdi>`).join(' · '); // a Latin part (a place) stays on one line
 const evOf = r => EVENTS().find(e => e.id === (r?.event || 'bl1')) || EVENTS()[0];
 // viewer: only rounds still ahead (or running now)
 const todayStr = () => { const d = zoneParts(now()); return `${d.y}-${pad(d.mo)}-${pad(d.d)}`; };
@@ -493,7 +521,7 @@ function resCard(ranked, row, who, final, full, q0 = null) {
   const what = o => row.rank === 1 ? `יתרון ${sgn(o.gain)}` : `${o.rank < row.rank ? 'מקום ' + o.rank : 'נשאר ' + row.rank}<small class="d">${sgn(o.gain)}</small>${o.advances && !final ? '<span class="up">עולה</span>' : ''}`;
   const bars = row.bs.map((b, j) => { const k = kind(b), p = pts(b);
     return `<div class="bar${row.ap?.includes(j) ? ' appeal' : ''}" title="בולדר ${j + 1}: ${p.toFixed(1)}"><div class="fill-wrap"><div class="fill ${k}" style="height:${p / 25 * 100}%"></div>${a.sole[j] ? `<span class="sole" title="${SOLE[a.sole[j]]}" aria-label="${SOLE[a.sole[j]]}">${STAR}</span>` : ''}</div><span class="lb">B${j + 1} (T${b?.[0] || 0}Z${b?.[1] || 0})</span></div>`; }).join('');
-  return `<article class="card fc${who.added ? ' added' : ''}">
+  return `<article class="card fc${who.added ? ' added' : ''}${who.picked ? ' picked' : ''}">
     <div class="top"><div><div class="nm">${esc(row.name)}</div><div class="club">${esc(row.club)} · מס׳ ${row.bib}</div></div><div class="rk">${row.rank}<small>/${a.n}</small>${inCat ? `<span class="rk-all">כללי ${a.overallRank}</span>` : ''}</div></div>
     <div class="sc"><b>${row.score.toFixed(1)}</b> נק׳ · ${a.tops} טופים · ${a.zones} זונים</div>
     <div class="bars" style="grid-template-columns:repeat(${row.bs.length},1fr)">${bars}</div>
@@ -524,7 +552,7 @@ function resCard(ranked, row, who, final, full, q0 = null) {
 // live, round still running (3.4.0): place so far, points, the cut line now; boulders not climbed yet = dashed
 function liveCard(ranked, row, who, q, final, full, wallTag = '', fresh = new Set()) {
   const head = rk => `<div class="top"><div><div class="nm">${esc(row.name)}${wallTag}</div><div class="club">${row.club ? esc(row.club) + ' · ' : ''}מס׳ ${row.bib}</div></div><div class="rk">${rk}</div></div>`;
-  if (row.rank == null) return `<article class="card fc live${who.added ? ' added' : ''}">${head('–')}<p class="muted small">עדיין בלי תוצאה — יופיע כאן אחרי הבולדר הראשון.</p></article>`;
+  if (row.rank == null) return `<article class="card fc live${who.added ? ' added' : ''}${who.picked ? ' picked' : ''}">${head('–')}<p class="muted small">עדיין בלי תוצאה — יופיע כאן אחרי הבולדר הראשון.</p></article>`;
   const ok = ranked.filter(x => x.rank != null), all = full.filter(x => x.rank != null), i = ok.indexOf(row);
   const overall = all.find(x => x.bib === row.bib)?.rank ?? row.rank, nDone = row.bs.filter(Boolean).length;
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
@@ -537,7 +565,7 @@ function liveCard(ranked, row, who, q, final, full, wallTag = '', fresh = new Se
     cut = overall <= q ? kv('קו העלייה כרגע', `<span class="yes">בפנים</span>${firstOut ? `<small class="d">יתרון ${r1(row.score - firstOut.score).toFixed(1)} על מקום ${firstOut.rank}</small>` : ''}`)
       : kv('קו העלייה כרגע', `חסרות ${r1(lastIn.score - row.score + 0.1).toFixed(1)} נק׳<small class="d">מקום ${q} · ${lastIn.score.toFixed(1)}</small>`);
   }
-  return `<article class="card fc live${who.added ? ' added' : ''}">${head(`${row.rank}<small>/${ok.length}</small><em>זמני</em>${ranked !== full ? `<span class="rk-all">כללי ${overall}</span>` : ''}`)}
+  return `<article class="card fc live${who.added ? ' added' : ''}${who.picked ? ' picked' : ''}">${head(`${row.rank}<small>/${ok.length}</small><em>זמני</em>${ranked !== full ? `<span class="rk-all">כללי ${overall}</span>` : ''}`)}
     <div class="sc"><b>${row.score.toFixed(1)}</b> נק׳ · ${row.bs.filter(b => b && b[0]).length} טופים · ${row.bs.filter(b => b && (b[0] || b[1])).length} זונים · ${nDone}/${row.bs.length} בולדרים</div>
     <div class="bars" style="grid-template-columns:repeat(${row.bs.length},1fr)">${bars}</div>
     <div class="ins"><div class="grp"><span class="gh">מיקום זמני · מתוך ${ok.length} שהתחילו</span>
@@ -591,6 +619,8 @@ function renderResults(r, part = null, isrKey = r.id) {
   const fresh = freshOf(r.id);
   const q = intl ? r.adv || 0 : res.live ? quota(res.rows.length) : analyze(full, full[0]).quota; // 3.12.1: intl = World Climbing's number
   const mine = (running ? ranked : ok).filter(x => whoByBib[x.bib]);
+  // stage A: opened from "שלי" → that athlete's card first and marked (only the national cards viewers already see)
+  if (pick?.round === r.id && pick.bibs.size) { for (const x of mine) if (pick.bibs.has(String(x.bib))) whoByBib[x.bib] = { ...whoByBib[x.bib], picked: true }; mine.sort((a, b) => !!whoByBib[b.bib].picked - !!whoByBib[a.bib].picked); }
   if (part === 'cards') return analysis ? mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full, intl && q > 0 ? q : null)).join('') : '';
   const cards = !analysis || part ? '' : mine.length ? `<div class="focus">${mine.map(x => running ? liveCard(ranked, x, whoByBib[x.bib], q, res.final, full, wallTag(x.bib), fresh) : resCard(ranked, x, whoByBib[x.bib], res.final, full, intl && q > 0 ? q : null)).join('')}</div>`
     : `<p class="muted">${intl && !nIsr ? (res.rows.length ? gw(r.id, 'אין ישראלים בסבב הזה.', 'אין ישראליות בסבב הזה.') : '') : VIEWER ? 'אין ספורטאים מהפלגיה בסבב הזה.' : 'אין ספורטאים שלי בסבב הזה.'}</p>`;
@@ -613,7 +643,7 @@ function renderResults(r, part = null, isrKey = r.id) {
       // 3.9.0: phone hides 2 columns → a cell spanning them would add a phantom column; one row per layout
       pre = `<tr class="cut cut-wide"><td colspan="${nB + 5}">${ct}</td></tr><tr class="cut cut-narrow"><td colspan="${nB + 3}">${ct}</td></tr>`; }
     return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${isr ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : ''}${intl ? intlName(x.name) : esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b>${wallTag(x.bib)}<small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
-      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : resFem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td><td class="tz"></td><td class="tt">–</td>` : x.bs.map((b, j) => `<td>${cell(b, j, x.bib)}</td>`).join('') + `<td class="tz">${x.bs.filter(b => b && b[0]).length}T ${x.bs.filter(b => b && (b[0] || b[1])).length}Z</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
+      ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : resFem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td><td class="tz"></td><td class="tt">–</td>` : x.bs.map((b, j) => `<td>${cell(b, j, x.bib)}</td>`).join('') + `<td class="tz">${tzText(x.bs)}</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
   return `<div class="res${res.live ? ' is-live' : ''}">
     ${part ? '' : chips}
@@ -842,9 +872,54 @@ function renderFinal() {
 // 3.6.1 (Roei): no רשימה/מפורט switch — home = the list; on a competition day it opens straight on that
 // competition's detail ("‹ אירועים" goes to the list until the home button is tapped again)
 function renderHome() {
+  const seg = ME ? `<div class="seg h-seg me-seg" role="group" aria-label="תצוגה"><button type="button" data-home-tab="all" aria-pressed="${homeTab === 'all'}">כללי</button><button type="button" data-home-tab="me" aria-pressed="${homeTab === 'me'}">שלי</button></div>` : '';
+  if (ME && homeTab === 'me') return renderMe(seg);
   if (homeFinal) return renderFinal();
-  if (homeOpenEvent == null) return renderHomeList('');
+  if (homeOpenEvent == null) return renderHomeList(seg);
   renderHomeDetail('', true);
+}
+
+// ---- stage A (2026-10-23): "כללי | שלי" for an athlete who opened the portal from the Palgi app ----
+// "כללי" = exactly the viewer portal. "שלי" = this athlete's own history (web/mine.js, by the app id only — never anyone
+// else's rows): current-season tiles, then seasons, newest first; a row opens that round's results with the athlete's card.
+let ME = null; // { id, name, short } — set in start() for an athlete entry with an app id; coach / viewer / code: null
+let homeTab = 'all';
+let meMemo = null;
+function meHistory() {
+  const day = todayStr();
+  if (!meMemo || meMemo.locked !== LOCKED || meMemo.day !== day) meMemo = { locked: LOCKED, day, h: myHistory(DATA, ME.id, day, { locked: LOCKED }) };
+  return meMemo.h;
+}
+const ymd = s => { const [y, m, d] = s.split('-').map(Number); return `${d}/${m}/${y}`; };
+function renderMe(seg) {
+  const h = meHistory(), cur = h.current;
+  const tile = (n, k) => `<div class="me-tile"><b>${n}</b><span>${k}</span></div>`;
+  const tiles = cur ? `<section class="me-sum"><h3 class="season-h">${esc(seasonLabel(cur.seasonId))}</h3><div class="me-tiles">${tile(cur.count, 'תחרויות')}${tile(cur.finals, 'גמרים')}${tile(cur.best, 'מקום הכי טוב')}</div></section>` : '';
+  const row = c => `<button type="button" class="card ev-row me-row" data-me-open="${esc(c.roundId)}">
+      <span class="ev-main"><b>${bidiParts(c.title)}</b><span class="muted small">${[ymd(c.date), ...catParts(c)].map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</span></span>
+      <span class="ev-side"><b class="me-place">מקום ${c.place}</b>${c.line ? `<span class="small muted"><bdi dir="ltr">${esc(c.line)}</bdi></span>` : ''}${c.score != null ? `<span class="small muted"><bdi dir="ltr">${c.score.toFixed(1)}</bdi> נק׳</span>` : ''}</span><span class="chev" aria-hidden="true"></span></button>`;
+  const body = h.seasons.length ? h.seasons.map(s => `<section class="me-season">${cur?.seasonId === s.id ? '' : `<h3 class="season-h">${esc(s.label)}</h3>`}<div class="ev-list">${s.comps.map(row).join('')}</div></section>`).join('')
+    : `<div class="card h-empty"><p>עוד אין תוצאות שלך בפורטל</p></div>`;
+  patch($('#home'), `<div class="h-head"><h2 class="h-event">${esc(ME.name || ME.short)}</h2>${seg}</div>${tiles}${body}`);
+}
+// a "שלי" row → the round's results (category chip = the athlete's own, as the row's place), the athlete's card first and
+// marked. International rounds show no cards to viewers (as today) → the results only.
+let pick = null, pickScroll = false; // { round, bibs: Set }
+function openMine(id) {
+  const r = round(id); if (!r) return;
+  const bibs = new Set((DATA.mine?.[id] || []).filter(m => m?.id === ME.id).map(m => r.slots?.[m.k]?.bib).filter(b => b != null).map(String));
+  pick = { round: id, bibs }; pickScroll = true;
+  const res = resultsOf(id);
+  if (res && !res.intl && !res.lead) {
+    const row = res.rows.find(x => bibs.has(String(x.bib)));
+    const opt = row && catOptions(res.rows, genderOf(id)).find(o => o.cats?.length === 1 && o.cats[0] === row.cat);
+    if (opt) resCat[id] = opt.key;
+  }
+  lastTabTap = Date.now(); current = id;
+  for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null;
+  window.scrollTo(0, 0); // before the results render below scrolls to the picked card
+  showScreen('round'); // round screen visible first (render() drops pick only on home / another round)
+  openRoundView(); if (view !== 'results' && resultsOf(id)) setView('results');
 }
 
 // the coach's sim tools in the home header (all home levels; none for viewers)
@@ -860,7 +935,7 @@ function evRowHtml(ev, i, evs, t) {
   const fin = finalsReady(ev);
   const tone = `ev-t-${evTone(ev.event)}`;
   return `${fin ? `<div class="ev-item card ${tone} ph-${ph}">` : ''}<button type="button" class="ev-row${fin ? '' : ' card'} ${tone} ph-${ph}" data-ev="${i}">
-      <span class="ev-main"><b>${esc(evName(ev.event))}</b><span class="muted small">${meta}</span></span>
+      <span class="ev-main"><b>${bidiParts(evName(ev.event))}</b><span class="muted small">${meta}</span></span>
       <span class="ev-side">${badge}<span class="small">${!ev.rounds.length || !people.size ? '' : `${people.size} ${ev.event.intl ? 'ישראלים' + (myIntl ? ` · ${myIntl} ${VIEWER ? 'מהפלגיה' : 'שלי'}` : '') : VIEWER ? 'מהפלגיה' : 'שלי'}`}${ovl ? `${people.size ? ' · ' : ''}<span class="ovl-count">⚠︎ ${ovl} חפיפות</span>` : ''}</span></span><span class="chev"></span></button>${fin ? `<button type="button" class="fin-btn" data-final="${i}:${finalsOf(ev)[0].key}:list">${CUP}תוצאות סופיות<span class="go" aria-hidden="true">‹</span></button></div>` : ''}`;
 }
 const seasonOf = ev => ev.event.season || 'nat-2026-27';
@@ -920,7 +995,7 @@ function renderHomeDetail(seg, fromList) {
       ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} סבבים של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
-  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${esc(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + tbdMark(ev.placeTbd) + ' · ' : ''}${rangeLabel(cur.dates)}${tbdMark(ev.dateTbd)}</span></h2>${seg}${homeTools()}</div>${chips}` +
+  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="ios-back h-back" id="home-back"><span class="ios-back-chev"></span>אירועים</button>' : ''}<h2 class="h-event">${bidiParts(evName(ev))} <span class="muted">· ${ev.place ? esc(ev.place) + tbdMark(ev.placeTbd) + ' · ' : ''}${rangeLabel(cur.dates)}${tbdMark(ev.dateTbd)}</span></h2>${seg}${homeTools()}</div>${chips}` +
     (rounds.length ? '' : `<div class="card h-empty"><p><b>${evBadge(cur, evs)}</b></p><p class="muted">הראונדים וסדרי העלייה יתווספו כשיתפרסמו.${ev.place ? '' : ' המיקום עוד לא פורסם.'}</p></div>`) +
     finalCards(cur, ei) + days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
 }
@@ -964,12 +1039,13 @@ function showScreen(sc) {
 }
 
 function render() {
+  if (pick && (screen === 'home' || pick.round !== current)) { pick = null; pickScroll = false; } // left that round → no ring on a later visit
   applyDelays();
   if (DATA.rounds.some(r => r.ifsc)) ifscWanted().forEach(id => pollIfsc(id)); // 3.11.0: each round waits 15 s between fetches itself
   if (screen === 'home') {
     document.body.classList.remove('intl-round', 'combo-round', 'lead-round');
     $('#clock').textContent = fmtClock(now());
-    $('#event-title').textContent = evName(homeEvents()[homeFinal?.ev ?? homeOpenEvent ?? focusEventIdx()].event);
+    $('#event-title').textContent = ME && homeTab === 'me' ? 'התוצאות שלי' : evName(homeEvents()[homeFinal?.ev ?? homeOpenEvent ?? focusEventIdx()].event);
     $('#round-sub').textContent = `מסך ראשי${SIM_AT != null ? ' · מצב הדמיה' : ''}`;
     renderTabs(); renderHome(); checkAlerts();
     return;
@@ -999,6 +1075,7 @@ function render() {
   if (view === 'results' && r.combo) try { patch($('#view-results'), renderCombo(r)); } catch (e) { console.error('results', e); }
   else if (view === 'results' && !resultsOf(r.id)) patch($('#view-results'), `<p class="muted intl-wait">${IFSC[r.id]?.err ? 'אין חיבור כרגע לתוצאות של World Climbing — מנסה שוב…' : 'טוען תוצאות מ-World Climbing…'}</p>`);
   else if (view === 'results') try { patch($('#view-results'), renderResults(r)); } catch (e) { console.error('results', e); }
+  if (pickScroll && view === 'results' && resultsOf(r.id)) { pickScroll = false; $('#view-results .fc.picked')?.scrollIntoView({ block: 'center' }); }
   if (view === 'mine') renderMine(r);
   if (view === 'all') renderAll(r);
   if (view === 'log') renderLog();
@@ -1221,6 +1298,21 @@ function checkAlerts() {
 // even when the app is closed. Needs the Home Screen app on iPadOS 16.4+ and a connection when the alert fires.
 const PUSH_URL = 'https://comp-push.palgiacademy.workers.dev';
 let pushKey = null, pushSent = '', pushNextTry = 0;
+// Stage A: Roei opened the portal from the Palgi app → alerts go through the app (one fixed app device on the Worker,
+// /subscribe-app), never a browser push subscription — the page shares the app's origin and service worker.
+const APP_PUSH_DEVICE = 'app-coach';
+const viaApp = () => !VIEWER && store.appEntry?.role === 'coach';
+const pushDevice = () => (viaApp() ? APP_PUSH_DEVICE : store.push.device);
+// typed code on the app's host (…/comps/): Web Push only through the portal's own /comps/ service worker (web/entry.js)
+let pushNoScope = false;
+async function pushReg() {
+  if (!pushNeedsCompsScope(location.hostname, location.pathname)) return navigator.serviceWorker.ready;
+  const reg = await navigator.serviceWorker.getRegistration('./');
+  if (!pushScopeOk(reg?.scope)) { pushNoScope = true; throw new Error('scope'); }
+  const w = reg.installing || reg.waiting; // just registered: wait until it is active (or gone)
+  if (!reg.active && w) await new Promise(res => { const on = () => { if (w.state === 'activated' || w.state === 'redundant') res(); }; w.addEventListener('statechange', on); on(); });
+  return reg;
+}
 async function pushHeaders() {
   if (!pushKey) {
     const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('comp-push:' + store.code));
@@ -1229,7 +1321,7 @@ async function pushHeaders() {
   return { 'Content-Type': 'application/json', 'X-Comp-Key': pushKey };
 }
 async function pushCall(path, body) {
-  const res = await fetch(PUSH_URL + path, { method: 'POST', headers: await pushHeaders(), body: JSON.stringify({ device: store.push.device, ...body }) });
+  const res = await fetch(PUSH_URL + path, { method: 'POST', headers: await pushHeaders(), body: JSON.stringify({ device: pushDevice(), ...body }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || String(res.status));
   return data;
@@ -1239,6 +1331,8 @@ function pushEnv() {
   const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
   if (SIM_AT != null) return 'sim';
+  if (viaApp()) return 'ready';
+  if (pushNoScope) return 'unsupported';
   if (ios && !standalone) return 'ios-install';
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') return 'unsupported';
   if (Notification.permission === 'denied') return 'denied';
@@ -1246,7 +1340,7 @@ function pushEnv() {
 }
 async function syncPush(force = false) {
   if (VIEWER) return;
-  if (!store.push.on || pushEnv() !== 'ready' || Notification.permission !== 'granted') return;
+  if (!store.push.on || pushEnv() !== 'ready' || (!viaApp() && Notification.permission !== 'granted')) return;
   const t = Date.now();
   if (!force && t < pushNextTry) return;
   const alerts = alertEntries().filter(a => a.until > t).map(({ key, tag, at, until, title, body }) => ({ key, tag, at, until, title, body }));
@@ -1260,7 +1354,8 @@ async function syncPush(force = false) {
   }
 }
 async function pushSubscribe() {
-  const reg = await navigator.serviceWorker.ready;
+  if (viaApp()) return pushCall('/subscribe-app', {});
+  const reg = await pushReg();
   const { publicKey } = await (await fetch(PUSH_URL + '/key')).json();
   const b64 = publicKey.replace(/-/g, '+').replace(/_/g, '/');
   const key = Uint8Array.from(atob(b64 + '==='.slice((b64.length + 3) % 4)), c => c.charCodeAt(0));
@@ -1268,6 +1363,12 @@ async function pushSubscribe() {
   await pushCall('/subscribe', { sub: sub.toJSON() });
 }
 async function pushEnable() {
+  if (viaApp()) {
+    store.setPush(true);
+    try { await pushSubscribe(); pushSent = ''; await syncPush(true); showToast('התראות דרך האפליקציה הופעלו ✓'); }
+    catch { store.setPush(false); showToast('אין חיבור לשרת ההתראות. נסה שוב.'); }
+    return renderPushState();
+  }
   const perm = Notification.requestPermission(); // must start inside the tap (iOS)
   store.setPush(true);
   try {
@@ -1278,19 +1379,22 @@ async function pushEnable() {
     showToast('התראות על מסך נעול הופעלו ✓');
   } catch (e) {
     store.setPush(false);
-    showToast(e.message === 'perm' ? 'לא אושרו התראות. אפשר לאשר בהגדרות האייפד → התראות → פורטל התחרויות' : 'אין חיבור לשרת ההתראות. נסה שוב.');
+    showToast(e.message === 'perm' ? 'לא אושרו התראות. אפשר לאשר בהגדרות האייפד → התראות → פורטל התחרויות'
+      : e.message === 'scope' ? 'המכשיר לא תומך בהתראות (צריך iPadOS 16.4 ומעלה).' : 'אין חיבור לשרת ההתראות. נסה שוב.');
   }
   renderPushState();
 }
 async function pushDisable() {
   store.setPush(false);
   try { await pushCall('/unsubscribe', {}); } catch { /* offline: the server drops it when the push fails */ }
-  try { await (await (await navigator.serviceWorker.ready).pushManager.getSubscription())?.unsubscribe(); } catch { /* ignore */ }
+  if (!viaApp()) try { await (await (await pushReg()).pushManager.getSubscription())?.unsubscribe(); } catch { /* ignore */ } // app: never the app's own subscription
   pushSent = ''; renderPushState();
 }
 async function renderPushState() {
   const box = $('#push-state'); if (!box) return;
   const env = pushEnv(), on = store.push.on && env === 'ready';
+  const label = viaApp() ? 'התראות דרך האפליקציה' : 'התראות על מסך נעול';
+  $('#push-toggle').previousElementSibling.textContent = label; $('#push-toggle').setAttribute('aria-label', label);
   $('#push-toggle').setAttribute('aria-checked', String(on));
   $('#push-toggle').disabled = env !== 'ready';
   $('#push-test').hidden = !on;
@@ -1301,11 +1405,11 @@ async function renderPushState() {
     unsupported: 'המכשיר לא תומך בהתראות (צריך iPadOS 16.4 ומעלה).',
     denied: 'ההתראות חסומות: הגדרות האייפד ← התראות ← פורטל התחרויות ← אפשר.',
   }[env];
-  if (msg) { box.textContent = msg; if (env === 'ios-install') box.insertAdjacentHTML('beforeend', '<button type="button" class="btn btn-sm btn-ghost" data-install-open>איך מוסיפים?</button>'); return; }
+  if (msg) { box.textContent = msg; if (env === 'ios-install' && !store.appEntry) box.insertAdjacentHTML('beforeend', '<button type="button" class="btn btn-sm btn-ghost" data-install-open>איך מוסיפים?</button>'); return; }
   if (!on) { box.textContent = 'כבוי · ההתראות מופיעות רק כשהאפליקציה פתוחה.'; return; }
   box.textContent = pushSent ? 'פעיל ✓ · בודק בשרת…' : 'פעיל · ממתין לחיבור לשרת…';
   try {
-    const st = await (await fetch(`${PUSH_URL}/status?device=${encodeURIComponent(store.push.device)}`, { headers: await pushHeaders() })).json();
+    const st = await (await fetch(`${PUSH_URL}/status?device=${encodeURIComponent(pushDevice())}`, { headers: await pushHeaders() })).json();
     const serverOk = !st.pending || st.alarm != null; // the Worker's alarm is armed for the next alert
     box.textContent = !st.subscribed ? 'פעיל · נרשם מחדש לשרת…'
       : `פעיל ✓ · ${st.pending} התראות מתוזמנות${st.next ? ` · הבאה ${fmtHM(st.next.at)} (${st.next.title})` : ''}${serverOk ? ' · שרת תקין' : ' · ⚠︎ שרת ההתראות לא מגיב כרגע'}`;
@@ -1942,6 +2046,13 @@ function start() {
   MINE_H = $('#mine-h').textContent;
   document.body.classList.toggle('viewer', VIEWER);
   if (VIEWER) { $('[data-view="mine"]').textContent = MINE_NAME(); $('#arm-btn').hidden = true; }
+  // stage A: opened from the Palgi app → a link back to the app, no add-to-home-screen guide (the app is the icon);
+  // "כללי | שלי" only for an athlete entry with an app id (coach / viewer entries and the code path: as today)
+  const entry = store.appEntry;
+  ME = entry?.role === 'athlete' && entry.athlete?.id ? entry.athlete : null;
+  document.body.classList.toggle('app-entry', !!entry);
+  $('#app-back').hidden = !entry;
+  if (entry) document.querySelectorAll('[data-install-open]').forEach(el => { el.hidden = true; });
   $('#app').hidden = false;
   document.querySelectorAll('.app-ver').forEach(el => { el.textContent = APP_VERSION; });
   current = params.get('round') && round(params.get('round')) ? params.get('round') : pickDefaultRound();
@@ -1965,6 +2076,8 @@ function start() {
       evFilter = { ...evFilter, [k]: opts.every(x => next.includes(x)) ? [] : next }; saveFilter(); render(); return;
     }
     if (b.id === 'filt-reset') { evFilter = { disc: [], type: [], age: [] }; saveFilter(); render(); return; }
+    if (d.homeTab) { homeTab = d.homeTab === 'me' && ME ? 'me' : 'all'; render(); window.scrollTo(0, 0); return; }
+    if (d.meOpen) { openMine(d.meOpen); return; }
     if (d.ev != null) { homeFrom = homeSeason; homeOpenEvent = Number(d.ev); render(); window.scrollTo(0, 0); return; }
     if (b.id === 'home-back') { homeSeason = homeFrom; homeOpenEvent = null; render(); return; }
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
@@ -2016,7 +2129,7 @@ function start() {
     }
     else if (b.id === 'sync-now') { $('#sync-state').textContent = 'מסנכרן…'; syncNow(); }
     else if (b.id === 'push-toggle') { if (store.push.on && pushEnv() === 'ready') pushDisable(); else pushEnable(); }
-    else if (b.id === 'push-test') pushCall('/test', {}).then(r => showToast(r.ok ? 'נשלחה התראת ניסיון · נעל את האייפד ובדוק' : 'השליחה נכשלה')).catch(() => showToast('אין חיבור לשרת ההתראות'));
+    else if (b.id === 'push-test') pushCall('/test', {}).then(r => showToast(r.ok ? (viaApp() ? 'נשלחה התראת ניסיון דרך האפליקציה' : 'נשלחה התראת ניסיון · נעל את האייפד ובדוק') : 'השליחה נכשלה')).catch(() => showToast('אין חיבור לשרת ההתראות'));
     else if (b.id === 'reset-all') askConfirm('איפוס כיול', 'הכיול יתאפס בכל הראונדים ובכל המכשירים, והשעון יחזור לזמנים שבסדר העלייה.', 'איפוס', () => { store.resetOffsets(); render(); showToast('הכיול אופס'); });
     else if (b.id === 'logout-btn') askConfirm('יציאה', 'בכניסה הבאה תצטרך להזין את הקוד שוב. ההערות והכיולים נשארים באייפד.', 'יציאה', () => { store.logout(); location.href = './'; });
     else if (b.id === 'copy-all-btn') copy(logItems().shown.map(i => (i.type === 'appeal' ? appealFull(i) : noteText(i))).join('\n\n')); // what is on screen (3.1.0)
@@ -2071,6 +2184,11 @@ function start() {
   if (SIM_AT == null) setupPullRefresh();
   setupSwipe(); setupAutoArm();
   if ('serviceWorker' in navigator && SIM_AT == null) navigator.serviceWorker.register('sw.js').catch(() => {});
+  // opened from the Palgi app: a notification tap while this page is the open window → the app's SW posts { type: 'open', url }
+  if (store.appEntry && 'serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
+    const url = store.appEntry ? openTarget(e.data, location.origin) : null;
+    if (url) location.href = url;
+  });
 }
 
 boot().catch(() => { $('#gate').hidden = false; });

@@ -6,6 +6,9 @@
 import { normTag } from './tags.js';
 const KEY = new URLSearchParams(location.search).get('at') ? 'comps.sim.v1' : 'comps.v1';
 const CODE_KEY = 'comps.code';
+// stage A: opened from the Palgi app → { role, athlete } (web/entry.js). On app.palgitraining.com localStorage is shared with
+// the app: every portal key starts with 'comps.' / 'comp-' — the app's keys are wa-*, sched.*, season.*, tplan.*, tlogIntro:*, wingateAcademyHub*.
+const ENTRY_KEY = 'comps.appEntry';
 export const DEFAULT_SETTINGS = {
   alerts: { w2: false, w1: true, m2: false, m1: false, s10: true, s0: false, transfer: false }, // default: one round + 10 s before (Roei 2026-10-12)
   sound: { on: true, vol: 0.6, tone: 'chime' },
@@ -125,7 +128,9 @@ export const store = {
       if (state.offsets[r] || this.delay(r)) { state.offsets[r] = 0; if (state.delays) state.delays[r] = 0; touch('offset', r); }
     }
   },
-  logout() { try { localStorage.removeItem(CODE_KEY); } catch { /* ignore */ } state.code = null; save(); },
+  get appEntry() { try { const v = JSON.parse(localStorage.getItem(ENTRY_KEY) || 'null'); return v && typeof v === 'object' && v.role ? v : null; } catch { return null; } },
+  set appEntry(v) { try { if (v) localStorage.setItem(ENTRY_KEY, JSON.stringify(v)); else localStorage.removeItem(ENTRY_KEY); } catch { /* ignore */ } },
+  logout() { try { localStorage.removeItem(CODE_KEY); localStorage.removeItem(ENTRY_KEY); } catch { /* ignore */ } state.code = null; save(); },
   exportAll() {
     return JSON.stringify({ device: state.devName, notes: this.notes(), appeals: this.appeals(), offsets: state.offsets, delays: state.delays, mineAdd: state.mineAdd, mineDel: state.mineDel }, null, 2);
   },

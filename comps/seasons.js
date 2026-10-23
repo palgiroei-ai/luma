@@ -6,7 +6,9 @@ const NAT = 'nat-2026-27';
 const SEASON_RE = /^(intl|nat)-(\d{4})-(\d{2})$/;
 const sid = id => id || NAT;
 // 'intl-2025-26' → '2026-01-01', 'nat-2026-27' → '2026-09-01' (unknown ids sort last)
-const seasonStart = id => { const m = SEASON_RE.exec(sid(id)); return !m ? '9999' : m[1] === 'intl' ? `${Number(m[2]) + 1}-01-01` : `${m[2]}-09-01`; };
+export const seasonStart = id => { const m = SEASON_RE.exec(sid(id)); return !m ? '9999' : m[1] === 'intl' ? `${Number(m[2]) + 1}-01-01` : `${m[2]}-09-01`; };
+// last day: intl-Y = 31 Dec Y+1, nat-Y = 31 Aug Y+1 ("שלי": which season is running today)
+export const seasonEnd = id => { const m = SEASON_RE.exec(sid(id)); return !m ? '0000' : `${Number(m[2]) + 1}-${m[1] === 'intl' ? '12-31' : '08-31'}`; };
 // 3.18.1 (Roei): a season is named by ONE year — international = its calendar year ('intl-2025-26' → 2026), national = the
 // international season it leads into ('nat-2026-27', Sept 2026–Aug 2027 → 2027). Both = the id's first year + 1; ids unchanged.
 export const seasonLabel = id => { const m = SEASON_RE.exec(sid(id)); return m ? `${m[1] === 'intl' ? 'עונה בינלאומית' : 'עונה לאומית'} ${Number(m[2]) + 1}` : ''; };

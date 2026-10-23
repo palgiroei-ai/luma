@@ -15,6 +15,8 @@ export const topAttempts = bs => bs.reduce((s, b) => s + ((b && b[0]) || 0), 0);
 export const zoneAttempts = bs => bs.reduce((s, b) => s + ((b && b[1]) || 0), 0);
 export const tops = bs => bs.filter(b => b && b[0]).length;
 export const zones = bs => bs.filter(b => b && (b[0] || b[1])).length;
+// the results table's T/Z column ("3T 4Z") — also the "שלי" history line
+export const tzText = bs => `${tops(bs)}T ${zones(bs)}Z`;
 export const kind = b => (!b ? 'w' : b[0] ? 't' : b[1] ? 'z' : 'n');
 
 // the round has no next round in the same competition (sen-m-r2 when there is no -r3; single U17 round) → no cut line

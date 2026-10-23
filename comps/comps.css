@@ -1187,3 +1187,18 @@ body.combo-round #photos-btn, body.combo-round #tags-btn { display: none !import
 .ev-filter button { font: inherit; font-size: 14px; font-weight: 500; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--muted); cursor: pointer; }
 .ev-filter button[aria-pressed="true"] { background: var(--copper-bg); border-color: var(--copper); color: var(--navy); font-weight: 600; }
 .ev-code { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .03em; padding: 0 6px; border-radius: 6px; border: 1.5px solid var(--border); margin-inline-end: 6px; unicode-bidi: isolate; } /* not direction:ltr — that flips margin-inline-end to the wrong side in RTL */
+
+/* ---- stage A 3.19.0: opened from the Palgi app — link back to the app, "כללי | שלי", the athlete's history ---- */
+.app-back { flex: none; display: inline-flex; align-items: center; gap: 6px; color: var(--copper-text); font-weight: 600; font-size: 14px; text-decoration: none; padding: 6px 0; white-space: nowrap; }
+.app-back:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; border-radius: 6px; }
+@media (max-width: 600px) { body.app-entry .top-logo { display: none; } .app-back { font-size: 13px; } }
+.me-sum { display: grid; gap: 6px; margin-bottom: 14px; }
+.me-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.me-tile { display: grid; gap: 2px; justify-items: center; text-align: center; padding: 12px 8px; background: var(--card); border: 1px solid var(--border); border-top: 4px solid var(--copper); border-radius: var(--radius); box-shadow: var(--shadow); }
+.me-tile b { font-size: 28px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.me-tile span { font-size: 13px; color: var(--muted); }
+.me-season { display: grid; gap: 6px; margin-bottom: 14px; }
+.me-row { border-inline-start-color: var(--copper); }
+.me-row .me-place { font-size: 16px; white-space: nowrap; }
+.fc.picked { box-shadow: 0 0 0 2px var(--copper), var(--shadow); }
+bdi.lat { white-space: nowrap; } /* "Arco, ITA" never splits over two lines (review round 1) */
