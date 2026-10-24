@@ -17,7 +17,7 @@ import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.21.1';
+export const APP_VERSION = '3.21.2';
 
 const $ = s => document.querySelector(s);
 

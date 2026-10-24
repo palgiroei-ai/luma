@@ -11,7 +11,9 @@ export const seasonStart = id => { const m = SEASON_RE.exec(sid(id)); return !m 
 export const seasonEnd = id => { const m = SEASON_RE.exec(sid(id)); return !m ? '0000' : `${Number(m[2]) + 1}-${m[1] === 'intl' ? '12-31' : '08-31'}`; };
 // 3.18.1 (Roei): a season is named by ONE year — international = its calendar year ('intl-2025-26' → 2026), national = the
 // international season it leads into ('nat-2026-27', Sept 2026–Aug 2027 → 2027). Both = the id's first year + 1; ids unchanged.
-export const seasonLabel = id => { const m = SEASON_RE.exec(sid(id)); return m ? `${m[1] === 'intl' ? 'עונה בינלאומית' : 'עונה לאומית'} ${Number(m[2]) + 1}` : ''; };
+// 3.22.0 (Roei 2026-10-24): an emoji per season kind, before the name everywhere the season is named
+export const SEASON_EMOJI = { nat: '🇮🇱', intl: '🌍' };
+export const seasonLabel = id => { const m = SEASON_RE.exec(sid(id)); return m ? `${SEASON_EMOJI[m[1]]} ${m[1] === 'intl' ? 'עונה בינלאומית' : 'עונה לאומית'} ${Number(m[2]) + 1}` : ''; };
 const seasonCmp = (a, b) => (seasonStart(a) < seasonStart(b) ? -1 : seasonStart(a) > seasonStart(b) ? 1 : sid(a) < sid(b) ? -1 : sid(a) > sid(b) ? 1 : 0);
 // events → [{ id, label }] of the seasons they use, in season order
 export function seasonsOf(events) {
