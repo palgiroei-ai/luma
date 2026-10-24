@@ -1,3 +1,4 @@
+import { catHe } from './labels.js';
 // Round results — pure scoring/ranking (World Climbing boulder, 2025+ points system). Used by app.js and tests.
 // Points per boulder: top 25, zone (no top) 10, minus 0.1 per failed attempt before it (never below 0).
 // Ranking (World Climbing Event Regulations Jan 2026 v3, Annex C §7.1; Roei 2026-10-13):
@@ -115,13 +116,13 @@ export function boulderStats(ranked, nBoulders) {
 export function catOptions(rows, gender) {
   const has = c => rows.some(r => r.cat === c);
   if (has('U15') || has('U17')) return [
-    { key: 'U17', label: `U17${gender}`, cats: ['U17'] }, { key: 'U15', label: `U15${gender}`, cats: ['U15'] },
-    { key: 'U17+U15', label: `U17${gender} + U15${gender}`, cats: ['U17', 'U15'] }].filter(o => o.cats.some(has));
+    { key: 'U17', label: catHe('U17', gender), cats: ['U17'] }, { key: 'U15', label: catHe('U15', gender), cats: ['U15'] },
+    { key: 'U17+U15', label: `${catHe('U17', gender)} + ${catHe('U15', gender)}`, cats: ['U17', 'U15'] }].filter(o => o.cats.some(has));
   if (!rows.some(r => r.cat)) return [];
-  return [{ key: 'all', label: gender === 'W' ? 'בוגרות' : 'בוגרים', cats: null },
-    ...['U21', 'U19'].filter(has).map(c => ({ key: c, label: c + gender, cats: [c] }))];
+  return [{ key: 'all', label: catHe('S', gender), cats: null },
+    ...['U21', 'U19'].filter(has).map(c => ({ key: c, label: catHe(c, gender), cats: [c] }))];
 }
-export const catLabel = (cat, gender) => (!cat ? '' : cat === 'S' ? (gender === 'W' ? 'בוגרות' : 'בוגרים') : cat + gender);
+export const catLabel = (cat, gender) => catHe(cat, gender);
 // the round's ranking inside one option (places re-numbered, ties + count-back as in the whole round)
 export function rankInCats(rows, cats, prevRank = null) {
   return rankRows(cats ? rows.filter(r => cats.includes(r.cat)) : rows, prevRank);

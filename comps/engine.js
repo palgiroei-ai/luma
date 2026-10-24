@@ -117,6 +117,19 @@ export function windowCount(round) {
   return last < 0 ? 0 : last + span(round);
 }
 
+// End of the round: the last athlete's last window (incl. trailing rest), with the calibration offset.
+export function roundEndMs(round, offsetMs = 0) {
+  return roundStart(round) + offsetMs + windowCount(round) * round.slotSec * 1000;
+}
+
+// portal consistency round (Roei: "15 דק אחרי סיום"): a national round's board, timer, calibration and next-up go away
+// 15 minutes after its end. International rounds never show a board clock (always false); no start list → false.
+export const BOARD_GONE_MS = 15 * 60000;
+export function boardGone(round, nowMs, offsetMs = 0) {
+  if (round.ifsc || !round.slots?.length || !windowCount(round)) return false;
+  return nowMs >= roundEndMs(round, offsetMs) + BOARD_GONE_MS;
+}
+
 // Slot k starts boulder 1 right now.
 export function syncSlotNow(round, k, nowMs) {
   return nowMs - slotStartMs(round, k, 0);

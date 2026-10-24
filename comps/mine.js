@@ -6,6 +6,7 @@
 // the whole round; international = ifscRanked (IFSC's place) or leadRanked. International rounds count only from the
 // saved ifscData in the payload — a live-only round (Worker /ifsc) appears once it is saved. National rounds also count
 // from opts.locked (the coach's "קבע כתוצאות רשמיות" results, app.js LOCKED), after the results file.
+import { catHe, roundTitle } from './labels.js';
 import { rankRows, rankInCats, catOptions, catLabel, isLastRound, tzText, score } from './results.js';
 import { ifscAnyResults, ifscRanked, leadRanked, intlMineByBib, genderOf } from './ifsc.js';
 import { seasonsOf, seasonStart, seasonEnd } from './seasons.js';
@@ -52,15 +53,13 @@ export function myHistory(data, athleteId, todayYmd, { locked } = {}) {
     best: Math.min(...cur.comps.map(c => c.place)) } : null, seasons };
 }
 
-// one category style on every "שלי" row (stage A review): [age, gender word, stage] → "U19 · גברים · סיבוב שני".
-// National: age from the athlete's own category (U19 in a seniors round → never "U19 · בוגרים"), the word from the round
-// title (בוגרים / בוגרות alone stay; with an age → גברים / נשים); international: both from World Climbing's round title
-// ("גברים U19 · מוקדמות"). The stage = the round title after its first part; a one-part title (u17-m "U17 בנים") has none.
+// one category style on every "שלי" row: [category, stage] → "נערים U19 · ראונד 2" (labels.js catHe / roundTitle).
+// National: the age from the athlete's own category (U19 in a seniors round → never "בוגרים"); international: from the
+// World Climbing round title. The stage = the round title after its first part; a one-part title (u17-m) has none.
 export function catParts(c) {
-  const label = String(c?.roundLabel || ''), segs = label.split(' · '), head = segs[0];
+  const label = roundTitle(c?.roundLabel || ''), segs = label.split(' · '), head = segs[0];
   const stage = segs.length > 1 ? segs.slice(1).join(' · ') : '';
-  const age = /^U\d+/.exec(c?.cat || '')?.[0] || /U\d+/.exec(head)?.[0] || '';
-  let word = head.replace(/U\d+/, '').trim();
-  if (age && /^בוגר/.test(word)) word = genderOf(c.roundId) === 'W' ? 'נשים' : 'גברים';
-  return [age, word || (age ? '' : c?.cat || ''), stage].filter(Boolean);
+  const age = /U\d+/.exec(c?.cat || '')?.[0] || /U\d+/.exec(head)?.[0] || '';
+  const g = genderOf(c?.roundId || '');
+  return [age ? catHe(age, g) : (/^בוגר/.test(head) ? head : (c?.cat || head)), stage].filter(Boolean);
 }

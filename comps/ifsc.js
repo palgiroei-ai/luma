@@ -42,7 +42,8 @@ const fmtTime = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) 
 // the lead table (World Climbing format): # · climber (country) · per route height + route place (quals) · score / height
 // (· time when given). ranked = leadRanked(); adv = how many go on (qualifying line before the first one out).
 // 3.18.0: mine = Set of my athletes' bibs → they get the marked row, other Israelis a plain tint ('isr'); without it every Israeli is marked
-export function leadTableHtml(ranked, { nR = 1, adv = 0, onlyIsr = false, fem = false, nameHtml = esc, mine = null } = {}) {
+// 3.21.0: waiting = the round is not over yet → an unranked climber is still to climb (not DNS)
+export function leadTableHtml(ranked, { nR = 1, adv = 0, onlyIsr = false, fem = false, nameHtml = esc, mine = null, waiting = false } = {}) {
   const multi = nR > 1, hasTime = !multi && ranked.some(x => x.time != null);
   const span = 3 + (multi ? nR : 0) + (hasTime ? 1 : 0);
   const sc = (s, cls) => `<td class="${cls}${isTop(s) ? ' top' : ''}">${s == null ? '–' : `<bdi dir="ltr">${esc(s)}</bdi>`}`;
@@ -50,9 +51,9 @@ export function leadTableHtml(ranked, { nR = 1, adv = 0, onlyIsr = false, fem = 
   const rowCls = x => (mine ? (mine.has(x.bib) ? ' class="mine"' : isIsr(x) ? ' class="isr"' : '') : isIsr(x) ? ' class="mine"' : '');
   const body = (onlyIsr ? ranked.filter(isIsr) : ranked).map(x => {
     let pre = '';
-    if (adv && !cut && x.rank != null && x.rank > adv) { cut = true; pre = `<tr class="cut"><td colspan="${span}">קו העלייה לסבב הבא · ${adv} עולים</td></tr>`; }
+    if (adv && !cut && x.rank != null && x.rank > adv) { cut = true; pre = `<tr class="cut"><td colspan="${span}">קו העלייה לראונד הבא · ${adv} עולים</td></tr>`; }
     const name = `<td class="n"><b>${isIsr(x) ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : ''}${nameHtml(x.name)}</b><small>${esc(x.club)}</small></td>`;
-    if (x.rank == null) return pre + `<tr${rowCls(x)}><td class="rk">–</td>${name}<td colspan="${span - 2}" class="muted small">${fem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td></tr>`;
+    if (x.rank == null) return pre + `<tr${rowCls(x)}><td class="rk">–</td>${name}<td colspan="${span - 2}" class="muted small">${waiting ? (fem ? 'עוד לא טיפסה' : 'עוד לא טיפס') : fem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td></tr>`;
     const routes = multi ? Array.from({ length: nR }, (_, j) => { const r = x.rs?.[j]; return sc(r?.[0], 'lh') + (r?.[1] != null ? `<small>(${r[1]})</small>` : '') + '</td>'; }).join('') : '';
     return pre + `<tr${rowCls(x)}><td class="rk">${x.rank}</td>${name}${routes}${sc(x.score, 'tt')}</td>${hasTime ? `<td class="tm">${x.time != null ? fmtTime(x.time) : ''}</td>` : ''}</tr>`;
   }).join('');

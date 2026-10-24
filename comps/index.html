@@ -23,6 +23,12 @@
     try {
       var key = /[?&]at=/.test(location.search) ? 'comps.sim.v1' : 'comps.v1';
       var st = (JSON.parse(localStorage.getItem(key) || '{}').settings) || {};
+      // opened from the Palgi app (same origin): its theme wins (ThemeBoot.html keys; entry.js appTheme() = same mapping)
+      if (/^#entry=/.test(location.hash) || localStorage.getItem('comps.appEntry')) {
+        var am = localStorage.getItem('wa-theme-mode'), ad = localStorage.getItem('wa-theme-dark');
+        var mt = am == null ? 'light' : { light: 'light', dark: 'dark', system: 'auto' }[am];
+        if (mt) st = { theme: mt, dark: BG[ad] && ad !== 'light' ? ad : 'plum' };
+      }
       var dark = BG[st.dark] && st.dark !== 'light' ? st.dark : 'plum';
       var sys = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
       var t = st.theme === 'dark' || (st.theme === 'auto' && sys) ? dark : 'light';
@@ -33,9 +39,73 @@
   </script>
   <link rel="preload" href="fonts/heebo-hebrew.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="comps.css">
+  <script>
+  // Loading-screen failsafe (final review 2026-10-24): app.js or one of its imports fails to load / throws while
+  // loading → hideSplash() never runs. Then, instead of "still loading…" forever: "לא הצלחנו לטעון" + reload.
+  // A failed <script> (incl. a module import) or an error thrown while the splash is up, or 20 s with no app/gate.
+  // Normal loads never see it: the app, the gate and an entry error all call hideSplash() (splash .out / removed).
+  (function () {
+    function fail() {
+      var sp = document.getElementById('splash');
+      if (!sp || sp.classList.contains('out') || sp.classList.contains('failed')) return;
+      sp.classList.add('failed');
+      var t = document.getElementById('sp-slow'); if (t) t.textContent = 'לא הצלחנו לטעון';
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn btn-primary sp-reload'; b.textContent = 'טען מחדש';
+      b.addEventListener('click', function () { location.reload(); });
+      sp.appendChild(b);
+    }
+    addEventListener('error', function (e) {
+      var el = e.target;
+      if ((el && el.tagName === 'SCRIPT') || (typeof ErrorEvent !== 'undefined' && e instanceof ErrorEvent)) fail();
+    }, true);
+    setTimeout(fail, 20000);
+  })();
+  </script>
   <script type="module" src="app.js"></script>
+  <!-- portal consistency round §2: loading screen, painted before any JS (comps.css is render-blocking, so the theme
+       tokens set by the boot script above are already there). The fill bar runs like the Palgi app's #app-splash;
+       hideSplash() in app.js takes it to 100% and fades it out when the app, the gate or an entry error shows. -->
+  <style>
+    #splash { position: fixed; inset: 0; z-index: 3000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      background: var(--chalk); color: var(--navy); font-family: var(--font); text-align: center; padding: 24px; transition: opacity .3s ease; }
+    #splash.out { opacity: 0; pointer-events: none; }
+    body:has(#gate:not([hidden])) #splash:not(.out) { display: none; } /* never over the gate, even if JS skipped hideSplash */
+    .sp-mark { width: 64px; height: 64px; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.4; }
+    .sp-mark circle { stroke: var(--copper); opacity: .6; }
+    .sp-mark path { stroke: currentColor; stroke-dasharray: 100; animation: sp-pulse 2.4s ease-in-out infinite; }
+    @keyframes sp-pulse { 0% { stroke-dashoffset: 100; } 55% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -100; } }
+    .sp-title { margin: 4px 0 0; font-size: 22px; font-weight: 800; }
+    .sp-sub { margin: 0; font-size: 14px; color: var(--muted); }
+    .sp-track { width: 140px; height: 3px; border-radius: var(--r-pill); background: var(--border); overflow: hidden; margin-top: 10px; }
+    .sp-fill { width: 0; height: 100%; border-radius: var(--r-pill); background: var(--copper); animation: sp-fill 8s cubic-bezier(0.1, 0.65, 0.2, 1) forwards; }
+    @keyframes sp-fill { from { width: 0; } to { width: 90%; } }
+    #splash.out .sp-fill { animation: none; width: 100%; transition: width .2s ease; }
+    .sp-slow { margin: 0; min-height: 1.3em; font-size: 14px; color: var(--muted); }
+    #splash.failed .sp-track { display: none; } /* no bar that will never fill */
+    #splash.failed .sp-slow { color: var(--navy); font-weight: 700; }
+    .sp-reload { margin-top: 4px; }
+    .sp-foot { position: absolute; bottom: calc(24px + env(safe-area-inset-bottom)); inset-inline: 0; font-family: var(--font-brand); font-size: 11px; font-weight: 600; letter-spacing: .32em; color: var(--muted); direction: ltr; }
+    @media (prefers-reduced-motion: reduce) {
+      .sp-mark path { animation: none; stroke-dasharray: none; }
+      .sp-fill { animation: none; width: 60%; }
+      #splash, #splash.out .sp-fill { transition: none; }
+    }
+  </style>
 </head>
 <body>
+
+<div id="splash" role="status" aria-live="polite">
+  <svg class="sp-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10" pathLength="100"/></svg>
+  <p class="sp-title">פורטל התחרויות</p>
+  <p class="sp-sub">פורטל תחרויות הטיפוס של LUMA</p>
+  <div class="sp-track" aria-hidden="true"><div class="sp-fill"></div></div>
+  <p class="sp-slow" id="sp-slow"></p>
+  <span class="sp-foot" lang="en">PALGI TRAINING</span>
+</div>
+<script>
+  setTimeout(function () { var t = document.getElementById('sp-slow'); var sp = document.getElementById('splash'); if (t && sp && !sp.classList.contains('failed')) t.textContent = 'החיבור איטי, עדיין טוען…'; }, 5000);
+</script>
 
 <section id="gate" class="gate" hidden>
   <form class="gate-card" id="gate-form" autocomplete="off">
@@ -55,6 +125,9 @@
 </section>
 
 <div id="app" hidden>
+  <!-- final review (ruling 8): inside a round the header + the ⌂/round picker/🔔/⚙︎ row stick as ONE block (CSS body.in-round
+       .top-stack); on home the wrapper is display: contents and only the header sticks, as before -->
+  <div class="top-stack" id="top-stack">
   <header class="topbar">
     <a class="app-back" id="app-back" href="/" hidden><span class="ios-back-chev" aria-hidden="true"></span>חזרה לאפליקציה</a>
     <img class="top-logo" src="logo-palgitraining.svg" alt="PalgiTraining" width="697" height="140">
@@ -63,15 +136,14 @@
       <p class="muted" id="round-sub"></p>
     </div>
     <div class="clock" id="clock" aria-label="שעה"></div>
-    <button type="button" class="gear bell" id="arm-btn" aria-pressed="false" aria-label="צליל ומסך דלוק · כבוי"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><i class="bell-dot"></i></button>
-    <button type="button" class="gear" id="settings-btn" aria-label="הגדרות">⚙︎</button>
     <a class="powered" href="https://luma.palgitraining.com/" target="_blank" rel="noopener" aria-label="Powered by LUMA">
       <span class="powered-by" lang="en">Powered by</span>
       <span class="brand-row"><img class="mark" src="mark.svg" alt=""><span class="wordmark">LUMA</span></span>
     </a>
   </header>
 
-  <nav class="tabs" aria-label="ראונדים"><button type="button" class="home-tab" id="home-btn" aria-pressed="false" aria-label="מסך ראשי" title="מסך ראשי"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/><path d="M10 19v-5h4v5"/></svg></button><span class="tabs-sep" aria-hidden="true"></span><div class="tabs-scroll" id="round-tabs"></div></nav>
+  <nav class="tabs" aria-label="ראונדים"><button type="button" class="icon-btn filled" id="home-btn" aria-pressed="false" aria-label="מסך ראשי" title="מסך ראשי"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/><path d="M10 19v-5h4v5"/></svg></button><div class="tabs-scroll" id="round-tabs"></div><button type="button" class="icon-btn bell" id="arm-btn" aria-pressed="false" aria-label="צליל ומסך דלוק · כבוי"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><i class="bell-dot"></i></button><button type="button" class="icon-btn" id="settings-btn" aria-label="הגדרות"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M5.5 18.5l1.8-1.8M16.7 7.3l1.8-1.8"/><circle cx="12" cy="12" r="6.6"/></svg></button></nav>
+  </div>
 
   <div class="sim-bar" id="sim-bar" hidden>
     <b>מצב הדמיה</b> · השעון מדומה, הערות וכיולים כאן לא נשמרים בתחרות האמיתית.
@@ -85,22 +157,22 @@
   <main class="main" id="round-screen">
     <section class="board" id="board" aria-label="מסלולים"></section>
     <!-- 3.2.0: a round running at the same time (both with my athletes) — compact board + its clock -->
-    <section class="par card" id="par" hidden aria-label="סבב במקביל"></section>
+    <section class="par card" id="par" hidden aria-label="ראונד במקביל"></section>
 
     <section class="mid">
       <div class="timer-card card">
         <div class="timer-label"><span id="timer-label"></span><span class="tz-tag" id="tz-tag" hidden>שעון ישראל</span></div>
-        <!-- 3.0.0 (Roei picked from the mock): ±סבב beside the clock, fine calibration in one row, offset text under the clock -->
+        <!-- 3.0.0 (Roei picked from the mock): ±rotation beside the clock, fine calibration in one row, offset text under the clock -->
         <div class="clock-row">
-          <button type="button" class="cbtn side" data-adj="-slot" aria-label="מקדים סבב"><bdi>−סבב</bdi></button>
+          <button type="button" class="cbtn side" data-adj="-slot" aria-label="מקדים רוטציה"><bdi>−רוטציה</bdi></button>
           <div class="timer" id="timer">--:--</div>
-          <button type="button" class="cbtn side" data-adj="+slot" aria-label="מאחר סבב"><bdi>+סבב</bdi></button>
+          <button type="button" class="cbtn side" data-adj="+slot" aria-label="מאחר רוטציה"><bdi>+רוטציה</bdi></button>
         </div>
         <div class="timer-sub muted" id="timer-sub"></div>
         <div class="calib" aria-label="כיול שעון">
           <div class="calib-row">
             <div class="mini"><button type="button" class="cbtn" data-adj="-step" id="adj-minus"><bdi dir="ltr">−15</bdi></button><button type="button" class="cbtn fine" data-adj="-1" aria-label="מקדים שנייה"><bdi dir="ltr">−1</bdi></button></div>
-            <button type="button" class="cbtn cbtn-main" data-adj="now">הסבב מתחיל עכשיו</button>
+            <button type="button" class="cbtn cbtn-main" data-adj="now">הרוטציה מתחילה עכשיו</button>
             <div class="mini"><button type="button" class="cbtn fine" data-adj="+1" aria-label="מאחר שנייה"><bdi dir="ltr">+1</bdi></button><button type="button" class="cbtn" data-adj="+step" id="adj-plus"><bdi dir="ltr">+15</bdi></button></div>
           </div>
           <svg width="0" height="0" class="svg-defs" aria-hidden="true">
@@ -135,8 +207,8 @@
             <button type="button" data-view="log" aria-pressed="false">הערות וערעורים</button>
             <button type="button" data-view="results" aria-pressed="false" hidden>תוצאות</button>
           </div>
-          <button type="button" class="btn btn-ghost btn-sm" id="photos-btn">📷 תמונות בולדרים</button>
-          <button type="button" class="btn btn-ghost btn-sm coach-only" id="tags-btn">🧗 תיוג בולדרים</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="photos-btn"><svg class="bico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg>תמונות בולדרים</button>
+          <button type="button" class="btn btn-secondary btn-sm coach-only" id="tags-btn"><svg class="bico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19 9.5 7l4 7 2.5-4L21 19z"/></svg>תיוג בולדרים</button>
         </div>
       </div>
       <div id="view-mine" class="mine-grid"></div>
@@ -148,13 +220,18 @@
   <footer class="app-footer" lang="en" dir="ltr"><span class="app-ver"></span> · Powered by <a class="footer-luma" href="https://luma.palgitraining.com" target="_blank" rel="noopener">LUMA<svg class="luma-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg></a> · By Roei Palgi</footer>
 </div>
 
+<dialog id="round-pick" class="rp" aria-labelledby="rp-title">
+  <div class="rp-head"><h2 id="rp-title">ראונדים באירוע</h2><button type="button" class="icon-btn" id="rp-close" aria-label="סגירה">✕</button></div>
+  <div id="round-pick-body" class="rp-body"></div>
+</dialog>
+
 <dialog id="note-dlg" class="dlg">
   <form method="dialog" id="note-form">
     <h2 id="note-title"></h2>
     <p class="muted small" id="note-ctx"></p>
     <textarea id="note-text" rows="5" maxlength="3000" placeholder="הערה…" required></textarea>
     <div class="dlg-actions">
-      <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
+      <button class="btn btn-secondary" value="cancel" formnovalidate>ביטול</button>
       <button class="btn btn-primary" value="save">שמירה</button>
     </div>
   </form>
@@ -175,28 +252,30 @@
         <button type="button" class="ios-row nav" data-page="sound"><span class="ico">🔊</span><span class="lbl">צליל</span><span class="val" id="v-sound"></span><span class="chev"></span></button>
       </div></div>
       <div class="ios-group"><p class="ios-gtitle">תחרות</p><div class="ios-box">
-        <button type="button" class="ios-row nav" data-page="calib"><span class="ico">🎯</span><span class="lbl">כיול</span><span class="val" id="v-calib"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav not-in-app" data-page="calib"><span class="ico">🎯</span><span class="lbl">כיול</span><span class="val" id="v-calib"></span><span class="chev"></span></button>
         <button type="button" class="ios-row nav" data-page="mine"><span class="ico">👥</span><span class="lbl">הספורטאים שלי</span><span class="val" id="v-mine"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav coach-only" id="clock-open"><span class="ico"><svg class="lico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/></svg></span><span class="lbl">שעון סימולציה</span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav coach-only" id="sim-open"><span class="ico"><svg class="lico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/></svg></span><span class="lbl">הדמיית ראונד</span><span class="chev"></span></button>
       </div></div>
       <div class="ios-group"><p class="ios-gtitle">כללי</p><div class="ios-box">
-        <button type="button" class="ios-row nav" data-page="look"><span class="ico">🌓</span><span class="lbl">מראה</span><span class="val" id="v-look"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav not-in-app" data-page="look"><span class="ico">🌓</span><span class="lbl">מראה</span><span class="val" id="v-look"></span><span class="chev"></span></button>
         <button type="button" class="ios-row nav" data-page="sync"><span class="ico">☁️</span><span class="lbl">סנכרון בין מכשירים</span><span class="val" id="v-sync"></span><span class="chev"></span></button>
-        <button type="button" class="ios-row nav" data-page="data"><span class="ico">📝</span><span class="lbl">הערות וערעורים</span><span class="val" id="v-data"></span><span class="chev"></span></button>
-        <button type="button" class="ios-row nav" data-page="feedback"><span class="ico">📮</span><span class="lbl">דיווח תקלה או הצעה לשיפור</span><span class="val" id="v-feedback"></span><span class="chev"></span></button>
-        <button type="button" class="ios-row nav coach-only" data-page="fbadmin"><span class="ico">📥</span><span class="lbl">משובים שהתקבלו</span><span class="val" id="v-fbadmin"></span><span class="chev"></span></button>
-        <button type="button" class="ios-row nav install-row" data-install-open><span class="ico">➕</span><span class="lbl">הוספה למסך הבית</span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav not-in-app" data-page="data"><span class="ico">📝</span><span class="lbl">הערות וערעורים</span><span class="val" id="v-data"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav not-in-app" data-page="feedback"><span class="ico">📮</span><span class="lbl">דיווח תקלה או הצעה לשיפור</span><span class="val" id="v-feedback"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav not-in-app coach-only" data-page="fbadmin"><span class="ico">📥</span><span class="lbl">משובים שהתקבלו</span><span class="val" id="v-fbadmin"></span><span class="chev"></span></button>
+        <button type="button" class="ios-row nav install-row not-in-app" data-install-open><span class="ico">➕</span><span class="lbl">הוספה למסך הבית</span><span class="chev"></span></button>
         <button type="button" class="ios-row nav" data-page="updates"><span class="ico">⬆️</span><span class="lbl">עדכונים</span><span class="val" id="v-updates"></span><span class="chev"></span></button>
       </div></div>
-      <div class="ios-group"><div class="ios-box">
+      <div class="ios-group not-in-app"><div class="ios-box">
         <button type="button" class="ios-row danger center" id="logout-btn">יציאה</button>
-      </div><p class="ios-foot">היציאה דורשת קוד בכניסה הבאה. ההערות והכיולים נשמרים.</p></div>
+      </div><p class="ios-foot">היציאה דורשת קוד בכניסה הבאה.<span class="coach-only"> ההערות והכיולים נשמרים.</span></p></div>
       <footer class="app-footer" lang="en" dir="ltr"><span class="app-ver"></span> · Powered by <a class="footer-luma" href="https://luma.palgitraining.com" target="_blank" rel="noopener">LUMA<svg class="luma-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg></a> · By Roei Palgi</footer>
     </div>
 
     <div class="ios-page" data-pg="alerts" hidden>
       <div class="ios-group"><p class="ios-gtitle">לפני שספורטאי שלי עולה לבולדר 1</p><div class="ios-box">
-        <label class="ios-row"><span class="lbl">2 סבבים לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.w2"></label>
-        <label class="ios-row"><span class="lbl">סבב לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.w1"></label>
+        <label class="ios-row"><span class="lbl">2 רוטציות לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.w2"></label>
+        <label class="ios-row"><span class="lbl">רוטציה לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.w1"></label>
         <label class="ios-row"><span class="lbl">2 דקות לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.m2"></label>
         <label class="ios-row"><span class="lbl">דקה לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.m1"></label>
         <label class="ios-row"><span class="lbl">10 שניות לפני</span><input type="checkbox" class="ios-sw" data-set="alerts.s10"></label>
@@ -253,9 +332,9 @@
     </div>
 
     <div class="ios-page" data-pg="look" hidden>
-      <div class="ios-group"><p class="ios-gtitle">החלקה בין סבבים</p><div class="ios-box">
-        <label class="ios-row"><span class="lbl">רק סבבים עם ספורטאים שלי</span><input type="checkbox" class="ios-sw" data-set="swipeMine"></label>
-      </div><p class="ios-foot">החלקה עם האצבע משמאל לימין עוברת לסבב הבא באותה תחרות, ומימין לשמאל לסבב הקודם.</p></div>
+      <div class="ios-group"><p class="ios-gtitle">החלקה בין ראונדים</p><div class="ios-box">
+        <label class="ios-row"><span class="lbl">רק ראונדים עם ספורטאים שלי</span><input type="checkbox" class="ios-sw" data-set="swipeMine"></label>
+      </div><p class="ios-foot">החלקה עם האצבע משמאל לימין עוברת לראונד הבא באותה תחרות, ומימין לשמאל לראונד הקודם.</p></div>
       <div class="ios-group"><p class="ios-gtitle">מצב</p><div class="ios-box">
         <label class="ios-row check"><span class="lbl">בהיר</span><input type="radio" name="theme" value="light" data-set="theme"><span class="tick">✓</span></label>
         <label class="ios-row check"><span class="lbl">כהה</span><input type="radio" name="theme" value="dark" data-set="theme"><span class="tick">✓</span></label>
@@ -290,13 +369,13 @@
         <div class="ios-row"><span class="lbl">סוג</span><div class="seg" role="group" aria-label="סוג משוב"><button type="button" data-fbtype="bug" aria-pressed="true">תקלה</button><button type="button" data-fbtype="suggestion" aria-pressed="false">הצעה לשיפור</button></div></div>
         <label class="ios-row viewer-only"><span class="lbl">שם (לא חובה)</span><input type="text" id="fb-name" class="ios-text" maxlength="60" autocomplete="name"></label>
         <div class="ios-row fb-text-row"><textarea id="fb-text" rows="4" maxlength="3000" placeholder="מה קרה, או מה כדאי לשפר?"></textarea></div>
-        <button type="button" class="ios-row link center" id="fb-send">שליחה</button>
+        <div class="ios-row fb-send-row"><button type="button" class="btn btn-primary" id="fb-send">שליחה</button></div>
       </div><p class="ios-foot" id="fb-msg">נשלח לרועי עם גרסת האפליקציה וסוג המכשיר, כדי שיהיה קל לבדוק.</p></div>
       <div class="ios-group"><p class="ios-gtitle">המשובים שלי</p><div class="ios-box" id="fb-mine"></div></div>
     </div>
 
     <div class="ios-page" data-pg="fbadmin" hidden>
-      <div class="ios-group"><div class="seg fb-filter" role="group" aria-label="סינון"><button type="button" data-fbf="open" aria-pressed="true">פתוחים</button><button type="button" data-fbf="bug" aria-pressed="false">תקלות</button><button type="button" data-fbf="suggestion" aria-pressed="false">הצעות</button><button type="button" data-fbf="all" aria-pressed="false">הכל</button></div></div>
+      <div class="ios-group"><div class="choices fb-filter" role="group" aria-label="סינון"><button type="button" class="choice" data-fbf="open" aria-pressed="true">פתוחים</button><button type="button" class="choice" data-fbf="bug" aria-pressed="false">תקלות</button><button type="button" class="choice" data-fbf="suggestion" aria-pressed="false">הצעות</button><button type="button" class="choice" data-fbf="all" aria-pressed="false">הכל</button></div></div>
       <div class="ios-group"><div class="ios-box" id="fb-all"></div></div>
     </div>
 
@@ -339,7 +418,7 @@
     <h2 id="confirm-title"></h2>
     <p id="confirm-text"></p>
     <div class="dlg-actions">
-      <button class="btn btn-ghost" value="cancel">ביטול</button>
+      <button class="btn btn-secondary" value="cancel">ביטול</button>
       <button class="btn btn-primary" value="ok" id="confirm-ok">סנכרון</button>
     </div>
   </form>
@@ -351,7 +430,7 @@
     <p class="muted small" id="manual-ctx"></p>
     <label>הראונד (מתחרה #1) מתחיל ב- <input id="manual-time" type="time" step="1" dir="ltr" required></label>
     <div class="dlg-actions">
-      <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
+      <button class="btn btn-secondary" value="cancel" formnovalidate>ביטול</button>
       <button class="btn btn-primary" value="save">החל</button>
     </div>
   </form>
@@ -365,7 +444,7 @@
     <div class="grid2">
       <label>להתחיל מ- <select id="sim-from">
         <option value="-120">2 דק' לפני ההתחלה</option>
-        <option value="mine">סבב לפני הספורטאי הראשון שלי</option>
+        <option value="mine">רוטציה לפני הספורטאי הראשון שלי</option>
         <option value="mid">אמצע הראונד</option>
         <option value="end">רבע שעה לפני הסוף</option>
       </select></label>
@@ -377,7 +456,7 @@
       </select></label>
     </div>
     <div class="dlg-actions">
-      <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
+      <button class="btn btn-secondary" value="cancel" formnovalidate>ביטול</button>
       <button class="btn btn-primary" value="go">הפעל הדמיה</button>
     </div>
   </form>
@@ -393,7 +472,7 @@
     </div>
     <label>מה קרה <textarea id="appeal-text" rows="5" maxlength="3000" placeholder="תיאור: אחיזה, ניסיון, טופ/זון, החלטת שופט…" required></textarea></label>
     <div class="dlg-actions">
-      <button class="btn btn-ghost" value="cancel" formnovalidate>ביטול</button>
+      <button class="btn btn-secondary" value="cancel" formnovalidate>ביטול</button>
       <button class="btn btn-primary" value="save">שמירה</button>
     </div>
   </form>
@@ -403,17 +482,17 @@
 <dialog id="clock-dlg" class="sc">
   <div class="sc-setup" id="sc-setup">
     <h2>שעון סימולציה · בולדר</h2>
-    <div class="sc-field"><span class="sc-lbl">אורך סבב</span>
-      <div class="seg" role="group" aria-label="אורך סבב"><button type="button" data-sc-len="240" aria-pressed="false">4 דק׳</button><button type="button" data-sc-len="300" aria-pressed="true">5 דק׳</button><button type="button" data-sc-len="custom" aria-pressed="false">אחר</button></div>
+    <div class="sc-field"><span class="sc-lbl">אורך רוטציה</span>
+      <div class="seg" role="group" aria-label="אורך רוטציה"><button type="button" data-sc-len="240" aria-pressed="false">4 דק׳</button><button type="button" data-sc-len="300" aria-pressed="true">5 דק׳</button><button type="button" data-sc-len="custom" aria-pressed="false">אחר</button></div>
       <label class="sc-custom" id="sc-custom" hidden>דקות:שניות <input id="sc-len" type="text" inputmode="numeric" dir="ltr" value="4:30" maxlength="5"></label></div>
-    <label class="sc-field"><span class="sc-lbl">מספר סבבים</span><input id="sc-n" type="number" min="1" max="60" value="10" inputmode="numeric"></label>
-    <p class="muted small">ביפים כמו בתחרות: ארוך בתחילת סבב, אחד כשנשארת דקה, 5 קצרים ב-5 השניות האחרונות. העוצמה לפי המכשיר.</p>
-    <div class="dlg-actions"><button type="button" class="btn btn-ghost" id="sc-close">סגירה</button><button type="button" class="btn btn-primary" id="sc-start" autofocus>התחל · 10 שניות</button></div>
+    <label class="sc-field"><span class="sc-lbl">מספר רוטציות</span><input id="sc-n" type="number" min="1" max="60" value="10" inputmode="numeric"></label>
+    <p class="muted small">ביפים כמו בתחרות: ארוך בתחילת רוטציה, אחד כשנשארת דקה, 5 קצרים ב-5 השניות האחרונות. העוצמה לפי המכשיר.</p>
+    <div class="dlg-actions"><button type="button" class="btn btn-secondary" id="sc-close">סגירה</button><button type="button" class="btn btn-primary" id="sc-start" autofocus>התחל · 10 שניות</button></div>
   </div>
   <div class="sc-run" id="sc-run" hidden>
     <div class="sc-round" id="sc-round"></div>
     <div class="sc-time" id="sc-time">5:00</div>
-    <div class="sc-ctrl"><button type="button" class="btn btn-ghost" id="sc-pause">עצירה</button><button type="button" class="btn btn-ghost" id="sc-stop">סיום</button></div>
+    <div class="sc-ctrl"><button type="button" class="btn btn-secondary" id="sc-pause">עצירה</button><button type="button" class="btn btn-secondary" id="sc-stop">סיום</button></div>
     <div class="sc-logos"><img src="logo-palgitraining.svg" alt="PalgiTraining" class="sc-palgi"><span class="sc-luma"><span class="powered-by" lang="en">Powered by</span><span class="brand-row"><img class="mark" src="mark.svg" alt=""><span class="wordmark">LUMA</span></span></span></div>
   </div>
 </dialog>

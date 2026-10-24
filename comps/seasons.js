@@ -37,11 +37,6 @@ export function evTone(e) {
   const m = evMeta(e);
   return m.type === 'ec' ? (m.age === 'youth' ? 'eyc' : 'ec') : ['wch', 'ech', 'ich'].includes(m.type) ? 'ch' : m.type === 'league' ? 'il' : 'wc';
 }
-const CODE = { wc: 'WC', ec: 'EC', wch: 'WCH', ech: 'ECH' };
-export function evCode(e) {
-  const m = evMeta(e), c = CODE[m.type]; if (!c) return '';
-  return `${m.age === 'youth' ? c[0] + 'Y' + c.slice(1) : c}-${['B', 'L'].filter(d => m.disc.includes(d)).join('')}`;
-}
 export function filterOptions(events) {
   const ms = events.map(evMeta), has = (k, v) => ms.some(m => (k === 'disc' ? m.disc.includes(v) : m[k] === v));
   return { disc: Object.keys(DISC).filter(v => has('disc', v)), type: Object.keys(TYPES).filter(v => has('type', v)), age: Object.keys(AGES).filter(v => has('age', v)) };
@@ -49,6 +44,13 @@ export function filterOptions(events) {
 // the filter that actually applies in a season: a hidden row (< 2 options) or a value this season doesn't offer is ignored
 export function effectiveFilter(f, opts) {
   return Object.fromEntries(Object.keys(opts).map(k => [k, opts[k].length < 2 ? [] : (f[k] || []).filter(v => opts[k].includes(v))]));
+}
+const ALL_L = { disc: "כל הענפים", type: "כל הסוגים", age: "כל הגילים" }, N_L = { disc: "ענפים", type: "סוגים", age: "גילים" }, LABELS = { disc: DISC, type: TYPES, age: AGES };
+// the text on a filter menu button: nothing / everything selected = "all", one = its label, several = "n …"
+export function filterLabel(k, selected, opts) {
+  const sel = [...selected].filter(v => (opts[k] || []).includes(v));
+  if (!sel.length || sel.length >= opts[k].length) return ALL_L[k];
+  return sel.length === 1 ? LABELS[k][sel[0]] : `${sel.length} ${N_L[k]}`;
 }
 export function filterEvents(items, f) {
   return items.filter(({ event }) => { const m = evMeta(event);
