@@ -17,7 +17,7 @@ import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.21.0';
+export const APP_VERSION = '3.21.1';
 
 const $ = s => document.querySelector(s);
 
@@ -305,6 +305,16 @@ function addAutoRounds(ev, info) {
 function loadIfscEventsCached() { // any event seen before, also long after it ended (its rounds stay)
   for (const ev of EVENTS().filter(e => e.ifscId && e.ifscPre)) { try { const info = JSON.parse(localStorage.getItem(IFSC_EV_KEY(ev.ifscId)) || 'null'); if (info) addAutoRounds(ev, info); } catch { /* no storage */ } }
 }
+// a link to a round that arrives with the round list (?round=, e.g. from an alert, first visit = nothing cached) → open it once
+let linkDone = false;
+function openPendingLink() {
+  const want = params.get('round');
+  if (linkDone || !want || current === want || !round(want) || Date.now() - T_LOAD > 20000) return; // not after the user moved on
+  linkDone = true; current = want; screen = 'round';
+  $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false');
+  for (const x of ['mine', 'all', 'results', 'log']) $('#view-' + x)._html = null;
+  openRoundView();
+}
 async function syncIfscEvents(force = false) {
   if (document.hidden && !force) return;
   for (const ev of autoEvents()) {
@@ -315,7 +325,7 @@ async function syncIfscEvents(force = false) {
       if (!res.ok) continue;
       const info = await res.json();
       try { localStorage.setItem(IFSC_EV_KEY(ev.ifscId), JSON.stringify(info)); } catch { /* private mode */ }
-      if (addAutoRounds(ev, info)) render();
+      if (addAutoRounds(ev, info)) { openPendingLink(); render(); }
     } catch { /* offline: the cached list stays */ }
   }
 }
