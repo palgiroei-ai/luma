@@ -18,11 +18,12 @@ export const DEFAULT_SETTINGS = {
   dark: 'plum',      // dark style like Wingate: plum | charcoal | black
   swipeMine: true,   // swipe between rounds: only rounds with my athletes (3.2.0, Roei); off = every round of the competition
   autoArm: true,     // 3.6.0: sound + screen-on start on the first touch (no start button; bell in the header)
+  leadAlert: 'n2',  // 3.22.0: lead alert — n2 / n3 = that many climbers before her on the route, m10 = 10 min before her estimate
   homeView: 'list',  // home screen: list (one row per competition, default — Roei 2026-10-12) | detail
 };
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const blank = () => ({ offsets: {}, delays: {}, notes: [], appeals: [], fired: {}, code: null, settings: {}, mineAdd: {}, mineDel: {}, push: { on: false, device: null },
-  v: 0, device: null, devName: '', devices: {}, meta: {}, dirty: {}, rev: 0, lastSync: 0, photos: {}, tags: {} });
+  v: 0, device: null, devName: '', devices: {}, meta: {}, dirty: {}, rev: 0, lastSync: 0, photos: {}, tags: {}, lead: {} });
 
 export function defaultDeviceName(ua = navigator.userAgent || '', touch = navigator.maxTouchPoints > 1) {
   if (/iPad/.test(ua) || (/Macintosh/.test(ua) && touch)) return 'אייפד';
@@ -56,6 +57,15 @@ if (state.v < 4) {
   for (const k of Object.keys(state.meta || {})) if (k.startsWith('tag:')) delete state.meta[k];
   state.tags = {}; state.rev = 0; state.v = 4; save();
 }
+// v5 (3.22.0 lead live board): ≤3.21 skipped 'lead' rows but moved rev past them → forget + pull again once.
+if (state.v < 5) {
+  for (const k of Object.keys(state.meta || {})) if (k.startsWith('lead:')) delete state.meta[k];
+  state.lead = {}; state.rev = 0; state.v = 5; save();
+}
+
+const LEAD_ROUTE = /:[AB]$/; // lead item ids: "round:A" / "round:B" = queue marks, bare "round" = route settings
+const leadSetNorm = d => ({ colors: { A: d?.colors?.A || '#D32F2F', B: d?.colors?.B || '#1E4FB8' }, swap: !!d?.swap });
+const leadCtlNorm = d => ({ manual: !!d?.manual, starts: (d?.starts || []).map(Number).filter(Number.isFinite) });
 
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* ignore */ }
@@ -147,6 +157,15 @@ export const store = {
   setTag(roundId, b, tag) { const id = roundId + ':' + b; state.tags = state.tags || {}; state.tags[id] = normTag(tag); touch('tag', id); },
   clearTag(roundId, b) { const id = roundId + ':' + b; if (state.tags) delete state.tags[id]; touch('tag', id); },
 
+  // lead live board (3.22.0): manual queue marks per route ("round:A|B") + route settings per round ("round"), shared like tags
+  leadCtl(roundId, route) { const c = state.lead?.[roundId + ':' + route]; return { manual: !!c?.manual, starts: [...(c?.starts || [])] }; },
+  setLeadCtl(roundId, route, ctl) { const id = roundId + ':' + route; state.lead = state.lead || {}; state.lead[id] = { manual: !!ctl?.manual, starts: (ctl?.starts || []).map(Number).filter(Number.isFinite) }; touch('lead', id); },
+  leadSet(roundId) { return leadSetNorm(state.lead?.[roundId]); },
+  setLeadSet(roundId, patch) {
+    const cur = leadSetNorm(state.lead?.[roundId]); state.lead = state.lead || {};
+    state.lead[roundId] = leadSetNorm({ colors: { ...cur.colors, ...(patch?.colors || {}) }, swap: patch?.swap ?? cur.swap }); touch('lead', roundId);
+  },
+
   // ---- sync ----
   get device() { return state.device; },
   get devName() { return state.devName; },
@@ -167,6 +186,7 @@ export const store = {
         const x = listOf(kind).find(n => n.id === id);
         if (x) out.push({ kind, id, t: x.t, del: x.del ? 1 : 0, data: STRIP(x) }); else delete state.dirty[key];
       } else {
+        if (kind === 'lead') { const ld = state.lead?.[id]; out.push({ kind, id, t: state.meta[key] || 1, del: ld ? 0 : 1, data: ld || null }); continue; }
         if (kind === 'tag') { const tg = state.tags?.[id]; out.push({ kind, id, t: state.meta[key] || 1, del: tg ? 0 : 1, data: tg || null }); continue; }
         const data = kind === 'offset' ? { v: state.offsets[id] || 0, d: this.delay(id) } : kind === 'mine' ? { add: this.mineAdd(id), del: this.mineDel(id) } : { name: state.devName };
         out.push({ kind, id, t: state.meta[key] || 1, del: 0, data });
@@ -185,7 +205,7 @@ export const store = {
   },
   // rows from the server (newest wins). Returns what changed so the UI can re-render / tell the coach.
   applyRemote(items, rev) {
-    const changed = { any: false, offsets: [], photos: [], tags: [] };
+    const changed = { any: false, offsets: [], photos: [], tags: [], lead: [] };
     for (const r of items || []) {
       const key = r.kind + ':' + r.id;
       if (r.kind === 'note' || r.kind === 'appeal') {
@@ -212,6 +232,10 @@ export const store = {
         const tg = r.del ? null : normTag(r.data);
         if (tg) state.tags[r.id] = tg; else delete state.tags[r.id];
         changed.tags.push(r.id);
+      } else if (r.kind === 'lead') {
+        state.lead = state.lead || {};
+        if (r.del || !r.data) delete state.lead[r.id]; else state.lead[r.id] = LEAD_ROUTE.test(r.id) ? leadCtlNorm(r.data) : leadSetNorm(r.data);
+        changed.lead.push(r.id);
       } else if (r.kind === 'device') {
         if (r.id === state.device) state.devName = r.data?.name || state.devName;
         else state.devices[r.id] = String(r.data?.name || '');

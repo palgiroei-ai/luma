@@ -1,0 +1,127 @@
+// 3.22.0: lead live board — timing engine (pure, no DOM; also imported by src/ build code).
+// A route's queue: slots with a leg on it (leg.net set), by leg.pos. Auto = "not earlier than" (NET) times;
+// manual = coach marks "הבאה על הקיר" (ctl.starts = start time of each climber in the order).
+// Circular import with engine.js: function declarations only are read across (no top-level values at load).
+import { zonedMs } from './engine.js';
+
+export const LEAD_CLIMB_MS = 400000, ON_TIME_MS = 120000, DOUBLE_TAP_MS = 3000; // 6:00 climb + 0:40 observation
+export const LEAD_GRACE_MS = 2700000; // 3.22.0 review fix: a manual route nobody tapped to the end → after, 45 min past its plan end
+
+// 0-based B index for the climber at 0-based A index `aIndex` among n: B starts half a field later (offset rule)
+export function offsetPos(n, aIndex) { return (aIndex - Math.floor(n / 2) + n) % n; }
+
+// slot indexes on that route, by position; a withdrawn climber (no leg / no NET) is not in the order
+export function legOrder(round, route) {
+  return round.slots.map((s, k) => ({ k, leg: s && s[route] }))
+    .filter(x => x.leg && x.leg.net).sort((a, b) => a.leg.pos - b.leg.pos).map(x => x.k);
+}
+
+export function netMs(round, k, route) {
+  return zonedMs(`${round.date}T${round.slots[k][route].net}:00`);
+}
+
+function median(xs) {
+  if (!xs.length) return LEAD_CLIMB_MS;
+  const s = xs.slice().sort((a, b) => a - b), h = s.length >> 1;
+  return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2;
+}
+
+export function routeState(round, route, nowMs, ctl = { manual: false, starts: [] }) {
+  const order = legOrder(round, route), nets = order.map(k => netMs(round, k, route));
+  const last = order.length - 1, step = median(nets.slice(1).map((t, i) => t - nets[i]));
+  const at = (cur, curStart, phase, paceMs, behindMs, estMs, planMs, endMs) =>
+    ({ order, cur, curK: cur >= 0 ? order[cur] : null, curStart, phase, paceMs, behindMs, estMs, planMs, endMs });
+  if (!ctl || !ctl.manual) {
+    let cur = -1;
+    while (cur < last && nets[cur + 1] <= nowMs) cur++;
+    const endMs = nets[last] + LEAD_CLIMB_MS, phase = cur < 0 ? 'before' : nowMs >= endMs ? 'after' : 'live';
+    return { mode: 'auto', ...at(cur, cur >= 0 ? nets[cur] : null, phase, step, null, i => nets[i], i => nets[i], endMs) };
+  }
+  const starts = ctl.starts || [], cur = Math.min(starts.length, order.length) - 1;
+  const curStart = cur >= 0 ? starts[cur] : null;
+  const paceMs = cur >= 1 ? (starts[cur] - starts[0]) / cur : step;
+  const estMs = i => (cur < 0 ? nets[i] : i < cur ? starts[i] : i === cur ? curStart
+    : Math.max(nets[i], curStart + (i - cur) * paceMs, nowMs + (i - cur - 1) * paceMs)); // 3.22.0: a forgotten tap never leaves estimates in the past
+  // 3.22.0 Task 8 fix: clock-free plan (marks + pace + NET only) — alerts must not follow the clock between taps
+  const planMs = i => (cur < 0 ? nets[i] : i <= cur ? starts[i] : Math.max(nets[i], curStart + (i - cur) * paceMs));
+  // 3.22.0 review fix: last climber tapped → her slot end; otherwise the plan end + LEAD_GRACE_MS (a forgotten last tap never stays live)
+  const endMs = cur === last && cur >= 0 ? curStart + LEAD_CLIMB_MS : planMs(last) + LEAD_CLIMB_MS + LEAD_GRACE_MS;
+  const phase = nowMs >= endMs ? 'after' : cur < 0 ? 'before' : 'live';
+  // 3.22.0 fix: late = the current climber started after her NET, or the next NET passed without a tap (chip agrees with estimates)
+  const behindMs = cur < 0 ? null : Math.max(curStart - nets[cur], cur < last && nowMs > nets[cur + 1] ? nowMs - nets[cur + 1] : -Infinity);
+  return { mode: 'manual', ...at(cur, curStart, phase, paceMs, behindMs, estMs, planMs, endMs) };
+}
+
+// "הבאה על הקיר": a second tap within DOUBLE_TAP_MS is the same start (Review Focus 2); no marks past the last climber.
+// Callers switch with toManual first — markNext on a non-manual ctl returns it unchanged.
+export function markNext(round, route, ctl, nowMs) {
+  if (!ctl || !ctl.manual) return ctl;
+  const starts = ctl.starts || [], lastMark = starts[starts.length - 1];
+  if (starts.length >= legOrder(round, route).length) return ctl;
+  if (lastMark != null && nowMs - lastMark < DOUBLE_TAP_MS) return ctl;
+  return { ...ctl, manual: true, starts: [...starts, nowMs] };
+}
+export function undoMark(ctl) { return { ...ctl, starts: ((ctl && ctl.starts) || []).slice(0, -1) }; }
+// switch to manual at the auto state's climber, who "has not started yet" → the previous one stays on the wall
+export function toManual(round, route, nowMs) {
+  const s = routeState(round, route, nowMs);
+  return { manual: true, starts: s.order.slice(0, Math.max(s.cur, 0)).map(k => netMs(round, k, route)) };
+}
+export function toAuto() { return { manual: false, starts: [] }; }
+
+export function legStatus(round, k, route, nowMs, ctl) {
+  const s = routeState(round, route, nowMs, ctl || undefined), i = s.order.indexOf(k);
+  if (i < 0) return { kind: 'none', ahead: 0, netMs: null, estMs: null, late: false };
+  const net = netMs(round, k, route), est = s.estMs(i), ahead = i - s.cur;
+  const kind = s.phase === 'after' || ahead < 0 ? 'done' : ahead === 0 ? 'wall' : ahead <= 2 ? 'prep' : 'wait';
+  return { kind, ahead, netMs: net, estMs: est, late: est - net >= ON_TIME_MS };
+}
+
+const routesOf = round => (round.routes || ['A', 'B']).filter(r => legOrder(round, r).length);
+
+export function leadPhase(round, nowMs, ctls = {}) {
+  const ph = routesOf(round).map(r => routeState(round, r, nowMs, ctls[r] || undefined).phase);
+  if (!ph.length || ph.every(p => p === 'before')) return 'before';
+  return ph.every(p => p === 'after') ? 'after' : 'live';
+}
+
+export function leadEndMs(round, ctls = {}) {
+  let end = -Infinity;
+  for (const r of routesOf(round)) {
+    end = Math.max(end, routeState(round, r, 0, ctls[r] || undefined).endMs); // = the moment the route turns 'after'
+  }
+  return end;
+}
+
+// two different athletes of `ks` on different routes, both not done, starting within one climb slot of each other
+export function leadOverlaps(round, ks, nowMs, ctls = {}) {
+  const legs = [];
+  for (const route of routesOf(round)) for (const k of ks) {
+    const st = legStatus(round, k, route, nowMs, ctls[route]);
+    if (st.kind !== 'none' && st.kind !== 'done') legs.push({ k, route, at: st.estMs });
+  }
+  legs.sort((a, b) => a.at - b.at);
+  const out = [];
+  for (let i = 0; i < legs.length; i++) for (let j = i + 1; j < legs.length && legs[j].at - legs[i].at < LEAD_CLIMB_MS; j++) {
+    if (legs[i].k !== legs[j].k && legs[i].route !== legs[j].route) out.push({ a: legs[i], b: legs[j] });
+  }
+  return out;
+}
+
+// pref n2/n3 = when the climber N places ahead starts; m10 = 10 min before the estimate; due until her slot ends
+// 3.22.0 Task 8 fix: never from the clock-floored estMs (it moves every tick between taps → re-armed alerts, a new push plan every 5 s).
+// Manual n2/n3 = trigger based: due once the climber N ahead (the first climber at the head) has a start mark, at = that mark,
+// `trig` = her index (the alert key). m10 / auto = the clock-free plan (planMs). est = planMs of her leg (alert text, until).
+export function leadAlertTimes(round, k, route, nowMs, ctl, pref) {
+  const st = legStatus(round, k, route, nowMs, ctl);
+  if (st.kind === 'none' || st.kind === 'done') return null;
+  const s = routeState(round, route, nowMs, ctl || undefined), i = s.order.indexOf(k), est = s.planMs(i), until = est + LEAD_CLIMB_MS;
+  if (pref === 'm10') return { at: est - 600000, until, est, trig: null };
+  const N = pref === 'n3' ? 3 : 2;
+  if (s.mode === 'manual') {
+    const j = Math.max(i - N, 0);
+    if (j > s.cur) return null; // the climber N ahead has not started yet
+    return { at: ctl.starts[j], until, est, trig: j };
+  }
+  return { at: i - N >= 0 ? s.planMs(i - N) : est - N * s.paceMs, until, est, trig: null };
+}

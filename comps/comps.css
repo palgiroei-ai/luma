@@ -1149,7 +1149,7 @@ body.intl-round #round-screen .mid, body.intl-round #par, body.intl-round .sec-h
 @media (max-width: 600px) { .res-tbl .n .fn { display: none; } }
 
 /* 3.16.0 saved lead rounds: no board / photos / tags; table = rank · climber · height per route (+ route place) · score */
-body.lead-round #board, body.lead-round #photos-btn, body.lead-round #tags-btn { display: none !important; }
+body.lead-round:not(.lead-live) #board, body.lead-round:not(.lead-live) #photos-btn, body.lead-round #tags-btn { display: none !important; } /* 3.22.0 Task 7: live lead = topos */
 /* 3.22.0 national lead before the start lists: programme + registered athletes, no clock / next-up */
 body.nat-lead-wait #round-screen .mid, body.nat-lead-wait #par { display: none !important; }
 .nl-card { padding: 14px 16px; }
@@ -1269,3 +1269,96 @@ bdi.lat { white-space: nowrap; } /* "Arco, ITA" never splits over two lines (rev
 .ios-row .ico .lico { width: 20px; height: 20px; vertical-align: -4px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
 body.board-gone #round-screen .mid { display: none; }
 .board-msg.ended { font-weight: 700; }
+
+/* 3.22.0 lead live board (national lead with a start list): route cards replace the board, clock and next-up.
+   Stripe = the route's hold colour (--rc, palette-checked in leadView.js); chips reuse the app's status colours. */
+body.lead-live #round-screen .mid, body.lead-live #par:not(.lead-par) { display: none !important; } /* 3.22.0 Task 9: #par.lead-par = the parallel-round hint stays */
+.lboard { display: flex; flex-direction: column; gap: 10px; }
+.lr-swap { align-self: flex-start; }
+.lroutes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.lroutes.one { grid-template-columns: minmax(0, 640px); }
+@media (max-width: 700px) { .lroutes { grid-template-columns: 1fr; } }
+.lroute { border-inline-start: 7px solid var(--rc); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.lr-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lr-name { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; }
+.lr-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--rc); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .25); flex: none; }
+.lr-tools { display: flex; align-items: center; gap: 6px; }
+.lr-pick { padding: 4px 10px; font-size: 15px; }
+.lroute .chip { font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: var(--r-pill); white-space: nowrap; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.chip.late { background: color-mix(in srgb, var(--appeal) 15%, transparent); color: var(--appeal); }
+.chip.prep { background: var(--added-bg); color: var(--added); }
+.chip.auto { background: var(--line); color: var(--muted); }
+.lr-swatches { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; border-radius: var(--r-sm); background: var(--chalk); }
+.lr-sw { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--card); box-shadow: 0 0 0 1px var(--border); cursor: pointer; padding: 0; }
+.lr-sw[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--navy); }
+.lr-topo { position: relative; display: block; width: 100%; height: 92px; padding: 0; border: 0; border-radius: var(--r-sm); overflow: hidden; background: var(--chalk); cursor: zoom-in; }
+.lr-topo img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.lr-topo span { position: absolute; inset-inline-start: 8px; bottom: 6px; background: rgb(0 0 0 / .6); color: var(--on-accent); font-size: 12px; border-radius: var(--r-sm); padding: 2px 8px; }
+.lr-note { margin: 0; font-size: 14px; }
+.lr-topo-add { flex: none; height: 56px; padding: 0 12px; text-align: center; } /* 3.22.0 Task 7: coach only, the boulder .ph-add look */
+.lr-wall { border-radius: var(--r-sm); background: var(--chalk); padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; }
+.lr-wall .lw-lbl { grid-column: 1 / -1; font-size: 12px; font-weight: 700; color: var(--live); }
+.lr-wall .lw-lbl small { color: var(--muted); font-weight: 600; font-size: 12px; }
+.lr-wall.wait .lw-lbl, .lr-wall.done .lw-lbl { color: var(--muted); font-size: 14px; }
+.lw-who { font-size: 20px; font-weight: 800; min-width: 0; overflow-wrap: anywhere; }
+.lw-who small { font-size: 13px; font-weight: 500; color: var(--muted); margin-inline-start: 6px; }
+.lw-who.mine, .lr-next li.mine .nm { color: var(--copper-text); }
+.lw-t { font-size: 22px; font-weight: 800; color: var(--live); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lw-t small { font-size: 12px; color: var(--muted); font-weight: 500; }
+.lw-bar { grid-column: 1 / -1; height: 5px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; }
+.lw-bar i { display: block; height: 100%; width: 0; background: var(--live); }
+.lr-pace { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
+.lr-pace b { color: var(--navy); font-variant-numeric: tabular-nums; }
+.lr-next { list-style: none; margin: 0; padding: 0; }
+.lr-next li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 2px; border-top: 1px solid var(--line); }
+.lr-next .pos { color: var(--muted); font-size: 13px; }
+.lr-next .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lr-next .times { font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lr-next .times .net { color: var(--muted); } .lr-next .times .eta { font-weight: 700; color: var(--appeal); }
+.lr-ctrl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lr-ctrl .lr-go { flex: 1; }
+.lr-ctrl .btn:disabled { opacity: .45; cursor: default; }
+.lr-ctrl .lr-undo { font-size: 20px; line-height: 1; padding: 10px 18px; }
+/* 3.22.0 lead "שלי": one row per route (stripe = the route's colour), hot card when a leg is in the prep area / on the wall */
+.lmine.hot { border-inline-start-color: var(--added); box-shadow: 0 0 0 2px var(--added-bg); }
+.lmine header .chip { margin-inline-start: auto; }
+.lmine .chip, .lall .chip { font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: var(--r-pill); white-space: nowrap; }
+.chip.done { background: var(--line); color: var(--muted); }
+.chip.live { background: color-mix(in srgb, var(--live) 14%, transparent); color: var(--live); }
+.lleg { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: var(--r-sm); background: var(--chalk); border-inline-start: 5px solid var(--rc); }
+.lleg .rt { font-weight: 800; font-size: 16px; }
+.lleg .st { font-size: 13px; min-width: 0; color: var(--muted); }
+.lleg .st .big { display: block; font-size: 16px; font-weight: 700; color: var(--navy); }
+.lleg .st .big.wall { color: var(--live); }
+.lleg .st [data-since] { font-variant-numeric: tabular-nums; direction: ltr; display: inline-block; }
+.lleg.prep .st .big { color: var(--added); }
+.lleg.done { opacity: .7; }
+.lleg .tm { text-align: end; font-size: 13px; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lleg .tm .ontime, .lleg .tm .eta { display: block; font-size: 17px; font-weight: 800; color: var(--navy); }
+.lleg .tm .eta { color: var(--appeal); }
+.lovl { grid-column: 1 / -1; margin: 0; padding: 8px 12px; border-radius: var(--r-sm); font-size: 14px; font-weight: 600;
+  background: color-mix(in srgb, var(--appeal) 13%, var(--card)); color: var(--appeal); }
+/* 3.22.0 lead full list: per route # · לא לפני · משוער · מצב; scrolls inside itself; band on whoever is on a wall */
+.lall-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--r); }
+.full.lall { min-width: 640px; font-size: 14px; }
+.full.lall th, .full.lall td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.full.lall th.grp { text-align: center; color: var(--navy); border-top: 4px solid var(--rc); }
+.full.lall .sep { border-inline-start: 2px solid var(--border); }
+.full.lall td.c-name small { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
+.full.lall td.c-name { white-space: normal; min-width: 120px; }
+.full.lall s { color: var(--muted); }
+.full.lall .eta { color: var(--appeal); font-weight: 700; }
+.full.lall .st-done { color: var(--muted); }
+.full.lall .st-wall { color: var(--live); font-weight: 700; }
+.full.lall .st-prep { color: var(--added); font-weight: 700; }
+.full.lall tr.climb td { background: color-mix(in srgb, var(--live) 8%, var(--card)); }
+.full.lall tr.climb td:first-child { box-shadow: inset -4px 0 0 var(--live); }
+.full.lall tr.mine.climb td { background: var(--copper-bg); }
+.full.lall tr.now td.c-st { color: inherit; font-weight: inherit; } /* the boulder band colours the status cell; here each route's state has its own colour */
+body.lead-live #round-screen > section { min-width: 0; } /* grid item: let the full list scroll inside .lall-wrap instead of widening the page */
+.lmine.hot.wall { border-inline-start-color: var(--live); box-shadow: 0 0 0 2px color-mix(in srgb, var(--live) 18%, transparent); }
+
+/* ---- 3.22.0 Task 9: parallel lead round hint (swipe) ---- */
+.par.lead-par { padding: 0; background: none; border: 0; box-shadow: none; margin-bottom: 8px; }
+.lead-par-hint { display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; font-weight: 600; text-align: start; padding: 8px 12px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--card); color: var(--navy); cursor: pointer; }

@@ -15,9 +15,11 @@ import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, is
 import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openTarget, appTheme, backToApp } from './entry.js';
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
+import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
+import { markNext, undoMark, toManual, toAuto, legStatus } from './lead.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.21.2';
+export const APP_VERSION = '3.22.0';
 
 const $ = s => document.querySelector(s);
 
@@ -363,6 +365,7 @@ const off = id => store.offset(id);
 function statusText(r, st) {
   switch (st.kind) {
     case 'waiting': return gw(r.id, 'ממתין', 'ממתינה');
+    case 'climbing': return 'על הקיר'; // 3.22.0 lead
     case 'boulder': return `על בולדר ${st.boulder}`;
     case 'rest': return `מנוחה בין ${st.from} ל-${st.to}`;
     case 'trailing': return `מנוחת סיום (אחרי ${r.boulders})`;
@@ -490,6 +493,8 @@ function renderDelayBtn(r) {
 // "השהיה": the federation clock adds 0–2 s at every window change → each window lasts slotSec + delay (shared, per round)
 function applyDelays() {
   for (const r of DATA.rounds) { if (r.slotSec0 == null) r.slotSec0 = r.slotSec; r.slotSec = r.slotSec0 + store.delay(r.id); }
+  // 3.22.0: lead live board — each route's shared mode + marks (store, synced) → round.leadCtl, read by engine.js / lead.js
+  for (const r of DATA.rounds) if (isLeadLive(r)) r.leadCtl = Object.fromEntries(leadRoutes(r).map(x => [x, store.leadCtl(r.id, x)]));
 }
 
 function renderNext(r, s) {
@@ -569,6 +574,10 @@ function mineCards(r, t, el) {
   if (natLeadWait(r)) { patch(el, natLeadPanel(r)); return; }
   const list = mineOf(r.id), R = resByBib(r);
   if (!list.length) { patch(el, `<p class="muted">${r.slots.length ? (VIEWER ? 'אין ספורטאי הפלגיה בראונד הזה.' : 'אין ספורטאים שלי בראונד הזה.') : 'סדר העלייה עוד לא התקבל.'}</p>`); return; }
+  if (isLeadLive(r)) { // 3.22.0 lead: one row per route per athlete + the amber overlap line (no boulder layout)
+    const c = { ...leadCtx(r), now: t, mine: list, notes: k => store.notes(n => n.round === r.id && n.k === k), appeals: k => store.appeals(a => a.round === r.id && a.k === k) };
+    patch(el, (VIEWER ? '<p class="muted small viewer-hint">מודגשים: ספורטאי הפלגיה</p>' : leadOverlapHtml(r, c)) + leadMineHtml(r, c)); return;
+  }
   patch(el, (VIEWER ? '<p class="muted small viewer-hint">מודגשים: ספורטאי הפלגיה</p>' : overlapHtml(r, t)) + list.map(m => {
     const s = r.slots[m.k];
     const st = athleteStatus(r, m.k, t, off(r.id));
@@ -593,6 +602,7 @@ function renderAll(r) {
   const t = now(); const mk = mineK(r.id); const base = new Set((DATA.mine[r.id] || []).map(m => m.k));
   if (natLeadWait(r)) { patch($('#view-all'), natLeadRegHtml(r)); return; } // 3.22.0: the registered athletes
   if (!r.slots.length) { patch($('#view-all'), '<p class="muted">סדר העלייה עוד לא התקבל.</p>'); return; }
+  if (isLeadLive(r)) { patch($('#view-all'), leadAllHtml(r, { ...leadCtx(r), now: t, mine: mineOf(r.id), base })); scrollToBand(); return; } // 3.22.0 lead: per route, band = on a wall
   const live = stateAt(r, t, off(r.id)).phase === 'live';
   let nextDone = !live;
   const R = resByBib(r), nc = R ? 7 : 6; // results column (3.4.0) only when the round has results / live results
@@ -610,9 +620,12 @@ function renderAll(r) {
       const tg = VIEWER || base.has(k) ? '' : `<button type="button" class="mine-tg" data-mine-tg="${k}" aria-pressed="${mk.has(k)}" aria-label="${mk.has(k) ? 'הסרה מהספורטאים שלי' : 'הוספה לספורטאים שלי'} · ${esc(s.name)}"></button>`;
       return pre + `<tr class="${mk.has(k) ? 'mine' : ''}${added ? ' added' : ''}${now_ ? ' now' : ''} st-${st.kind}"><td>${s.order}</td><td class="c-bib">${s.bib}</td><td class="c-name"><span class="nm-in">${tg}<span>${esc(s.name)}${mk.has(k) ? ` <b>(${esc(shortOf(r.id, k))})</b>` : ''}</span></span></td>
         <td>${fmtClock(st.startMs)}</td><td class="c-st">${statusText(r, st)}</td>${resTd(s)}
-        <td class="row-actions"><button type="button" class="sync-btn" data-sync="${k}">${gw(r.id, 'מתחיל עכשיו', 'מתחילה עכשיו')}</button>
+        <td class="row-actions">${isLeadLive(r) ? '' : `<button type="button" class="sync-btn" data-sync="${k}">${gw(r.id, 'מתחיל עכשיו', 'מתחילה עכשיו')}</button>`}
           <button type="button" class="sync-btn btn-appeal" data-appeal="${k}">ערעור</button></td></tr>`;
     }).join('')}</tbody></table></div>`);
+  scrollToBand();
+}
+function scrollToBand() {
   if (scrollAll) {
     scrollAll = false;
     const row = $('#view-all tr.now') || $('#view-all tr.next-line');
@@ -819,10 +832,10 @@ function renderCombo(r) {
 // "כולם / רק ישראלים" (3.18.0: one place, right above the results table)
 const isrSeg = (only, fem) => `<div class="choices res-cats res-isr" role="group" aria-label="סינון"><button type="button" class="choice" data-resisr="0" aria-pressed="${!only}">כולם</button><button type="button" class="choice" data-resisr="1" aria-pressed="${only}">🇮🇱 ${fem ? 'רק ישראליות' : 'רק ישראלים'}</button></div>`;
 
-function appealText(a) {
+function appealText(a) { // 3.22.0 lead: route A/B, start lists without bibs
   const r = round(a.round);
-  return [`ערעור — ${evOf(r).title} · ${roundTitle(r.title)} (${dayLabel(r.date)})`, `ספורטאי: ${a.name} · מס' גב ${a.bib} · סדר עלייה ${a.order}`,
-    `בולדר: ${a.boulder}`, `שעה: ${a.time}`, `תיאור: ${a.text}`].join('\n');
+  return [`ערעור — ${evOf(r).title} · ${roundTitle(r.title)} (${dayLabel(r.date)})`, `ספורטאי: ${a.name}${a.bib != null ? ` · מס' גב ${a.bib}` : ''} · סדר עלייה ${a.order}`,
+    `${/^[AB]$/.test(a.boulder) ? 'מסלול' : 'בולדר'}: ${a.boulder}`, `שעה: ${a.time}`, `תיאור: ${a.text}`].join('\n');
 }
 
 // ---- notes & appeals (3.1.0): this round or all rounds, filter by name, edit notes, appeal status ----
@@ -833,7 +846,7 @@ function logItems() {
   const all = [...store.notes(inScope).map(n => ({ ...n, type: 'note' })), ...store.appeals(inScope).map(a => ({ ...a, type: 'appeal' }))];
   return { all, shown: (logName ? all.filter(i => i.short === logName) : all).sort((a, b) => b.at - a.at) };
 }
-const noteText = n => `${n.short} · ${roundTitle(round(n.round)?.title)} · ${fmtClock(n.at)} · ${n.ctx}${n.edited ? ` · נערך ${fmtClock(n.edited)}` : ''}\n${n.text}`;
+const noteText = n => `${n.short} · ${roundTitle(round(n.round)?.title)} · ${fmtClock(n.at)}${n.ctx ? ` · ${n.ctx}` : ''}${n.edited ? ` · נערך ${fmtClock(n.edited)}` : ''}\n${n.text}`;
 const appealFull = a => appealText(a) + (a.status && a.status !== 'pending' ? `\nסטטוס: ${APPEAL_ST.find(x => x[0] === a.status)[1]}${a.outcome ? ' · ' + a.outcome : ''}` : '');
 function logCard(i) {
   const r = round(i.round);
@@ -849,7 +862,7 @@ function logCard(i) {
       <button type="button" class="btn btn-sm btn-secondary btn-danger-text" data-del-appeal="${i.id}">מחיקה</button></div></article>`;
   }
   const editing = editId === i.id;
-  return `<article class="log card"><header><b>📝 ${esc(i.short)}</b><span class="muted small">${esc(roundTitle(r?.title))} · ${fmtClock(i.at)} · ${esc(i.ctx)}${i.edited ? ` · נערך ${fmtClock(i.edited)}` : ''}${from}</span></header>
+  return `<article class="log card"><header><b>📝 ${esc(i.short)}</b><span class="muted small">${esc(roundTitle(r?.title))} · ${fmtClock(i.at)}${i.ctx ? ` · ${esc(i.ctx)}` : ''}${i.edited ? ` · נערך ${fmtClock(i.edited)}` : ''}${from}</span></header>
     ${editing ? `<textarea class="note-edit" id="edit-${i.id}" rows="3" aria-label="עריכת ההערה">${esc(i.text)}</textarea>
       <div class="ath-actions"><button type="button" class="btn btn-sm btn-primary" data-edit-save="${i.id}">שמירה</button><button type="button" class="btn btn-sm btn-secondary" data-edit-cancel>ביטול</button></div>`
     : `<p>${esc(i.text)}</p><div class="ath-actions"><button type="button" class="btn btn-sm btn-secondary" data-edit="${i.id}">עריכה</button><button type="button" class="btn btn-sm btn-secondary btn-danger-text" data-del-note="${i.id}">מחיקה</button></div>`}</article>`;
@@ -919,7 +932,8 @@ function evPhase(ev, t = now()) {
   if (ev.rounds.length) {
     const rs = ev.rounds.filter(r => r.slots.length);
     if (rs.some(r => stateAt(r, t, off(r.id)).phase === 'live') || ev.rounds.some(r => r.ifsc && ifscPhase(r) === 'live')) return 'live';
-    const done = r => (r.ifsc ? ifscPhase(r) === 'after' : roundStart(r) + off(r.id) + (r.slots.length ? windowCount(r) * r.slotSec * 1000 : 12 * 3600e3) < t);
+    const done = r => (r.ifsc ? ifscPhase(r) === 'after' : isLeadLive(r) ? stateAt(r, t).phase === 'after' // 3.22.0 lead: by its routes
+      : roundStart(r) + off(r.id) + (r.slots.length ? windowCount(r) * r.slotSec * 1000 : 12 * 3600e3) < t);
     return ev.rounds.every(done) ? 'after' : 'before';
   }
   const today = evToday(ev.event);
@@ -1121,13 +1135,16 @@ function renderHomeDetail(seg, fromList) {
     const ph = r.slots.length ? stateAt(r, t, off(r.id)).phase : 'wait';
     const badge = { live: '<span class="hb live">חי עכשיו</span>', before: '<span class="hb soon">בקרוב</span>', after: '<span class="hb done">הסתיים</span>', wait: '<span class="hb wait">ממתין לסדר עלייה</span>' }[ph];
     const rk = rankedOf(r.id), rankOfK = k => rk?.find(x => x.bib === r.slots[k].bib)?.rank;
-    const mine = mineOf(r.id).map(m => `<li><b>${esc(m.short)}</b> <span>${rk ? (rankOfK(m.k) ? `מקום ${rankOfK(m.k)}` : gw(r.id, 'לא התחיל', 'לא התחילה')) : `#${r.slots[m.k].order} · ${fmtHM(slotStartMs(r, m.k, off(r.id)))}`}</span></li>`).join('');
-    const live = ph === 'live' ? (() => { const s = stateAt(r, t, off(r.id)); const b1 = s.boulders[0]; return `<p class="h-live">רוטציה ${s.n + 1} מתוך ${windowCount(r)} · בולדר 1: ${b1 ? `#${b1.order} ${esc(b1.name)}` : '—'}</p>`; })() : '';
+    const LL = isLeadLive(r); // 3.22.0 lead: a climber's time = her next leg (done → סיימה)
+    const leadAt = k => { const a = athleteStatus(r, k, t); return a.kind === 'done' ? gw(r.id, 'סיים', 'סיימה') : fmtHM(a.startMs); };
+    const mine = mineOf(r.id).map(m => `<li><b>${esc(m.short)}</b> <span>${rk ? (rankOfK(m.k) ? `מקום ${rankOfK(m.k)}` : gw(r.id, 'לא התחיל', 'לא התחילה')) : `#${r.slots[m.k].order} · ${LL ? leadAt(m.k) : fmtHM(slotStartMs(r, m.k, off(r.id)))}`}</span></li>`).join('');
+    const live = ph !== 'live' ? '' : LL ? leadHomeLine(r, t)
+      : (() => { const s = stateAt(r, t, off(r.id)); const b1 = s.boulders[0]; return `<p class="h-live">רוטציה ${s.n + 1} מתוך ${windowCount(r)} · בולדר 1: ${b1 ? `#${b1.order} ${esc(b1.name)}` : '—'}</p>`; })();
     return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(roundTitle(r.title))}</h3>${rk ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
-      <p class="muted small">${r.slots.length ? range(fmtHM(roundStart(r) + off(r.id)), fmtHM(roundEndMs(r))) : fmtHM(roundStart(r) + off(r.id))} · ${r.boulders} בולדרים · רוטציה ${fmtDur(r.slotSec0 * 1000)}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
+      <p class="muted small">${r.slots.length ? range(fmtHM(roundStart(r) + off(r.id)), fmtHM(roundEndMs(r))) : fmtHM(roundStart(r) + off(r.id))} · ${LL ? unitsOf(r) : `${r.boulders} בולדרים · רוטציה ${fmtDur(r.slotSec0 * 1000)}`}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
       ${isoRow(r)}${live}${mine ? `<ul class="h-mine">${mine}</ul>` : `<p class="muted small">${r.slots.length ? 'אין ספורטאים שלי' : ''}</p>`}
-      ${mineOf(r.id).length > 1 ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} רוטציות של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
+      ${mineOf(r.id).length > 1 && !LL ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} רוטציות של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
   patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="icon-btn h-back" id="home-back" aria-label="חזרה"><span class="ios-back-chev" aria-hidden="true"></span></button>' : ''}<h2 class="h-event">${bidiParts(evName(ev))} <span class="muted">· ${placeOnce(evName(ev), ev.place) ? `<bdi>${esc(ev.place)}</bdi>` + tbdMark(ev.placeTbd) + ' · ' : ''}${rangeLabel(cur.dates)}${tbdMark(ev.dateTbd)}</span></h2>${seg}</div>${chips}` +
@@ -1207,6 +1224,9 @@ function render() {
   document.body.classList.toggle('intl-round', !!r.ifsc);
   document.body.classList.toggle('lead-round', !!r.lead);
   document.body.classList.toggle('nat-lead-wait', natLeadWait(r)); // 3.22.0: no clock / next-up before the start lists
+  document.body.classList.toggle('lead-live', isLeadLive(r)); // 3.22.0: route cards replace the board, clock and next-up
+  const phT = $('#photos-btn').lastChild, phL = isLeadLive(r) ? 'טופו' : 'תמונות בולדרים'; // 3.22.0 Task 7: replace / delete a topo
+  if (phT.textContent !== phL) phT.textContent = phL;
   // consistency round §10: the section heading names the selected tab
   const allLbl = natLeadWait(r) ? 'הרשומים' : 'סדר עלייה מלא'; // 3.22.0: before the start lists the list = who registered
   $('[data-view="all"]').textContent = allLbl;
@@ -1218,6 +1238,7 @@ function render() {
   $('#board').hidden = gone && !!rs;
   renderTabs();
   if (gone) patch($('#board'), rs ? '' : '<div class="board-msg ended">הראונד הסתיים · התוצאות יופיעו כאן</div>');
+  else if (isLeadLive(r)) patch($('#board'), leadBoardHtml(r, leadCtx(r)));
   else { renderBoard(r, s); renderTimer(r, s); renderNext(r, s); }
   if (gone) $('#par').hidden = true; // §5 board gone: no parallel-round box on an ended round either (final review)
   else renderPar(r);
@@ -1237,7 +1258,50 @@ function render() {
   if (view === 'log') renderLog();
   const t = now();
   document.querySelectorAll('[data-until]').forEach(el => { el.textContent = fmtDur(Number(el.dataset.until) - t); });
+  document.querySelectorAll('[data-since]').forEach(el => { el.textContent = fmtDur(t - Number(el.dataset.since)); }); // 3.22.0 lead: time on the wall
+  document.querySelectorAll('[data-bar-since]').forEach(el => { el.style.width = `${Math.min(100, Math.max(0, (t - Number(el.dataset.barSince)) / 3600))}%`; }); // of 6:00
   checkAlerts();
+}
+
+// ---- 3.22.0 lead live board: context for web/leadView.js + the coach's route controls (shared marks / settings in store) ----
+const leadPick = {}; // round → route whose colour picker is open (this session)
+function leadCtx(r) {
+  return { now: now(), ctls: r.leadCtl || {}, set: store.leadSet(r.id), mineKs: mineK(r.id), viewer: VIEWER, pick: leadPick[r.id] || null,
+    // 3.22.0 Task 7: topo = the round's photo b 1 (A) / 2 (B); route notes = notes with k: null + route (coach only — viewers never sync notes)
+    topoUrl: x => photoUrl(r.id, topoB(x)), topoHas: x => !!photoV(r.id, topoB(x)), topoBusy: x => busyPh.has(r.id + ':' + topoB(x)),
+    routeNote: x => (VIEWER ? null : routeNoteText(store.notes(n => n.round === r.id), x)) };
+}
+// 3.22.0 Task 7: a note on a whole route (the existing note kind, no athlete: k null) — listed on the notes screen as "מסלול A"
+function openRouteNote(x) {
+  const r = round(current);
+  if (VIEWER || !isLeadLive(r) || !leadRoutes(r).includes(x)) return;
+  const name = `מסלול ${x}`;
+  $('#note-title').textContent = `הערה · ${name}`;
+  $('#note-ctx').textContent = `${roundTitle(r.title)} · ${fmtClock(now())}`;
+  $('#note-text').value = '';
+  const dlg = $('#note-dlg'); dlg.returnValue = '';
+  dlg.onclose = () => {
+    const text = $('#note-text').value.trim();
+    if (dlg.returnValue !== 'save' || !text) return;
+    store.addNote({ round: r.id, k: null, route: x, name, short: name, at: now(), ctx: '', text });
+    render();
+  };
+  dlg.showModal();
+}
+function leadCtlSet(x, f) {
+  const r = round(current);
+  if (VIEWER || !isLeadLive(r) || !leadRoutes(r).includes(x)) return;
+  const c = store.leadCtl(r.id, x), n = f(r, x, c);
+  if (n && n !== c) store.setLeadCtl(r.id, x, n);
+  render();
+}
+function leadSetClick(d) {
+  const r = round(current);
+  if (VIEWER || !isLeadLive(r)) return;
+  if (d.leadPick) leadPick[r.id] = leadPick[r.id] === d.leadPick ? null : d.leadPick;
+  else if (d.leadColor) { const [x, c] = d.leadColor.split('|'); if (leadRoutes(r).includes(x)) store.setLeadSet(r.id, { colors: { [x]: leadColor(c, x) } }); leadPick[r.id] = null; }
+  else store.setLeadSet(r.id, { swap: !store.leadSet(r.id).swap });
+  render();
 }
 
 // ---- 3.3.0 training simulation clock (boulder only): windows of 4/5 min (or custom), World Climbing signals ----
@@ -1298,13 +1362,31 @@ function stopClock() { clearInterval(sc.timer); sc.timer = null; $('#clock-dlg')
 // ---- 3.2.0: rounds at the same time + swipe between rounds ----
 // another round whose climbing overlaps this one, both with my athletes (happens sometimes in the schedule — Roei)
 function parRound(r) {
-  if (!r.slots.length || !mineOf(r.id).length) return null;
+  if (!r.slots.length || r.lead || !mineOf(r.id).length) return null; // 3.22.0: no #par box on/for lead rounds (spec §8: swipe)
   const a0 = roundStart(r) + off(r.id), a1 = roundEndMs(r);
-  return DATA.rounds.find(x => x.id !== r.id && x.slots.length && x.date === r.date && mineOf(x.id).length
+  return DATA.rounds.find(x => x.id !== r.id && x.slots.length && !x.lead && x.date === r.date && mineOf(x.id).length
     && roundStart(x) + off(x.id) < a1 && roundEndMs(x) > a0) || null;
 }
+// 3.22.0 Task 9: a lead round running at the same time as this one (same competition, both with my athletes) → hint line, swipe to it
+function leadParRound(r) {
+  if (!isLeadLive(r) || !mineOf(r.id).length) return null;
+  const a0 = roundStart(r), a1 = roundEndMs(r), t = now();
+  return roundsOf(evOf(r)).find(x => x.id !== r.id && isLeadLive(x) && mineOf(x.id).length && Number.isFinite(roundEndMs(x))
+    && roundStart(x) < a1 && roundEndMs(x) > a0 && stateAt(x, t).phase !== 'after') || null;
+}
+function renderLeadPar(r, el) {
+  const par = leadParRound(r), h = par ? leadParHint(r, par, { now: now(), ctls: par.leadCtl || {}, mine: mineOf(par.id) }) : '';
+  const html = h ? `<button type="button" class="lead-par-hint" data-go-round="${par.id}">${esc(h)}</button>` : '';
+  el.hidden = !h; el.classList.toggle('lead-par', !!h);
+  if (h && el.nextElementSibling?.id !== 'board') $('#board').before(el); // above the board
+  if (el.dataset.lp !== html) { el.innerHTML = html; el.dataset.lp = html; }
+}
 function renderPar(r) {
-  const par = parRound(r), el = $('#par');
+  const el = $('#par');
+  if (isLeadLive(r)) return renderLeadPar(r, el);
+  if (el.dataset.lp) { el.innerHTML = ''; el.dataset.lp = ''; } el.classList.remove('lead-par');
+  if (el.previousElementSibling?.id !== 'board') $('#board').after(el); // back to its place below the board
+  const par = parRound(r);
   el.hidden = !par; if (!par) return;
   const s = stateAt(par, now(), off(par.id));
   const head = s.phase === 'live' ? `רוטציה ${s.n + 1} · נותר <b class="par-t${s.slotLeftMs <= 60000 ? ' warn' : ''}">${fmtDur(s.slotLeftMs)}</b>`
@@ -1322,7 +1404,7 @@ function swipeSeq() {
 function goRound(id) {
   lastTabTap = Date.now(); current = id;
   for (const x of ['mine', 'all', 'results', 'log']) $('#view-' + x)._html = null;
-  $('#par').innerHTML = ''; editId = null;
+  $('#par').innerHTML = ''; $('#par').dataset.lp = ''; editId = null;
   openRoundView(); render();
 }
 function swipeToast(seq, i) {
@@ -1420,8 +1502,10 @@ function showAlert(text, cls, group = '') {
 const ALERT_LBL = { w2: '2 רוטציות', w1: 'רוטציה', m2: '2 דקות', m1: 'דקה', s10: '10 שניות' };
 function alertEntries() {
   applyDelays();
-  const out = [];
+  const out = [], t = now();
   for (const r of DATA.rounds) {
+    // 3.22.0 Task 8: lead = N climbers before her / 10 min before her estimate, per route (r.leadCtl from applyDelays)
+    if (isLeadLive(r)) { out.push(...leadAlertEntries(r, mineOf(r.id), t, store.settings.leadAlert, roundTitle(r.title))); continue; }
     for (const m of mineOf(r.id)) {
       const startMs = slotStartMs(r, m.k, off(r.id));
       const s = r.slots[m.k];
@@ -1617,9 +1701,13 @@ function openAppeal(k, rid = current) {
   const r = round(rid); const s = r.slots[k];
   const st = athleteStatus(r, k, now(), off(r.id));
   const def = st.kind === 'boulder' ? st.boulder : st.kind === 'rest' ? st.from : st.kind === 'waiting' ? 1 : r.boulders;
-  const who = shortOf(r.id, k) || s.name;
-  $('#appeal-who').textContent = `${shortOf(r.id, k) ? `${who} · ` : ''}${s.name} · #${s.order} · גב ${s.bib} · ${roundTitle(r.title)}`;
-  $('#appeal-boulder').innerHTML = Array.from({ length: r.boulders }, (_, i) => `<option ${i + 1 === def ? 'selected' : ''}>${i + 1}</option>`).join('');
+  const who = shortOf(r.id, k) || s.name, LL = isLeadLive(r);
+  $('#appeal-who').textContent = `${shortOf(r.id, k) ? `${who} · ` : ''}${s.name} · #${s.order}${s.bib != null ? ` · גב ${s.bib}` : ''} · ${roundTitle(r.title)}`;
+  $('#appeal-unit').textContent = LL ? 'מסלול' : 'בולדר';
+  // 3.22.0 lead: pick the route — default = the leg she is on / waiting for now (else the last one)
+  const lr = LL ? leadRoutes(r) : null, ld = LL && (lr.find(x => ['wall', 'prep', 'wait'].includes(legStatus(r, k, x, now(), r.leadCtl?.[x]).kind)) || lr.at(-1));
+  $('#appeal-boulder').innerHTML = LL ? lr.map(x => `<option ${x === ld ? 'selected' : ''}>${x}</option>`).join('')
+    : Array.from({ length: r.boulders }, (_, i) => `<option ${i + 1 === def ? 'selected' : ''}>${i + 1}</option>`).join('');
   $('#appeal-time').value = fmtClockIn(now());
   $('#appeal-text').value = '';
   const dlg = $('#appeal-dlg'); dlg.returnValue = '';
@@ -1708,10 +1796,12 @@ function openSim() {
   dlg.onclose = () => {
     if (dlg.returnValue !== 'go') return;
     const r = round($('#sim-round').value); const S = r.slotSec * 1000; const T0 = roundStart(r);
-    const span = windowCount(r) * S;
+    const LL = isLeadLive(r), end = LL ? engineEnd(r) : NaN; // 3.22.0 lead: by its NET times (none → like an empty round)
+    const span = LL ? (Number.isFinite(end) ? end - T0 : 0) : windowCount(r) * S;
     const from = $('#sim-from').value;
     const firstMine = mineOf(r.id)[0];
-    const at = from === 'mine' && firstMine ? T0 + (firstMine.k - 1) * S - 5000
+    const leadMine = () => { const st = athleteStatus(r, firstMine.k, T0 - 1).startMs; return st != null ? st - 5 * 60000 : T0 - 120000; }; // no leg → round start
+    const at = from === 'mine' && firstMine ? (LL ? leadMine() : T0 + (firstMine.k - 1) * S - 5000)
       : from === 'mid' ? T0 + span / 2 : from === 'end' ? T0 + span - 15 * 60000 : T0 - 120000;
     const d = zoneParts(at);
     const iso = `${d.y}-${pad(d.mo)}-${pad(d.d)}T${fmtClockIn(at)}`;
@@ -1820,21 +1910,24 @@ function openPhotos() {
   if (SIM_AT == null && !VIEWER) syncNow(); else if (SIM_AT != null) loadPhotoList(gridRound);
   $('#photos-dlg').showModal();
 }
+// 3.22.0 Task 7: on a live lead round the photos are the topos — b 1 = route A, b 2 = route B
+const phLabel = (r, b) => (isLeadLive(r) ? `טופו · מסלול ${b === 2 ? 'B' : 'A'}` : `בולדר ${b}`);
 function renderPhotoGrid() {
   const r = round(gridRound); if (!r) return;
-  $('#photos-title').textContent = `תמונות בולדרים · ${roundTitle(r.title)}`;
-  $('#photos-grid').innerHTML = Array.from({ length: r.boulders }, (_, j) => {
-    const b = j + 1, v = photoV(r.id, b), u = photoUrl(r.id, b), busy = busyPh.has(r.id + ':' + b), dis = busy ? ' disabled' : '';
-    const pic = u && !busy ? `<button type="button" class="ph-pic" data-photo="${b}" aria-label="הגדלת בולדר ${b}"><img src="${u}" alt="בולדר ${b}"></button>`
+  const LL = isLeadLive(r), bs = LL ? leadRoutes(r).map(topoB) : Array.from({ length: r.boulders }, (_, j) => j + 1);
+  $('#photos-title').textContent = `${LL ? 'טופו' : 'תמונות בולדרים'} · ${roundTitle(r.title)}`;
+  $('#photos-grid').innerHTML = bs.map(b => {
+    const v = photoV(r.id, b), u = photoUrl(r.id, b), busy = busyPh.has(r.id + ':' + b), dis = busy ? ' disabled' : '';
+    const pic = u && !busy ? `<button type="button" class="ph-pic" data-photo="${b}" aria-label="הגדלת ${phLabel(r, b)}"><img src="${u}" alt="${phLabel(r, b)}"></button>`
       : `<div class="ph-empty">${busy ? 'מעלה…' : v ? 'טוען…' : 'אין תמונה'}</div>`;
     const acts = VIEWER ? '' : v ? `<div class="ph-acts"><button type="button" class="btn btn-secondary btn-sm" data-ph-up="${b}"${dis}>החלף</button><button type="button" class="btn btn-secondary btn-sm btn-danger-text" data-ph-del="${b}"${dis}>מחק</button></div>`
       : `<button type="button" class="btn btn-primary btn-sm" data-ph-up="${b}"${dis}><svg class="bico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg>הוסף תמונה</button>`;
-    return `<div class="ph-cell"><b>בולדר ${b}</b>${pic}${acts}</div>`;
+    return `<div class="ph-cell"><b>${phLabel(r, b)}</b>${pic}${acts}</div>`;
   }).join('');
 }
 function openPhoto(rid, b) {
   const u = photoUrl(rid, b); if (!u) return;
-  $('#photo-title').textContent = `בולדר ${b} · ${roundTitle(round(rid).title)}`;
+  $('#photo-title').textContent = `${phLabel(round(rid), b)} · ${roundTitle(round(rid).title)}`;
   $('#photo-img').src = u;
   $('#photo-dlg').showModal();
 }
@@ -1990,7 +2083,7 @@ async function uploadPhoto(rid, b, file) {
   finally { busyPh.delete(id); renderPhotoGrid(); }
 }
 function deletePhoto(rid, b) {
-  askConfirm('מחיקת תמונה', `התמונה של בולדר ${b} תימחק מכל המכשירים ומהצופים.`, 'מחיקה', async () => {
+  askConfirm('מחיקת תמונה', `התמונה של ${phLabel(round(rid), b)} תימחק מכל המכשירים ומהצופים.`, 'מחיקה', async () => {
     const id = rid + ':' + b; busyPh.add(id); renderPhotoGrid();
     try { await photoWrite(rid, b, null); showToast('התמונה נמחקה'); }
     catch { showToast('לא נמחק · בדוק חיבור ונסה שוב'); }
@@ -2086,6 +2179,7 @@ function renderSettingsMain() {
   const st = store.settings;
   const al = [['w2', '2 רוטציות'], ['w1', 'רוטציה'], ['m2', '2 דק׳'], ['m1', 'דקה'], ['s10', '10 ש׳'], ['s0', 'בעלייה'], ['transfer', 'נורמן']].filter(([k]) => st.alerts[k]).map(([, l]) => l);
   $('#v-alerts').textContent = al.length ? al.join(' · ') : 'כבוי';
+  syncLeadAlertSeg(); // 3.22.0 Task 8
   $('#v-push').textContent = store.push.on && pushEnv() === 'ready' ? 'פעיל' : 'כבוי';
   $('#v-sound').textContent = st.sound.on ? { chime: 'פעמון', beep: 'ביפים', alarm: 'אזעקה' }[st.sound.tone] : 'כבוי';
   $('#v-calib').textContent = `${st.lock ? 'נעול' : 'פתוח'} · ${st.step} ש׳`;
@@ -2096,6 +2190,11 @@ function renderSettingsMain() {
   $('#v-updates').textContent = APP_VERSION;
   $('#v-sync').textContent = syncLabel(true);
   $('#dark-group').hidden = st.theme === 'light';
+}
+
+// 3.22.0 Task 8: the lead alert segmented row on the alerts page (n2 / n3 / m10)
+function syncLeadAlertSeg() {
+  for (const b of document.querySelectorAll('[data-lead-alert]')) b.setAttribute('aria-pressed', String(b.dataset.leadAlert === store.settings.leadAlert));
 }
 
 function renderMineList() {
@@ -2250,6 +2349,7 @@ function start() {
     if (b.id === 'rp-close') { rp.close(); return; }
     if (d.round && rp.open) rp.close(); // falls through to the normal open-round branch
     if (d.page) { setPage(d.page); return; }
+    if (d.leadAlert) { if (!VIEWER) { store.setSetting('leadAlert', d.leadAlert); syncLeadAlertSeg(); } return; } // 3.22.0 Task 8 (the push plan follows on the 5 s syncPush tick)
     if (d.final) { const [ev, key, from] = d.final.split(':'); homeFinal = { ev: Number(ev), key, from }; render(); window.scrollTo(0, 0); return; }
     if (b.id === 'final-back') { if (homeFinal.from === 'list') homeOpenEvent = null; else homeOpenEvent = homeFinal.ev; homeFinal = null; render(); return; }
     if (d.season) { ddOpen = null; homeSeason = d.season; render(); window.scrollTo(0, 0); return; }
@@ -2268,6 +2368,12 @@ function start() {
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
     else if (b.id === 'home-btn') { homeOpenEvent = null; homeFinal = null; homeSeason = null; homeFrom = null; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
+    else if (d.leadManual) leadCtlSet(d.leadManual, (r, x) => toManual(r, x, now()));
+    else if (d.leadNext) leadCtlSet(d.leadNext, (r, x, c) => markNext(r, x, c, now()));
+    else if (d.leadUndo) leadCtlSet(d.leadUndo, (r, x, c) => undoMark(c));
+    else if (d.leadAuto) leadCtlSet(d.leadAuto, () => toAuto());
+    else if (d.leadPick || d.leadColor || d.leadSwap != null) leadSetClick(d);
+    else if (d.leadNote) openRouteNote(d.leadNote);
     else if (d.photo) openPhoto(d.phRound || ($('#photos-dlg').open ? gridRound : current), Number(d.photo));
     else if (b.id === 'photos-btn') openPhotos();
     else if (b.id === 'tags-btn') openTags();

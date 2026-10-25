@@ -284,6 +284,9 @@
       <div class="ios-group"><div class="ios-box">
         <label class="ios-row"><span class="lbl">מעבר לנורמן</span><input type="checkbox" class="ios-sw" data-set="alerts.transfer"></label>
       </div><p class="ios-foot">פתחת את האפליקציה באיחור? מופיעה רק ההתראה הרלוונטית ביותר.</p></div>
+      <div class="ios-group"><div class="ios-box">
+        <div class="ios-row"><span class="lbl">הובלה</span><div class="seg" role="group" aria-label="התראה בהובלה"><button type="button" data-lead-alert="n2" aria-pressed="true">2 לפני</button><button type="button" data-lead-alert="n3" aria-pressed="false">3 לפני</button><button type="button" data-lead-alert="m10" aria-pressed="false">10 דקות לפני</button></div></div>
+      </div><p class="ios-foot">הובלה: לפי מספר המטפסים לפני הספורטאי שלי במסלול, או 10 דקות לפני הזמן המשוער.</p></div>
     </div>
 
     <div class="ios-page" data-pg="push" hidden>
@@ -467,7 +470,7 @@
     <h2>ערעור</h2>
     <p class="muted small" id="appeal-who"></p>
     <div class="grid2">
-      <label>בולדר <select id="appeal-boulder"></select></label>
+      <label><span id="appeal-unit">בולדר</span> <select id="appeal-boulder"></select></label>
       <label>שעה <input id="appeal-time" type="text" inputmode="numeric" dir="ltr"></label>
     </div>
     <label>מה קרה <textarea id="appeal-text" rows="5" maxlength="3000" placeholder="תיאור: אחיזה, ניסיון, טופ/זון, החלטת שופט…" required></textarea></label>
