@@ -64,7 +64,8 @@ if (state.v < 5) {
 }
 
 const LEAD_ROUTE = /:[AB]$/; // lead item ids: "round:A" / "round:B" = queue marks, bare "round" = route settings
-const leadSetNorm = d => ({ colors: { A: d?.colors?.A || '#D32F2F', B: d?.colors?.B || '#1E4FB8' }, swap: !!d?.swap });
+const leadSetNorm = d => ({ colors: { A: d?.colors?.A || '#D32F2F', B: d?.colors?.B || '#1E4FB8' },
+  colors2: { A: d?.colors2?.A || null, B: d?.colors2?.B || null }, swap: !!d?.swap }); // 3.23.0 colors2 = optional second hold colour
 const leadCtlNorm = d => ({ manual: !!d?.manual, starts: (d?.starts || []).map(Number).filter(Number.isFinite) });
 
 function save() {
@@ -163,7 +164,7 @@ export const store = {
   leadSet(roundId) { return leadSetNorm(state.lead?.[roundId]); },
   setLeadSet(roundId, patch) {
     const cur = leadSetNorm(state.lead?.[roundId]); state.lead = state.lead || {};
-    state.lead[roundId] = leadSetNorm({ colors: { ...cur.colors, ...(patch?.colors || {}) }, swap: patch?.swap ?? cur.swap }); touch('lead', roundId);
+    state.lead[roundId] = leadSetNorm({ colors: { ...cur.colors, ...(patch?.colors || {}) }, colors2: { ...cur.colors2, ...(patch?.colors2 || {}) }, swap: patch?.swap ?? cur.swap }); touch('lead', roundId);
   },
 
   // ---- sync ----

@@ -15,11 +15,11 @@ import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, is
 import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openTarget, appTheme, backToApp } from './entry.js';
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
-import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
+import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
 import { markNext, undoMark, toManual, toAuto, legStatus } from './lead.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.22.0';
+export const APP_VERSION = '3.23.0';
 
 const $ = s => document.querySelector(s);
 
@@ -576,7 +576,9 @@ function mineCards(r, t, el) {
   if (!list.length) { patch(el, `<p class="muted">${r.slots.length ? (VIEWER ? 'אין ספורטאי הפלגיה בראונד הזה.' : 'אין ספורטאים שלי בראונד הזה.') : 'סדר העלייה עוד לא התקבל.'}</p>`); return; }
   if (isLeadLive(r)) { // 3.22.0 lead: one row per route per athlete + the amber overlap line (no boulder layout)
     const c = { ...leadCtx(r), now: t, mine: list, notes: k => store.notes(n => n.round === r.id && n.k === k), appeals: k => store.appeals(a => a.round === r.id && a.k === k) };
-    patch(el, (VIEWER ? '<p class="muted small viewer-hint">מודגשים: ספורטאי הפלגיה</p>' : leadOverlapHtml(r, c)) + leadMineHtml(r, c)); return;
+    const par = leadParRound(r), pm = par ? mineOf(par.id) : [];
+    const pc = par && { ...leadCtx(par), now: t, mine: pm, notes: k => store.notes(n => n.round === par.id && n.k === k), appeals: k => store.appeals(a => a.round === par.id && a.k === k) };
+    patch(el, (VIEWER ? '<p class="muted small viewer-hint">מודגשים: ספורטאי הפלגיה</p>' : leadOverlapHtml(r, c)) + leadMineHtml(r, c) + (par ? leadParMineHtml(par, pc) : '')); return;
   }
   patch(el, (VIEWER ? '<p class="muted small viewer-hint">מודגשים: ספורטאי הפלגיה</p>' : overlapHtml(r, t)) + list.map(m => {
     const s = r.slots[m.k];
@@ -1299,7 +1301,13 @@ function leadSetClick(d) {
   const r = round(current);
   if (VIEWER || !isLeadLive(r)) return;
   if (d.leadPick) leadPick[r.id] = leadPick[r.id] === d.leadPick ? null : d.leadPick;
-  else if (d.leadColor) { const [x, c] = d.leadColor.split('|'); if (leadRoutes(r).includes(x)) store.setLeadSet(r.id, { colors: { [x]: leadColor(c, x) } }); leadPick[r.id] = null; }
+  else if (d.leadColor) { // 3.23.0: the picker stays open — a second tap may add the second colour
+    const [x, c] = d.leadColor.split('|'), cur = store.leadSet(r.id);
+    if (leadRoutes(r).includes(x) && leadColor2(c)) {
+      const p = leadPickColor(leadColor(cur.colors[x], x), leadColor2(cur.colors2[x]), leadColor2(c));
+      store.setLeadSet(r.id, { colors: { [x]: p.c1 }, colors2: { [x]: p.c2 } });
+    }
+  }
   else store.setLeadSet(r.id, { swap: !store.leadSet(r.id).swap });
   render();
 }

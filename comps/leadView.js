@@ -9,6 +9,20 @@ export const LEAD_COLORS = [['אדום', '#D32F2F'], ['כתום', '#EF6C00'], ['
   ['כחול', '#1E4FB8'], ['סגול', '#7B3FC4'], ['ורוד', '#E0529C'], ['שחור', '#222222'], ['לבן', '#F4F4F4']];
 const DEF = { A: '#D32F2F', B: '#1E4FB8' };
 export const leadColor = (hex, route) => LEAD_COLORS.find(([, c]) => c === String(hex || '').toUpperCase())?.[1] || DEF[route] || DEF.A;
+// 3.23.0: optional second hold colour (Roei) — palette or nothing
+export const leadColor2 = hex => LEAD_COLORS.find(([, c]) => c === String(hex || '').toUpperCase())?.[1] || null;
+// swatch tap: another colour = second (replaces it), tap 2 again = remove it, tap 1 with two = 2 becomes the only one
+export function leadPickColor(c1, c2, c) {
+  if (c === c2) return { c1, c2: null };
+  if (c === c1) return { c1: c2 || c1, c2: null };
+  return { c1, c2: c };
+}
+const colorName = c => LEAD_COLORS.find(([, x]) => x === c)?.[0] || '';
+// both colours of a route; c2 null when unset, off the palette or equal to c1. css = the style="" vars, two = the class
+function paint(set, route) {
+  const c1 = leadColor(set?.colors?.[route], route), x = leadColor2(set?.colors2?.[route]), c2 = x && x !== c1 ? x : null;
+  return { c1, c2, two: c2 ? ' two' : '', css: `--rc:${c1}${c2 ? `;--rc2:${c2}` : ''}` };
+}
 export const LEAD_ROUTES = ['A', 'B'];
 // national lead round with a start list → this board; international lead / before the start lists → the old paths
 export const isLeadLive = r => !!(r && r.lead && !r.ifsc && r.slots && r.slots.length > 0);
@@ -29,15 +43,15 @@ function timesHtml(st) {
 
 function routeCard(r, route, ctx) {
   const fem = genderOf(r.id) === 'W', g = (m, f) => (fem ? f : m);
-  const ctl = ctx.ctls[route], manual = !!ctl?.manual, rc = leadColor(ctx.set?.colors?.[route], route);
+  const ctl = ctx.ctls[route], manual = !!ctl?.manual, pt = paint(ctx.set, route);
   const s = routeState(r, route, ctx.now, ctl || undefined), step = routeState(r, route, ctx.now).paceMs;
   const n = s.order.length, mine = k => ctx.mineKs.has(k), coach = !ctx.viewer;
   const late = manual && s.behindMs != null && s.behindMs >= 120000;
   const modeChip = !manual ? chip('auto', 'לפי לא-לפני') : s.cur < 0 ? '' : late ? chip('late', `באיחור ${Math.round(s.behindMs / 60000)} דק׳`) : chip('ok', 'בזמן');
   const tools = coach ? `<button type="button" class="btn btn-sm btn-secondary lr-pick" data-lead-pick="${route}" aria-label="צבע מסלול ${route}" aria-expanded="${ctx.pick === route}">🎨</button>` : '';
-  const head = `<div class="lr-head"><span class="lr-name"><span class="lr-dot" aria-hidden="true"></span>מסלול ${route}</span><span class="lr-tools">${modeChip}${tools}</span></div>`;
-  const sw = coach && ctx.pick === route ? `<div class="lr-swatches" role="group" aria-label="צבע מסלול ${route}">${LEAD_COLORS.map(([nm, c]) =>
-    `<button type="button" class="lr-sw" style="background:${c}" aria-label="${nm}" title="${nm}" aria-pressed="${c === rc}" data-lead-color="${route}|${c}"></button>`).join('')}</div>` : '';
+  const head = `<div class="lr-head"><span class="lr-name"><span class="lr-dot" aria-hidden="true"></span>מסלול ${route}${pt.c2 ? ` <small class="lr-cn">${colorName(pt.c1)}·${colorName(pt.c2)}</small>` : ''}</span><span class="lr-tools">${modeChip}${tools}</span></div>`;
+  const sw = coach && ctx.pick === route ? `<div class="lr-swatches" role="group" aria-label="צבע מסלול ${route}">${LEAD_COLORS.map(([nm, c]) => { const i = c === pt.c1 ? 1 : c === pt.c2 ? 2 : 0;
+      return `<button type="button" class="lr-sw" style="background:${c}" aria-label="${nm}" title="${nm}" aria-pressed="${i > 0}" data-lead-color="${route}|${c}">${i ? `<span class="k">${i}</span>` : ''}</button>`; }).join('')}<small class="lr-sw-hint">צבע נוסף = צבע שני · לחיצה שוב על 2 מורידה אותו</small></div>` : '';
   // 3.22.0 Task 7: topo = photo b 1/2 — banner (tap = the photo dialog) or the coach's upload spot; a version still loading → nothing
   const url = ctx.topoUrl?.(route), tb = topoB(route), rid = esc(r.id), busy = !!ctx.topoBusy?.(route);
   const topo = url && !busy ? `<button type="button" class="lr-topo" data-photo="${tb}" data-ph-round="${rid}"><img src="${esc(url)}" alt="טופו מסלול ${route}"><span>טופו · הקש להגדלה</span></button>`
@@ -72,7 +86,7 @@ function routeCard(r, route, ctx) {
         <button type="button" class="btn btn-sm btn-secondary" data-lead-auto="${route}">חזרה לסנכרון</button></div>`;
   } else if (coach && manual) ctrl = `<div class="lr-ctrl"><button type="button" class="btn btn-sm btn-secondary" data-lead-undo="${route}" aria-label="ביטול הסימון האחרון">↶</button><button type="button" class="btn btn-sm btn-secondary" data-lead-auto="${route}">חזרה לסנכרון</button></div>`;
   if (noteBtn) ctrl = ctrl ? ctrl.replace(/<\/div>$/, `${noteBtn}</div>`) : `<div class="lr-ctrl">${noteBtn}</div>`;
-  return `<article class="lroute card" data-route="${route}" style="--rc:${rc}">${head}${sw}${topo}${noteHtml}${wall}${pace}${next}${ctrl}</article>`;
+  return `<article class="lroute card${pt.two}" data-route="${route}" style="${pt.css}">${head}${sw}${topo}${noteHtml}${wall}${pace}${next}${ctrl}</article>`;
 }
 
 // ctx = { now, ctls: {A, B}, set: {colors, swap}, mineKs: Set<k>, viewer, pick?: route with the colour picker open,
@@ -90,7 +104,7 @@ const gwOf = r => (genderOf(r.id) === 'W' ? (m, f) => f : m => m);
 const lateTimes = st => `<s>לא לפני ${hm(st.netMs)}</s><bdi class="eta" dir="ltr">~${hm(st.estMs)}</bdi>`;
 
 function mineLeg(r, k, route, ctx, g) {
-  const st = legStatus(r, k, route, ctx.now, ctx.ctls[route]), rc = leadColor(ctx.set?.colors?.[route], route), leg = r.slots[k][route];
+  const st = legStatus(r, k, route, ctx.now, ctx.ctls[route]), pt = paint(ctx.set, route), leg = r.slots[k][route];
   const obs = !!ctx.ctls[route]?.manual; // manual = the coach's taps (observed); auto = the schedule
   let txt, tm;
   if (st.kind === 'none') { txt = `<span class="big">${g('לא עלה', 'לא עלתה')}</span>`; tm = ''; }
@@ -103,7 +117,7 @@ function mineLeg(r, k, route, ctx, g) {
     txt = `<span class="big">${st.ahead === 1 ? g('הבא בתור', 'הבאה בתור') : `עוד ${st.ahead - 1} ${g('לפניו', 'לפניה')}`}</span>מקום ${leg.pos} במסלול ${route}`;
     tm = st.late ? lateTimes(st) : `לא לפני<span class="ontime">${hm(st.netMs)}</span>`;
   }
-  return { st, obs, html: `<div class="lleg ${st.kind}" style="--rc:${rc}"><span class="rt">${route}</span><span class="st">${txt}</span><span class="tm">${tm}</span></div>` };
+  return { st, obs, html: `<div class="lleg ${st.kind}${pt.two}" style="${pt.css}"><span class="rt">${route}</span><span class="st">${txt}</span><span class="tm">${tm}</span></div>` };
 }
 
 export function leadMineHtml(round, ctx) {
@@ -157,6 +171,13 @@ export function leadParHint(round, par, ctx) {
   return best ? `במקביל: ${roundTitle(par.title)} · החלק לצד — ${best.short} · ${best.route} ~${hm(best.at)}` : '';
 }
 
+// 3.23.0 (Roei): a parallel lead round's athletes under "שלי" — same cards (times, both routes, note / appeal to THAT round), faded
+export function leadParMineHtml(par, ctx) {
+  if (!par || !ctx.mine?.length) return '';
+  const t = `במקביל: ${roundTitle(par.title)}`;
+  return `<section class="lpar-mine" aria-label="${esc(t)}"><h4 class="lpar-h">${esc(t)}</h4>${leadMineHtml(par, ctx)}</section>`;
+}
+
 // full start list: one row per climber (A order), per route # · לא לפני · משוער · מצב; band on whoever is on a wall
 export function leadAllHtml(round, ctx) {
   const g = gwOf(round), rs = leadRoutes(round), mk = ctx.mineKs || new Set(), base = ctx.base || new Set();
@@ -169,7 +190,7 @@ export function leadAllHtml(round, ctx) {
       : st.kind === 'prep' ? '<span class="st-prep">הכנה</span>' : `עוד ${st.ahead - 1}`;
     return { st, html: `<td class="sep">${leg.pos}</td><td>${st.late && st.kind !== 'done' && st.kind !== 'wall' ? `<s>${hm(st.netMs)}</s>` : hm(st.netMs)}</td><td>${est}</td><td class="c-st">${stx}</td>` };
   };
-  const head = `<tr><th></th>${rs.map(x => `<th class="grp sep" colspan="4" style="--rc:${leadColor(ctx.set?.colors?.[x], x)}">מסלול ${x}</th>`).join('')}${ctx.viewer ? '' : '<th></th>'}</tr>
+  const head = `<tr><th></th>${rs.map(x => { const pt = paint(ctx.set, x); return `<th class="grp sep${pt.two}" colspan="4" style="${pt.css}">מסלול ${x}</th>`; }).join('')}${ctx.viewer ? '' : '<th></th>'}</tr>
     <tr><th>שם</th>${'<th class="sep">#</th><th>לא לפני</th><th>משוער</th><th>מצב</th>'.repeat(rs.length)}${ctx.viewer ? '' : '<th></th>'}</tr>`;
   const rows = round.slots.map((s, k) => {
     if (!s) return '';
