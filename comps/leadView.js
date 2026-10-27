@@ -47,6 +47,8 @@ function timesHtml(st) {
   return st.late ? `<s class="net">${hm(st.netMs)}</s> <bdi class="eta" dir="ltr">~${hm(st.estMs)}</bdi>` : `<span>${hm(st.netMs)}</span>`;
 }
 
+// 3.25.0: bib number badge next to every name (Roei) — the start lists carry it
+const bibTag = x => (x?.bib ? `<span class="bib" title="מספר גב">${esc(String(x.bib))}</span>` : '');
 function routeCard(r, route, ctx) {
   const fem = genderOf(r.id) === 'W', g = (m, f) => (fem ? f : m);
   const ctl = ctx.ctls[route], manual = !!ctl?.manual, pt = paint(ctx.set, route, ctx.holds);
@@ -72,11 +74,11 @@ function routeCard(r, route, ctx) {
   if (s.phase === 'after') wall = `<div class="lr-wall done"><span class="lw-lbl">המסלול הסתיים</span></div>`;
   else if (s.cur < 0) {
     const k0 = s.order[0];
-    wall = `<div class="lr-wall wait"><span class="lw-lbl">${g('עולה ראשון', 'עולה ראשונה')} ${hm(s.estMs(0))}</span>${k0 != null ? `<span class="lw-who${mine(k0) ? ' mine' : ''}">${esc(r.slots[k0].name)}<small>${esc(r.slots[k0].club)}</small></span>` : ''}</div>`;
+    wall = `<div class="lr-wall wait"><span class="lw-lbl">${g('עולה ראשון', 'עולה ראשונה')} ${hm(s.estMs(0))}</span>${k0 != null ? `<span class="lw-who${mine(k0) ? ' mine' : ''}">${bibTag(r.slots[k0])}${esc(r.slots[k0].name)}<small>${esc(r.slots[k0].club)}</small></span>` : ''}</div>`;
   } else {
     const k = s.curK, x = r.slots[k];
     wall = `<div class="lr-wall"><span class="lw-lbl">על הקיר · ${s.cur + 1}/${n}</span>
-      <span class="lw-who${mine(k) ? ' mine' : ''}">${esc(x.name)}<small>${esc(x.club)}</small></span>
+      <span class="lw-who${mine(k) ? ' mine' : ''}">${bibTag(x)}${esc(x.name)}<small>${esc(x.club)}</small></span>
       <span class="lw-t"><span data-since="${s.curStart + OBS_MS}"></span><small> / ${mss(LEAD_CLIMB_MS - OBS_MS)}</small></span>
       <span class="lw-bar"><i data-bar-since="${s.curStart + OBS_MS}"></i></span></div>`;
   }
@@ -84,7 +86,7 @@ function routeCard(r, route, ctx) {
   const nextKs = s.phase === 'after' ? [] : s.order.slice(s.cur + 1, s.cur + 5);
   const next = s.phase === 'after' ? '' : `<ol class="lr-next">${nextKs.map(k => {
     const st = legStatus(r, k, route, ctx.now, ctl), x = r.slots[k];
-    return `<li class="${mine(k) ? 'mine' : ''}"><span class="pos">${x[route].pos}</span><span class="nm">${esc(x.name)}${st.kind === 'prep' ? ' ' + chip('prep', 'אזור הכנה') : ''}</span><span class="times">${timesHtml(st)}</span></li>`;
+    return `<li class="${mine(k) ? 'mine' : ''}"><span class="pos">${x[route].pos}</span><span class="nm">${bibTag(x)}${esc(x.name)}${st.kind === 'prep' ? ' ' + chip('prep', 'אזור הכנה') : ''}</span><span class="times">${timesHtml(st)}</span></li>`;
   }).join('') || `<li class="muted"><span></span><span class="nm">${g('אחרון במסלול', 'אחרונה במסלול')}</span><span></span></li>`}</ol>`;
   let ctrl = '';
   if (coach && s.phase !== 'after') {
@@ -143,7 +145,7 @@ export function leadMineHtml(round, ctx) {
     const acts = ctx.viewer ? '' : `<div class="ath-actions"><button type="button" class="btn btn-sm btn-secondary" data-note="${m.k}" data-nr="${round.id}">הערה</button>
         <button type="button" class="btn btn-sm btn-appeal" data-appeal="${m.k}" data-nr="${round.id}">ערעור</button></div>`;
     return `<article class="ath card lmine${hot ? ` hot${seen ? ' wall' : ''}` : done ? ' done' : ''}${m.added ? ' added' : ''}" data-k="${m.k}">
-      <header><h3>${esc(m.short)}</h3><span class="muted small">${esc(s.name)} · ${esc(s.club || '')}</span>${hotChip}</header>
+      <header><h3>${esc(m.short)}</h3><span class="muted small">${bibTag(s)}${esc(s.name)} · ${esc(s.club || '')}</span>${hotChip}</header>
       ${legs.map(l => l.html).join('')}
       ${!ctx.viewer && notes.length ? `<p class="last-note">📝 ${esc(notes[notes.length - 1].text)}${notes.length > 1 ? ` <span class="muted">(+${notes.length - 1})</span>` : ''}</p>` : ''}
       ${!ctx.viewer && appeals.length ? `<p class="last-note appeal-tag">⚑ ${appeals.length} ערעור${appeals.length > 1 ? 'ים' : ''}</p>` : ''}
@@ -198,16 +200,18 @@ export function leadAllHtml(round, ctx) {
     const est = st.kind === 'done' || st.kind === 'wall' ? hm(st.estMs) : st.late ? `<bdi class="eta" dir="ltr">~${hm(st.estMs)}</bdi>` : '';
     const stx = st.kind === 'done' ? `<span class="st-done">${g('סיים', 'סיימה')}</span>` : st.kind === 'wall' ? (ctx.ctls[route]?.manual ? '<span class="st-wall">על הקיר</span>' : `<span class="st-sched">${SCHED_WALL}</span>`)
       : st.kind === 'prep' ? '<span class="st-prep">הכנה</span>' : `עוד ${st.ahead - 1}`;
-    return { st, html: `<td class="sep">${leg.pos}</td><td>${st.late && st.kind !== 'done' && st.kind !== 'wall' ? `<s>${hm(st.netMs)}</s>` : hm(st.netMs)}</td><td>${est}</td><td class="c-st">${stx}</td>` };
+    const d = st.kind === 'done' ? ' done' : '', td = d ? '<td class="done">' : '<td>'; // 3.25.0: a finished route = struck through (Roei)
+    return { st, html: `<td class="sep${d}">${leg.pos}</td>${td}${st.late && st.kind !== 'done' && st.kind !== 'wall' ? `<s>${hm(st.netMs)}</s>` : hm(st.netMs)}</td>${td}${est}</td><td class="c-st">${stx}</td>` };
   };
   const head = `<tr><th></th>${rs.map(x => { const pt = paint(ctx.set, x, ctx.holds); return `<th class="grp sep${pt.two}" colspan="4" style="${pt.css}">מסלול ${x}</th>`; }).join('')}${ctx.viewer ? '' : '<th></th>'}</tr>
     <tr><th>שם</th>${'<th class="sep">#</th><th>לא לפני</th><th>משוער</th><th>מצב</th>'.repeat(rs.length)}${ctx.viewer ? '' : '<th></th>'}</tr>`;
   const rows = round.slots.map((s, k) => {
     if (!s) return '';
     const cs = rs.map(x => cell(k, x)), climb = cs.some(c => c.st.kind === 'wall');
+    const over = cs.some(c => c.st.kind === 'done') && cs.every(c => c.st.kind === 'done' || c.st.kind === 'none'); // climbed everything
     const tg = ctx.viewer || base.has(k) ? '' : `<button type="button" class="mine-tg" data-mine-tg="${k}" aria-pressed="${mk.has(k)}" aria-label="${mk.has(k) ? 'הסרה מהספורטאים שלי' : 'הוספה לספורטאים שלי'} · ${esc(s.name)}"></button>`;
-    const cls = [mk.has(k) && 'mine', added.has(k) && 'added', climb && 'climb now'].filter(Boolean).join(' ');
-    return `<tr class="${cls}" data-k="${k}"><td class="c-name"><span class="nm-in">${tg}<span>${esc(s.name)}${mk.has(k) && short(k) ? ` <b>(${esc(short(k))})</b>` : ''}<small>${esc(s.club || '')}</small></span></span></td>${cs.map(c => c.html).join('')}${ctx.viewer ? ''
+    const cls = [mk.has(k) && 'mine', added.has(k) && 'added', climb && 'climb now', over && 'over'].filter(Boolean).join(' ');
+    return `<tr class="${cls}" data-k="${k}"><td class="c-name"><span class="nm-in">${tg}<span>${bibTag(s)}<span class="nm-t">${esc(s.name)}</span>${mk.has(k) && short(k) ? ` <b>(${esc(short(k))})</b>` : ''}<small>${esc(s.club || '')}</small></span></span></td>${cs.map(c => c.html).join('')}${ctx.viewer ? ''
       : `<td class="row-actions"><button type="button" class="sync-btn btn-appeal" data-appeal="${k}">ערעור</button></td>`}</tr>`;
   }).join('');
   const hint = `<p class="muted small hint">ערעור אפשר על כל מתחרה. ○ ליד שם = הוספה לספורטאים שלי בראונד הזה. מצב «עוד N» = ${g('ממתינים', 'ממתינות')} לפני, בלי מי שעל הקיר.</p>`;
