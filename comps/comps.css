@@ -1350,11 +1350,11 @@ body.lead-live #round-screen .mid, body.lead-live #par:not(.lead-par) { display:
 .lroute.two, .lleg.two { position: relative; }
 .lroute.two::before, .lleg.two::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: -7px; width: 7px;
   border-start-start-radius: inherit; border-end-start-radius: inherit; pointer-events: none;
-  background: linear-gradient(to bottom, var(--rc) 0 25%, var(--rc2) 25% 50%, var(--rc) 50% 75%, var(--rc2) 75%); }
-.lleg.two::before { inset-inline-start: -5px; width: 5px; background: linear-gradient(to bottom, var(--rc) 0 50%, var(--rc2) 50%); }
-.lroute.two .lr-dot { background: linear-gradient(135deg, var(--rc) 50%, var(--rc2) 50%); }
+  background: linear-gradient(to bottom, var(--rc) 0 calc(25% - 1px), var(--card) 0 calc(25% + 1px), var(--rc2) 0 calc(50% - 1px), var(--card) 0 calc(50% + 1px), var(--rc) 0 calc(75% - 1px), var(--card) 0 calc(75% + 1px), var(--rc2) 0); } /* 3.24.0: 2px card-colour gap between the colours (Roei) */
+.lleg.two::before { inset-inline-start: -5px; width: 5px; background: linear-gradient(to bottom, var(--rc) 0 calc(50% - 1px), var(--card) 0 calc(50% + 1px), var(--rc2) 0); }
+.lroute.two .lr-dot { background: linear-gradient(135deg, var(--rc) 0 calc(50% - 1px), var(--card) 0 calc(50% + 1px), var(--rc2) 0); }
 .lr-cn { font-size: 13px; font-weight: 500; color: var(--muted); }
-.full.lall th.grp.two { border-top-color: transparent; background-image: linear-gradient(to left, var(--rc) 0 25%, var(--rc2) 25% 50%, var(--rc) 50% 75%, var(--rc2) 75%);
+.full.lall th.grp.two { border-top-color: transparent; background-image: linear-gradient(to left, var(--rc) 0 calc(25% - 1px), var(--card) 0 calc(25% + 1px), var(--rc2) 0 calc(50% - 1px), var(--card) 0 calc(50% + 1px), var(--rc) 0 calc(75% - 1px), var(--card) 0 calc(75% + 1px), var(--rc2) 0);
   background-size: 100% 4px; background-repeat: no-repeat; background-origin: border-box; background-position: top; }
 .lr-sw { position: relative; }
 /* 3.23.0 "שלי": athletes of the parallel lead round, faded (Roei: lighter but visible) */

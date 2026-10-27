@@ -133,7 +133,8 @@ export function leadMineHtml(round, ctx) {
   const g = gwOf(round), rs = leadRoutes(round);
   return ctx.mine.map(m => {
     const s = round.slots[m.k]; if (!s) return '';
-    const legs = rs.map(x => mineLeg(round, m.k, x, ctx, g));
+    // 3.24.0: legs in climbing order (Roei) — group B starts on route B
+    const net = x => s[x]?.net || '99', legs = rs.slice().sort((x, y) => net(x).localeCompare(net(y))).map(x => mineLeg(round, m.k, x, ctx, g));
     const onWall = legs.some(l => l.st.kind === 'wall'), hot = onWall || legs.some(l => l.st.kind === 'prep');
     const seen = legs.some(l => l.st.kind === 'wall' && l.obs); // red live style only for a manual (observed) wall
     const hotChip = onWall ? (seen ? chip('live', 'על הקיר') : chip('auto', SCHED_WALL)) : hot ? chip('prep', 'להיכנס לאזור ההכנה') : ''; // fix: never the prep text while she climbs (wall wins)
