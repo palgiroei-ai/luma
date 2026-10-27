@@ -1382,3 +1382,9 @@ body.lead-live #round-screen > section { min-width: 0; } /* grid item: let the f
 /* ---- 3.22.0 Task 9: parallel lead round hint (swipe) ---- */
 .par.lead-par { padding: 0; background: none; border: 0; box-shadow: none; margin-bottom: 8px; }
 .lead-par-hint { display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; font-weight: 600; text-align: start; padding: 8px 12px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--card); color: var(--navy); cursor: pointer; }
+
+/* 3.24.0 route demo video */
+.lr-video { align-self: flex-start; }
+.vid-view .vid-box { width: min(92vw, calc((100dvh - 120px) * 9 / 16)); aspect-ratio: 9 / 16; margin: 0 auto; }
+.vid-view iframe { width: 100%; height: 100%; border: 0; border-radius: var(--r-sm); background: var(--ink, black); display: block; }
+.vid-view .ph-x { background: none; border: 0; color: inherit; font-size: 22px; cursor: pointer; }

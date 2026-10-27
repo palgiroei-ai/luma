@@ -15,11 +15,11 @@ import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, is
 import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openTarget, appTheme, backToApp } from './entry.js';
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
-import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
+import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
 import { markNext, undoMark, toManual, toAuto, legStatus } from './lead.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.23.0';
+export const APP_VERSION = '3.24.0';
 
 const $ = s => document.querySelector(s);
 
@@ -1268,7 +1268,7 @@ function render() {
 // ---- 3.22.0 lead live board: context for web/leadView.js + the coach's route controls (shared marks / settings in store) ----
 const leadPick = {}; // round → route whose colour picker is open (this session)
 function leadCtx(r) {
-  return { now: now(), ctls: r.leadCtl || {}, set: store.leadSet(r.id), mineKs: mineK(r.id), viewer: VIEWER, pick: leadPick[r.id] || null,
+  return { now: now(), ctls: r.leadCtl || {}, set: store.leadSet(r.id), mineKs: mineK(r.id), viewer: VIEWER, pick: leadPick[r.id] || null, holds: r.holds, video: r.video,
     // 3.22.0 Task 7: topo = the round's photo b 1 (A) / 2 (B); route notes = notes with k: null + route (coach only — viewers never sync notes)
     topoUrl: x => photoUrl(r.id, topoB(x)), topoHas: x => !!photoV(r.id, topoB(x)), topoBusy: x => busyPh.has(r.id + ':' + topoB(x)),
     routeNote: x => (VIEWER ? null : routeNoteText(store.notes(n => n.round === r.id), x)) };
@@ -1304,7 +1304,7 @@ function leadSetClick(d) {
   else if (d.leadColor) { // 3.23.0: the picker stays open — a second tap may add the second colour
     const [x, c] = d.leadColor.split('|'), cur = store.leadSet(r.id);
     if (leadRoutes(r).includes(x) && leadColor2(c)) {
-      const p = leadPickColor(leadColor(cur.colors[x], x), leadColor2(cur.colors2[x]), leadColor2(c));
+      const now2 = routeColors(cur, x, r.holds), p = leadPickColor(now2.c1, now2.c2, leadColor2(c)); // 3.24.0: from the shown colours (default holds too)
       store.setLeadSet(r.id, { colors: { [x]: p.c1 }, colors2: { [x]: p.c2 } });
     }
   }
@@ -1933,6 +1933,14 @@ function renderPhotoGrid() {
     return `<div class="ph-cell"><b>${phLabel(r, b)}</b>${pic}${acts}</div>`;
   }).join('');
 }
+// 3.24.0: route demo video — YouTube (no-cookie) in a dialog; closing empties the iframe so the sound stops
+function openLeadVideo(x) {
+  const r = round(current), id = r?.video?.[x];
+  if (!id || !/^[\w-]{11}$/.test(id)) return;
+  $('#video-title').textContent = `סרטון הדגמה · מסלול ${x} · ${roundTitle(r.title)}`;
+  $('#video-frame').src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&playsinline=1&rel=0`;
+  $('#video-dlg').showModal();
+}
 function openPhoto(rid, b) {
   const u = photoUrl(rid, b); if (!u) return;
   $('#photo-title').textContent = `${phLabel(round(rid), b)} · ${roundTitle(round(rid).title)}`;
@@ -2382,6 +2390,7 @@ function start() {
     else if (d.leadAuto) leadCtlSet(d.leadAuto, () => toAuto());
     else if (d.leadPick || d.leadColor || d.leadSwap != null) leadSetClick(d);
     else if (d.leadNote) openRouteNote(d.leadNote);
+    else if (d.leadVideo) openLeadVideo(d.leadVideo);
     else if (d.photo) openPhoto(d.phRound || ($('#photos-dlg').open ? gridRound : current), Number(d.photo));
     else if (b.id === 'photos-btn') openPhotos();
     else if (b.id === 'tags-btn') openTags();
@@ -2458,7 +2467,9 @@ function start() {
   });
   $('#view-log').addEventListener('change', e => { const id = e.target.dataset?.apOut; if (id) { store.setAppeal(id, { outcome: e.target.value.trim() }); render(); } });
   $('#photo-file').addEventListener('change', e => { const f = e.target.files?.[0]; if (f && upTarget != null && !VIEWER) uploadPhoto(gridRound, upTarget, f); });
-  $('#photo-dlg').addEventListener('click', () => $('#photo-dlg').close()); // tap anywhere closes the big photo
+  $('#photo-dlg').addEventListener('click', () => $('#photo-dlg').close());
+  $('#video-x').addEventListener('click', () => $('#video-dlg').close());
+  $('#video-dlg').addEventListener('close', () => { $('#video-frame').src = 'about:blank'; }); // tap anywhere closes the big photo
   $('#tags-dlg').addEventListener('click', tagClick);
   // tag popover on the board: tap a tag → show; tap anywhere else / scroll → hide
   document.addEventListener('click', e => { const b = e.target.closest('[data-tg-pop]'); if (b) showTagPop(b); else $('#tag-pop').hidden = true; }, true);

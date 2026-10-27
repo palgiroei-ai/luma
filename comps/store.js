@@ -64,8 +64,11 @@ if (state.v < 5) {
 }
 
 const LEAD_ROUTE = /:[AB]$/; // lead item ids: "round:A" / "round:B" = queue marks, bare "round" = route settings
+// 3.24.0: a set saved before `picked` existed counts as picked when it differs from the old defaults
+const wasPicked = (d, x) => (d?.picked ? !!d.picked[x] : !!(d?.colors2?.[x] || (d?.colors?.[x] && d.colors[x] !== (x === 'A' ? '#D32F2F' : '#1E4FB8'))));
 const leadSetNorm = d => ({ colors: { A: d?.colors?.A || '#D32F2F', B: d?.colors?.B || '#1E4FB8' },
-  colors2: { A: d?.colors2?.A || null, B: d?.colors2?.B || null }, swap: !!d?.swap }); // 3.23.0 colors2 = optional second hold colour
+  colors2: { A: d?.colors2?.A || null, B: d?.colors2?.B || null }, swap: !!d?.swap, // 3.23.0 colors2 = optional second hold colour
+  picked: { A: wasPicked(d, 'A'), B: wasPicked(d, 'B') } }); // 3.24.0: the coach chose this route's colours (else the round's default holds)
 const leadCtlNorm = d => ({ manual: !!d?.manual, starts: (d?.starts || []).map(Number).filter(Number.isFinite) });
 
 function save() {
@@ -164,7 +167,8 @@ export const store = {
   leadSet(roundId) { return leadSetNorm(state.lead?.[roundId]); },
   setLeadSet(roundId, patch) {
     const cur = leadSetNorm(state.lead?.[roundId]); state.lead = state.lead || {};
-    state.lead[roundId] = leadSetNorm({ colors: { ...cur.colors, ...(patch?.colors || {}) }, colors2: { ...cur.colors2, ...(patch?.colors2 || {}) }, swap: patch?.swap ?? cur.swap }); touch('lead', roundId);
+    state.lead[roundId] = leadSetNorm({ colors: { ...cur.colors, ...(patch?.colors || {}) }, colors2: { ...cur.colors2, ...(patch?.colors2 || {}) }, swap: patch?.swap ?? cur.swap,
+      picked: { A: cur.picked.A || !!patch?.colors?.A, B: cur.picked.B || !!patch?.colors?.B } }); touch('lead', roundId);
   },
 
   // ---- sync ----
