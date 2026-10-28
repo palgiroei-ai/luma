@@ -32,10 +32,12 @@ export function routeState(round, route, nowMs, ctl = { manual: false, starts: [
   const at = (cur, curStart, phase, paceMs, behindMs, estMs, planMs, endMs) =>
     ({ order, cur, curK: cur >= 0 ? order[cur] : null, curStart, phase, paceMs, behindMs, estMs, planMs, endMs });
   if (!ctl || !ctl.manual) {
+    // 3.31.0: ctl.sched / ctl.plan (withPair) = the paired round's estimates in place of the calculated times
+    const est = ctl?.sched ? i => ctl.sched[i] ?? nets[i] : i => nets[i], plan = ctl?.plan ? i => ctl.plan[i] ?? nets[i] : est;
     let cur = -1;
-    while (cur < last && nets[cur + 1] <= nowMs) cur++;
-    const endMs = nets[last] + LEAD_CLIMB_MS, phase = cur < 0 ? 'before' : nowMs >= endMs ? 'after' : 'live';
-    return { mode: 'auto', ...at(cur, cur >= 0 ? nets[cur] : null, phase, step, null, i => nets[i], i => nets[i], endMs) };
+    while (cur < last && est(cur + 1) <= nowMs) cur++;
+    const endMs = est(last) + LEAD_CLIMB_MS, phase = cur < 0 ? 'before' : nowMs >= endMs ? 'after' : 'live';
+    return { mode: 'auto', ...at(cur, cur >= 0 ? est(cur) : null, phase, step, null, est, plan, endMs) };
   }
   const starts = ctl.starts || [], cur = Math.min(starts.length, order.length) - 1;
   const curStart = cur >= 0 ? starts[cur] : null;
@@ -75,6 +77,22 @@ export function withLive(round, route, ctl, resAt, nowMs, onAt = null) {
     starts.push(Math.min(nowMs, Math.max(prev, t)));
   }
   return { manual: true, starts, live: true, fromAuto: !(ctl && ctl.manual), ...(endAt != null ? { endAt } : {}) };
+}
+// 3.31.0 (ILCA 28/10, lead1 R2): girls climb in parallel to the boys — girl i starts with boy off + i (round.pair = { id, off }),
+// so the boys and girls finish together. Derived, never stored, and only while the girls' route has no marks / live results
+// of its own: boys' marks reached the first girl → the girls started with them (live ctl like withLive); before that → the
+// girls' schedule = the boys' estimates (an auto ctl with sched / plan), so a faster or slower boys' pace moves the girls too.
+export function withPair(round, route, ctl, partner, pctl, nowMs) {
+  const off = round.pair?.off;
+  if ((ctl && ctl.manual) || !partner || off == null || !pctl?.manual) return ctl;
+  const ps = routeState(partner, route, nowMs, pctl), n = legOrder(round, route).length;
+  if (ps.order.length < off + n) return ctl;
+  if (ps.cur >= off) {
+    const starts = []; for (let i = 0; i < n && off + i <= ps.cur; i++) starts.push(ps.estMs(off + i));
+    return { manual: true, starts, live: true, fromAuto: !(ctl && ctl.manual), pair: true };
+  }
+  const idx = [...Array(n).keys()];
+  return { manual: false, starts: [], sched: idx.map(i => ps.estMs(off + i)), plan: idx.map(i => ps.planMs(off + i)), pair: true };
 }
 // the coach taps over a derived ctl → it becomes her own marks (the live flags dropped)
 export const ownCtl = c => (c && c.live ? { manual: true, starts: c.starts.slice() } : c);

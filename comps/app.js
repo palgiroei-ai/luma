@@ -17,11 +17,11 @@ import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openT
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
-import { markNext, undoMark, toManual, toAuto, legStatus, withLive, ownCtl, legOrder, routeState } from './lead.js';
+import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ownCtl, legOrder, routeState } from './lead.js';
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.30.3';
+export const APP_VERSION = '3.31.0';
 
 const $ = s => document.querySelector(s);
 
@@ -525,6 +525,11 @@ function applyDelays() {
     const off = DATA.results?.[r.id] ? 0 : LOCKED[r.id]?.at, at = off == null ? leadResAt(r) : null;
     r.leadCtl = Object.fromEntries(leadRoutes(r).map(x => [x, off != null ? withLive(r, x, store.leadCtl(r.id, x), new Map(legOrder(r, x).map(k => [k, off])), now())
       : withLive(r, x, store.leadCtl(r.id, x), at?.done[x], now(), at?.on[x])]));
+  }
+  // 3.31.0: girls in parallel to the boys (round.pair) — after the boys' ctl above, so the girls follow the boys' live state
+  for (const r of DATA.rounds) if (r.pair && r.leadCtl && !DATA.results?.[r.id] && LOCKED[r.id]?.at == null) {
+    const p = round(r.pair.id); if (!p?.leadCtl) continue;
+    r.leadCtl = Object.fromEntries(leadRoutes(r).map(x => [x, withPair(r, x, r.leadCtl[x], p, p.leadCtl[x], now())]));
   }
 }
 // route → Map slot k → when that climber's live result arrived (null: no live data for this round)
