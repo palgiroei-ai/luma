@@ -41,7 +41,8 @@ export const leadRoutes = r => (r.routes || ['A', 'B']).filter(x => LEAD_ROUTES.
 const mss = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const chip = (cls, t) => `<span class="chip ${cls}">${t}</span>`;
 const OBS_MS = 40000; // 3.22.0 review fix: the wall timer counts the 6:00 climb, from the end of the 0:40 observation
-const SCHED_WALL = 'לפי לא-לפני: על הקיר'; // 3.22.0 review fix: auto = the schedule, never "on the wall" as observed (spec anti-goal)
+const SCHED_WALL = 'לפי לא-לפני: על הקיר', SCHED_EST = 'לפי חישוב: על הקיר'; // 3.30.3: calculated R2 times
+const schedWall = r => (r.netEst ? SCHED_EST : SCHED_WALL), schedLbl = r => (r.netEst ? 'לפי חישוב' : 'לפי לא-לפני'); // 3.22.0 review fix: auto = the schedule, never "on the wall" as observed (spec anti-goal)
 
 function timesHtml(st) {
   return st.late ? `<s class="net">${hm(st.netMs)}</s> <bdi class="eta" dir="ltr">~${hm(st.estMs)}</bdi>` : `<span>${hm(st.netMs)}</span>`;
@@ -55,7 +56,7 @@ function routeCard(r, route, ctx) {
   const s = routeState(r, route, ctx.now, ctl || undefined), step = routeState(r, route, ctx.now).paceMs;
   const n = s.order.length, mine = k => ctx.mineKs.has(k), coach = !ctx.viewer;
   const late = manual && s.behindMs != null && s.behindMs >= 120000;
-  const modeChip = !manual ? chip('auto', 'לפי לא-לפני') : s.cur < 0 ? '' : late ? chip('late', `באיחור ${Math.round(s.behindMs / 60000)} דק׳`) : chip('ok', 'בזמן');
+  const modeChip = !manual ? chip('auto', schedLbl(r)) : s.cur < 0 ? '' : late ? chip('late', `באיחור ${Math.round(s.behindMs / 60000)} דק׳`) : chip('ok', 'בזמן');
   // 3.27.1 (Roei): the route note = a small 📝 next to 🎨 (was a full-width button under the list)
   const tools = coach ? `<button type="button" class="btn btn-sm btn-secondary lr-pick lr-note-btn" data-lead-note="${route}" aria-label="הערה למסלול ${route}" title="הערה למסלול">📝</button><button type="button" class="btn btn-sm btn-secondary lr-pick" data-lead-pick="${route}" aria-label="צבע מסלול ${route}" aria-expanded="${ctx.pick === route}">🎨</button>` : '';
   const head = `<div class="lr-head"><span class="lr-name"><span class="lr-dot" aria-hidden="true"></span>מסלול ${route}${pt.c2 ? ` <small class="lr-cn">${colorName(pt.c1)}·${colorName(pt.c2)}</small>` : ''}</span><span class="lr-tools">${modeChip}${tools}</span></div>`;
@@ -122,7 +123,7 @@ function mineLeg(r, k, route, ctx, g) {
   if (st.kind === 'none') { txt = `<span class="big">${g('לא עלה', 'לא עלתה')}</span>`; tm = ''; }
   else if (st.kind === 'done') { txt = `<span class="big">${g('סיים', 'סיימה')}</span>${g('עלה', 'עלתה')} ב-${hm(st.estMs)}`; tm = chip('done', '✓'); }
   else if (st.kind === 'wall') {
-    txt = `<span class="big${obs ? ' wall">על הקיר עכשיו' : `">${SCHED_WALL}`}</span><span data-since="${st.estMs + OBS_MS}"></span> מתוך ${mss(LEAD_CLIMB_MS - OBS_MS)}`;
+    txt = `<span class="big${obs ? ' wall">על הקיר עכשיו' : `">${schedWall(r)}`}</span><span data-since="${st.estMs + OBS_MS}"></span> מתוך ${mss(LEAD_CLIMB_MS - OBS_MS)}`;
     tm = obs ? chip('live', 'LIVE') : chip('auto', hm(st.netMs));
   }
   else {
@@ -140,7 +141,7 @@ export function leadMineHtml(round, ctx) {
     const net = x => s[x]?.net || '99', legs = rs.slice().sort((x, y) => net(x).localeCompare(net(y))).map(x => mineLeg(round, m.k, x, ctx, g));
     const onWall = legs.some(l => l.st.kind === 'wall'), hot = onWall || legs.some(l => l.st.kind === 'prep');
     const seen = legs.some(l => l.st.kind === 'wall' && l.obs); // red live style only for a manual (observed) wall
-    const hotChip = onWall ? (seen ? chip('live', 'על הקיר') : chip('auto', SCHED_WALL)) : hot ? chip('prep', 'להיכנס לאזור ההכנה') : ''; // fix: never the prep text while she climbs (wall wins)
+    const hotChip = onWall ? (seen ? chip('live', 'על הקיר') : chip('auto', schedWall(round))) : hot ? chip('prep', 'להיכנס לאזור ההכנה') : ''; // fix: never the prep text while she climbs (wall wins)
     const done = legs.every(l => l.st.kind === 'done' || l.st.kind === 'none');
     const notes = ctx.notes?.(m.k) || [], appeals = ctx.appeals?.(m.k) || [];
     const acts = ctx.viewer ? '' : `<div class="ath-actions"><button type="button" class="btn btn-sm btn-secondary" data-note="${m.k}" data-nr="${round.id}">הערה</button>
@@ -168,8 +169,8 @@ export function leadOverlapHtml(round, ctx) {
 export function leadHomeLine(r, nowMs) {
   const rs = leadRoutes(r), auto = x => !r.leadCtl?.[x]?.manual, all = rs.every(auto);
   const who = rs.map(x => { const s = routeState(r, x, nowMs, r.leadCtl?.[x]);
-    return `${x} ${!all && auto(x) ? 'לפי לא-לפני · ' : ''}${s.curK != null && s.phase === 'live' ? esc(r.slots[s.curK].name) : '—'}`; });
-  return `<p class="h-live">${all ? 'לפי לא-לפני · ' : ''}על הקיר: ${who.join(' · ')}</p>`;
+    return `${x} ${!all && auto(x) ? `${schedLbl(r)} · ` : ''}${s.curK != null && s.phase === 'live' ? esc(r.slots[s.curK].name) : '—'}`; });
+  return `<p class="h-live">${all ? `${schedLbl(r)} · ` : ''}על הקיר: ${who.join(' · ')}</p>`;
 }
 
 // 3.22.0 Task 9: one line above the board when another live lead round (same event, overlapping) has my athletes — swipe to it
@@ -199,7 +200,7 @@ export function leadAllHtml(round, ctx) {
     const st = legStatus(round, k, route, ctx.now, ctx.ctls[route]), leg = round.slots[k][route];
     if (st.kind === 'none') return { st, html: `<td class="sep"></td><td></td><td></td><td class="c-st">${g('לא עלה', 'לא עלתה')}</td>` };
     const est = st.kind === 'done' || st.kind === 'wall' ? hm(st.estMs) : st.late ? `<bdi class="eta" dir="ltr">~${hm(st.estMs)}</bdi>` : '';
-    const stx = st.kind === 'done' ? `<span class="st-done">${g('סיים', 'סיימה')}</span>` : st.kind === 'wall' ? (ctx.ctls[route]?.manual ? '<span class="st-wall">על הקיר</span>' : `<span class="st-sched">${SCHED_WALL}</span>`)
+    const stx = st.kind === 'done' ? `<span class="st-done">${g('סיים', 'סיימה')}</span>` : st.kind === 'wall' ? (ctx.ctls[route]?.manual ? '<span class="st-wall">על הקיר</span>' : `<span class="st-sched">${schedWall(round)}</span>`)
       : st.kind === 'prep' ? '<span class="st-prep">הכנה</span>' : `עוד ${st.ahead - 1}`;
     const d = st.kind === 'done' ? ' done' : '', td = d ? '<td class="done">' : '<td>'; // 3.25.0: a finished route = struck through (Roei)
     return { st, html: `<td class="sep${d}">${leg.pos}</td>${td}${st.late && st.kind !== 'done' && st.kind !== 'wall' ? `<s>${hm(st.netMs)}</s>` : hm(st.netMs)}</td>${td}${est}</td><td class="c-st">${stx}</td>` };
