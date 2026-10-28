@@ -20,7 +20,7 @@ import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadCol
 import { markNext, undoMark, toManual, toAuto, legStatus, withLive, ownCtl } from './lead.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.27.1';
+export const APP_VERSION = '3.28.0';
 
 const $ = s => document.querySelector(s);
 
@@ -164,7 +164,7 @@ async function loadLocked() {
     for (const [id, v] of Object.entries(items || {})) {
       const old = LOCKED[id];
       const src = `ההתאחדות · תוצאות רשמיות · נקבע כרשמי ${fbDate(v.at)}`;
-      next[id] = old && old.at === v.at ? old : round(id)?.lead ? { ...toLeadResults({ rows: v.rows }, id, leadPrevRank(id)), source: src, at: v.at, locked: true } // 3.26.0 lead
+      next[id] = old && old.at === v.at ? old : round(id)?.lead ? { ...toLeadResults({ rows: v.rows }, id, leadPrevRank(id)), file: v.rows, source: src, at: v.at, locked: true } // 3.26.0 lead
         : { source: src, at: v.at, locked: true, final: lastRound(id),
         rows: v.rows.map(r => ({ ...r, bs: r.bs.some(Boolean) ? r.bs : [] })) }; // nothing entered = did not start (DNS)
     }
@@ -858,7 +858,14 @@ function renderLead(r, part, isrKey) {
 // 3.26.0 national lead round (federation live / locked): same World Climbing table, my athletes marked (the "שלי"
 // rows), the live bar + lock bar like boulder, qualifying line = the info sheet quota. No cards.
 function renderNatLead(r, part) {
-  const res = resultsOf(r.id), fem = resFem, ranked = rankedOf(r.id);
+  const res = resultsOf(r.id), fem = resFem, full = rankedOf(r.id), g = genderOf(r.id);
+  // 3.28.0 (Roei): categories as in boulder — chips U17 / U15 / U17+U15 (seniors: כללי / U21 / U19), each its own lead ranking
+  // (round 1 points recomputed among that category), the place in the whole round small under it; a category tag after the club
+  const opts = catOptions(res.rows, g), opt = opts.find(o => o.key === resCat[r.id]) || opts[0];
+  const sub = opt?.cats && res.file ? leadRanked(toLeadResults({ rows: res.file.filter(x => opt.cats.includes(x.cat)) }, r.id, leadPrevRank(r.id)).rows) : null;
+  const ranked = sub && sub.length !== full.length ? sub : full, overall = ranked === full ? null : new Map(full.map(x => [x.bib, x.rank]));
+  const chips = !part && opts.length > 1 ? `<div class="choices res-cats" role="group" aria-label="קטגוריה">${opts.map(o => `<button type="button" class="choice" data-rescat="${o.key}" aria-pressed="${o === opt}">${esc(o.label)}</button>`).join('')}</div>` : '';
+  const catOf = x => (x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? catLabel(x.cat, g) : '');
   const mineBy = {}; for (const m of mineOf(r.id)) { const s = r.slots[m.k]; if (s) mineBy[s.bib] = m; }
   const nameHtml = n => { const x = res.rows.find(y => y.name === n), m = x && mineBy[x.bib]; return esc(n) + (m ? ` <span class="tag">${esc(m.short)}</span>` : ''); };
   const last = res.final || lastRound(r.id), q = last ? 0 : r.info?.quota || 0;
@@ -866,9 +873,10 @@ function renderNatLead(r, part) {
   return `<div class="res lead-res${res.live ? ' is-live' : ''}">
     ${res.live ? `<div class="live-bar${live.err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל המסלולים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} מסלולים הוזנו · ${res.started} התחילו</span>${live.err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · לא רשמי</span></div>` : ''}
     ${part ? '' : lockBar(r, res)}
+    ${chips}
     <div class="res-head"><span class="muted small">מקור: ${esc(srcOf(res))}</span></div>
-    <div class="card"><div class="tbl-head"><b>${fem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'ספורטאי הפלגיה' : 'שלי'}</span></div>
-      <div class="tbl-wrap">${leadTableHtml(ranked, { nR: r.boulders, adv: q, fem, nameHtml, mine: new Set(Object.keys(mineBy).map(Number)), waiting: running })}</div></div>
+    <div class="card"><div class="tbl-head"><b>${overall ? esc(opt.label) : fem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'ספורטאי הפלגיה' : 'שלי'}</span></div>
+      <div class="tbl-wrap">${leadTableHtml(ranked, { nR: r.boulders, adv: q, fem, nameHtml, mine: new Set(Object.keys(mineBy).map(Number)), waiting: running, catOf, overall })}</div></div>
     <p class="muted small">גובה = מספר האחיזה האחרונה שהוחזקה; <bdi dir="ltr">+</bdi> = תנועה ממנה הלאה; TOP = עד סוף המסלול. ${r.boulders > 1 ? 'בראונד הראשון: ניקוד משולב של שני המסלולים (נמוך יותר = טוב יותר), ובסוגריים המקום בכל מסלול. ' : 'תיקו: לפי המקום בראונד הראשון. '}${last ? 'ראונד אחרון — אין ראונד המשך.' : q ? `עולים לראונד הבא: ${q}; תיקו על המקום האחרון עולה.` : ''}</p>
   </div>`;
 }

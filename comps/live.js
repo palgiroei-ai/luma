@@ -67,7 +67,8 @@ export function liveLeadRows(round, cfg, results, nowMs) {
   const lg = liveGroup(round.id); if (!lg || !cfg || !results || !round.slots.length || !isLeadCfg(cfg)) return null;
   if (cfg.roundNumber != null && Number(cfg.roundNumber) !== roundNumberOf(round.id)) return null;
   const cats = groupCats(cfg, lg), routes = round.routes || (round.boulders > 1 ? ['A', 'B'] : ['A']);
-  const bySlot = new Map(round.slots.filter(Boolean).map(s => [s.bib, { bib: s.bib, name: s.name, club: s.club || '', cat: s.cat || null }]));
+  // 3.28.0: categories as in boulder (S / U21 / U19 / U17 / U15) — the start lists say 'Senior'
+  const bySlot = new Map(round.slots.filter(Boolean).map(s => [s.bib, { bib: s.bib, name: s.name, club: s.club || '', cat: s.cat === 'Senior' ? 'S' : s.cat || null }]));
   let updated = 0, done = 0;
   for (const [key, v] of Object.entries(results)) {
     let k; try { k = decodeURIComponent(key); } catch { continue; }
