@@ -75,13 +75,17 @@ export function liveLeadRows(round, cfg, results, nowMs) {
     if (!row || gender !== lg.gender || !cats.includes(cat) || !x || !v) continue;
     const at = Date.parse(v.updatedAt); if (!at || at > nowMs || dayOf(at) !== round.date) continue;
     const sc = leadScore(v); if (sc == null) continue;
+    if (!row.cat) row.cat = catCode(cat);
+    // 3.27.1 (real data 28/10): the judge opens the record when the climb STARTS (started, hold 0, locked false) and locks
+    // it with the final score → only a locked record is a result; an open one = she is on the wall since (now − timeMs)
+    if (v.locked !== true) { (row.on || Object.defineProperty(row, 'on', { value: {}, enumerable: false }).on)[x] = at - (Number(v.timeMs) || 0); continue; }
     if (row[x] == null) done++;
-    row[x] = sc; if (!row.cat) row.cat = catCode(cat);
+    row[x] = sc;
     (row.at || Object.defineProperty(row, 'at', { value: {}, enumerable: false }).at)[x] = at; // 3.27.0: when (moves the route on; not a score field)
     updated = Math.max(updated, at);
   }
-  if (!done) return null;
   const rows = [...bySlot.values()], total = rows.length * routes.length;
+  if (!done) return rows.some(r => r.on) ? { rows, done, total, started: 0, complete: false, updated, routes, climbingOnly: true } : null;
   return { rows, done, total, started: rows.filter(r => routes.some(x => r[x] != null)).length, complete: done === total, updated, routes };
 }
 // new route results since the last poll → [{ bib, name, route: 1|2, score }]; prev = null → nothing (as liveEvents)

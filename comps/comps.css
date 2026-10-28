@@ -1320,7 +1320,7 @@ body.lead-live #round-screen .mid, body.lead-live #par:not(.lead-par) { display:
 .lr-ctrl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .lr-ctrl .lr-go { flex: 1; }
 .lr-ctrl .btn:disabled { opacity: .45; cursor: default; }
-.lr-ctrl .lr-undo { font-size: 20px; line-height: 1; padding: 10px 18px; }
+.lr-ctrl .lr-undo { flex: 0 0 auto; } /* 3.27.1: "הקודם" text button */
 /* 3.22.0 lead "שלי": one row per route (stripe = the route's colour), hot card when a leg is in the prep area / on the wall */
 .lmine.hot { border-inline-start-color: var(--added); box-shadow: 0 0 0 2px var(--added-bg); }
 .lmine header .chip { margin-inline-start: auto; }

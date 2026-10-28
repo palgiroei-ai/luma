@@ -20,7 +20,7 @@ import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadCol
 import { markNext, undoMark, toManual, toAuto, legStatus, withLive, ownCtl } from './lead.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.27.0';
+export const APP_VERSION = '3.27.1';
 
 const $ = s => document.querySelector(s);
 
@@ -236,7 +236,7 @@ function leadPrevRank(id) {
   return prevId !== id && resultsOf(prevId) ? new Map(rankedOf(prevId).filter(x => x.rank != null).map(x => [x.bib, x.rank])) : null;
 }
 function liveLeadOf(r) {
-  const lr = liveLeadRows(r, live.data.cfg, live.data.results, now()); if (!lr) return null;
+  const lr = liveLeadRows(r, live.data.cfg, live.data.results, now()); if (!lr || lr.climbingOnly) return null; // 3.27.1: someone on the wall, no result yet
   const evs = liveLeadEvents(liveSeen[r.id], lr.rows, lr.routes);
   liveSeen[r.id] = lr.rows.map(x => ({ ...x }));
   if (r.id === current && screen === 'round') evs.forEach(e => liveToast({ ...e, kind: 'lead' }));
@@ -519,15 +519,15 @@ function applyDelays() {
   // 3.27.0: + the federation's live results move each route on (withLive, derived — the store keeps the coach's own marks)
   for (const r of DATA.rounds) if (isLeadLive(r)) {
     const at = leadResAt(r);
-    r.leadCtl = Object.fromEntries(leadRoutes(r).map(x => [x, withLive(r, x, store.leadCtl(r.id, x), at?.[x], now())]));
+    r.leadCtl = Object.fromEntries(leadRoutes(r).map(x => [x, withLive(r, x, store.leadCtl(r.id, x), at?.done[x], now(), at?.on[x])]));
   }
 }
 // route → Map slot k → when that climber's live result arrived (null: no live data for this round)
 function leadResAt(r) {
   if (!live.data || r.ifsc) return null;
   const lr = liveLeadRows(r, live.data.cfg, live.data.results, now()); if (!lr) return null;
-  const kOf = new Map(r.slots.map((x, k) => [x?.bib, k])), out = {};
-  for (const row of lr.rows) for (const [x, t] of Object.entries(row.at || {})) if (kOf.has(row.bib)) (out[x] ||= new Map()).set(kOf.get(row.bib), t);
+  const kOf = new Map(r.slots.map((x, k) => [x?.bib, k])), out = { done: {}, on: {} };
+  for (const row of lr.rows) if (kOf.has(row.bib)) for (const f of ['done', 'on']) for (const [x, t] of Object.entries((f === 'done' ? row.at : row.on) || {})) (out[f][x] ||= new Map()).set(kOf.get(row.bib), t);
   return out;
 }
 

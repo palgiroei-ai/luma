@@ -56,7 +56,8 @@ function routeCard(r, route, ctx) {
   const n = s.order.length, mine = k => ctx.mineKs.has(k), coach = !ctx.viewer;
   const late = manual && s.behindMs != null && s.behindMs >= 120000;
   const modeChip = !manual ? chip('auto', 'לפי לא-לפני') : s.cur < 0 ? '' : late ? chip('late', `באיחור ${Math.round(s.behindMs / 60000)} דק׳`) : chip('ok', 'בזמן');
-  const tools = coach ? `<button type="button" class="btn btn-sm btn-secondary lr-pick" data-lead-pick="${route}" aria-label="צבע מסלול ${route}" aria-expanded="${ctx.pick === route}">🎨</button>` : '';
+  // 3.27.1 (Roei): the route note = a small 📝 next to 🎨 (was a full-width button under the list)
+  const tools = coach ? `<button type="button" class="btn btn-sm btn-secondary lr-pick lr-note-btn" data-lead-note="${route}" aria-label="הערה למסלול ${route}" title="הערה למסלול">📝</button><button type="button" class="btn btn-sm btn-secondary lr-pick" data-lead-pick="${route}" aria-label="צבע מסלול ${route}" aria-expanded="${ctx.pick === route}">🎨</button>` : '';
   const head = `<div class="lr-head"><span class="lr-name"><span class="lr-dot" aria-hidden="true"></span>מסלול ${route}${pt.c2 ? ` <small class="lr-cn">${colorName(pt.c1)}·${colorName(pt.c2)}</small>` : ''}</span><span class="lr-tools">${modeChip}${tools}</span></div>`;
   const sw = coach && ctx.pick === route ? `<div class="lr-swatches" role="group" aria-label="צבע מסלול ${route}">${LEAD_COLORS.map(([nm, c]) => { const i = c === pt.c1 ? 1 : c === pt.c2 ? 2 : 0;
       return `<button type="button" class="lr-sw" style="background:${c}" aria-label="${nm}" title="${nm}" aria-pressed="${i > 0}" data-lead-color="${route}|${c}">${i ? `<span class="k">${i}</span>` : ''}</button>`; }).join('')}<small class="lr-sw-hint">צבע נוסף = צבע שני · לחיצה שוב על 2 מורידה אותו</small></div>` : '';
@@ -69,7 +70,6 @@ function routeCard(r, route, ctx) {
   const video = vid ? `<button type="button" class="btn btn-sm btn-secondary lr-video" data-lead-video="${esc(route)}">▶ סרטון הדגמה</button>` : '';
   const note = coach && ctx.routeNote?.(route);
   const noteHtml = note ? `<p class="lr-note">📝 ${esc(note)}</p>` : '';
-  const noteBtn = coach ? `<button type="button" class="btn btn-sm btn-secondary" data-lead-note="${route}">+ הערה למסלול</button>` : '';
   let wall;
   if (s.phase === 'after') wall = `<div class="lr-wall done"><span class="lw-lbl">המסלול הסתיים</span></div>`;
   else if (s.cur < 0) {
@@ -92,11 +92,11 @@ function routeCard(r, route, ctx) {
   if (coach && s.phase !== 'after') {
     ctrl = !manual
       ? `<div class="lr-ctrl"><button type="button" class="btn btn-sm btn-secondary" data-lead-manual="${route}">${g('עדיין לא עלה', 'עדיין לא עלתה')}</button></div>`
-      : `<div class="lr-ctrl"><button type="button" class="btn btn-primary lr-go" data-lead-next="${route}"${s.cur >= n - 1 ? ' disabled' : ''}>▶ ${g('הבא', 'הבאה')} על הקיר</button>
-        <button type="button" class="btn btn-secondary lr-undo" data-lead-undo="${route}" aria-label="ביטול הסימון האחרון"${s.cur < 0 ? ' disabled' : ''}>↶</button>
+      // 3.27.1 (Roei): "הקודם" / "הבא" side by side (RTL: previous on the right)
+      : `<div class="lr-ctrl"><button type="button" class="btn btn-secondary lr-undo" data-lead-undo="${route}" aria-label="${g('המטפס הקודם', 'המטפסת הקודמת')} על הקיר"${s.cur < 0 ? ' disabled' : ''}>${g('הקודם', 'הקודמת')}</button>
+        <button type="button" class="btn btn-primary lr-go" data-lead-next="${route}" aria-label="${g('המטפס הבא', 'המטפסת הבאה')} על הקיר"${s.cur >= n - 1 ? ' disabled' : ''}>${g('הבא', 'הבאה')}</button>
         <button type="button" class="btn btn-sm btn-secondary" data-lead-auto="${route}">חזרה לסנכרון</button></div>`;
-  } else if (coach && manual) ctrl = `<div class="lr-ctrl"><button type="button" class="btn btn-sm btn-secondary" data-lead-undo="${route}" aria-label="ביטול הסימון האחרון">↶</button><button type="button" class="btn btn-sm btn-secondary" data-lead-auto="${route}">חזרה לסנכרון</button></div>`;
-  if (noteBtn) ctrl = ctrl ? ctrl.replace(/<\/div>$/, `${noteBtn}</div>`) : `<div class="lr-ctrl">${noteBtn}</div>`;
+  } else if (coach && manual) ctrl = `<div class="lr-ctrl"><button type="button" class="btn btn-sm btn-secondary" data-lead-undo="${route}" aria-label="${g('המטפס הקודם', 'המטפסת הקודמת')} על הקיר">${g('הקודם', 'הקודמת')}</button><button type="button" class="btn btn-sm btn-secondary" data-lead-auto="${route}">חזרה לסנכרון</button></div>`;
   return `<article class="lroute card${pt.two}" data-route="${route}" style="${pt.css}">${head}${sw}${topo}${video}${noteHtml}${wall}${pace}${next}${ctrl}</article>`;
 }
 

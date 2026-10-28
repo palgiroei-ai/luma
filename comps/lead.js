@@ -58,17 +58,19 @@ export function routeState(round, route, nowMs, ctl = { manual: false, starts: [
 // came in (in lead she starts about when the judge enters the previous score). Only ever forward — marks or a schedule
 // already further on stay. resAt: Map slot k → when her result on this route arrived. → a derived manual ctl, never
 // stored: { manual, starts, live: true, fromAuto, endAt? } (the last climber's result = the route is over), or ctl itself.
-export function withLive(round, route, ctl, resAt, nowMs) {
-  if (!resAt || !resAt.size) return ctl;
+// 3.27.1: onAt = Map k → climb start of a climber whose record is open (on the wall now) — she is the current one.
+export function withLive(round, route, ctl, resAt, nowMs, onAt = null) {
+  if ((!resAt || !resAt.size) && (!onAt || !onAt.size)) return ctl;
   const s = routeState(round, route, nowMs, ctl), order = s.order, last = order.length - 1;
-  let done = -1;
-  order.forEach((k, i) => { if (resAt.has(k)) done = i; });
-  if (done < 0) return ctl;
-  const want = Math.min(done + 1, last), endAt = done === last ? resAt.get(order[last]) : null;
+  let done = -1, on = -1;
+  order.forEach((k, i) => { if (resAt?.has(k)) done = i; if (onAt?.has(k)) on = i; });
+  if (done < 0 && on < 0) return ctl;
+  const want = on > done ? on : Math.min(done + 1, last), endAt = done === last && on < 0 ? resAt.get(order[last]) : null;
   if (want <= s.cur && endAt == null) return ctl;
   const starts = ctl && ctl.manual ? (ctl.starts || []).slice(0, order.length) : order.slice(0, s.cur + 1).map(k => netMs(round, k, route));
   for (let j = starts.length; j <= want; j++) {
-    const prev = j > 0 ? starts[j - 1] : -Infinity, t = resAt.get(order[j - 1]) ?? resAt.get(order[done]);
+    const prev = j > 0 ? starts[j - 1] : -Infinity;
+    const t = j === on ? onAt.get(order[on]) : resAt?.get(order[j - 1]) ?? (done >= 0 ? resAt.get(order[done]) : onAt.get(order[on]));
     starts.push(Math.min(nowMs, Math.max(prev, t)));
   }
   return { manual: true, starts, live: true, fromAuto: !(ctl && ctl.manual), ...(endAt != null ? { endAt } : {}) };
