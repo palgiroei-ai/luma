@@ -40,10 +40,11 @@ export function routeState(round, route, nowMs, ctl = { manual: false, starts: [
   const starts = ctl.starts || [], cur = Math.min(starts.length, order.length) - 1;
   const curStart = cur >= 0 ? starts[cur] : null;
   const paceMs = cur >= 1 ? (starts[cur] - starts[0]) / cur : step;
+  const floor = i => (round.netEst ? -Infinity : nets[i]); // 3.31.0: a calculated time (R2 lists without times) is no "not earlier than"
   const estMs = i => (cur < 0 ? nets[i] : i < cur ? starts[i] : i === cur ? curStart
-    : Math.max(nets[i], curStart + (i - cur) * paceMs, nowMs + (i - cur - 1) * paceMs)); // 3.22.0: a forgotten tap never leaves estimates in the past
+    : Math.max(floor(i), curStart + (i - cur) * paceMs, nowMs + (i - cur - 1) * paceMs)); // 3.22.0: a forgotten tap never leaves estimates in the past
   // 3.22.0 Task 8 fix: clock-free plan (marks + pace + NET only) — alerts must not follow the clock between taps
-  const planMs = i => (cur < 0 ? nets[i] : i <= cur ? starts[i] : Math.max(nets[i], curStart + (i - cur) * paceMs));
+  const planMs = i => (cur < 0 ? nets[i] : i <= cur ? starts[i] : Math.max(floor(i), curStart + (i - cur) * paceMs));
   // 3.22.0 review fix: last climber tapped → her slot end; otherwise the plan end + LEAD_GRACE_MS (a forgotten last tap never stays live)
   // 3.27.0: the last climber's live result came in (ctl.endAt) → the route is over then
   const endMs = ctl.endAt != null ? ctl.endAt : cur === last && cur >= 0 ? curStart + LEAD_CLIMB_MS : planMs(last) + LEAD_CLIMB_MS + LEAD_GRACE_MS;

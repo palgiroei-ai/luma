@@ -112,7 +112,8 @@ export function leadBoardHtml(round, ctx) {
 // rows / columns always A then B (the board's side swap is about the walls, not reading order)
 // ctx (on top of the board's) = { mine: [{k, short, cat, added?}], notes(k), appeals(k), base: Set<k> (Roster = no toggle) }
 const gwOf = r => (genderOf(r.id) === 'W' ? (m, f) => f : m => m);
-const lateTimes = st => `<s>לא לפני ${hm(st.netMs)}</s><bdi class="eta" dir="ltr">~${hm(st.estMs)}</bdi>`;
+const netLbl = r => (r.netEst ? 'חישוב' : 'לא לפני'); // 3.31.0: R2 times are a calculation (4 min per climber), may come earlier
+const lateTimes = (st, r) => `<s>${netLbl(r)} ${hm(st.netMs)}</s><bdi class="eta" dir="ltr">~${hm(st.estMs)}</bdi>`;
 
 function mineLeg(r, k, route, ctx, g) {
   const st = legStatus(r, k, route, ctx.now, ctx.ctls[route]), pt = paint(ctx.set, route, ctx.holds), leg = r.slots[k][route];
@@ -126,7 +127,7 @@ function mineLeg(r, k, route, ctx, g) {
   }
   else {
     txt = `<span class="big">${st.ahead === 1 ? g('הבא בתור', 'הבאה בתור') : `עוד ${st.ahead - 1} ${g('לפניו', 'לפניה')}`}</span>מקום ${leg.pos} במסלול ${route}`;
-    tm = st.late ? lateTimes(st) : `לא לפני<span class="ontime">${hm(st.netMs)}</span>`;
+    tm = st.late ? lateTimes(st, r) : `${r.netEst ? 'חישוב · אפשר גם לפני' : 'לא לפני'}<span class="ontime">${hm(st.netMs)}</span>`;
   }
   return { st, obs, html: `<div class="lleg ${st.kind}${pt.two}" style="${pt.css}"><span class="rt">${route}</span><span class="st">${txt}</span><span class="tm">${tm}</span></div>` };
 }
@@ -204,7 +205,7 @@ export function leadAllHtml(round, ctx) {
     return { st, html: `<td class="sep${d}">${leg.pos}</td>${td}${st.late && st.kind !== 'done' && st.kind !== 'wall' ? `<s>${hm(st.netMs)}</s>` : hm(st.netMs)}</td>${td}${est}</td><td class="c-st">${stx}</td>` };
   };
   const head = `<tr><th></th>${rs.map(x => { const pt = paint(ctx.set, x, ctx.holds); return `<th class="grp sep${pt.two}" colspan="4" style="${pt.css}">מסלול ${x}</th>`; }).join('')}${ctx.viewer ? '' : '<th></th>'}</tr>
-    <tr><th>שם</th>${'<th class="sep">#</th><th>לא לפני</th><th>משוער</th><th>מצב</th>'.repeat(rs.length)}${ctx.viewer ? '' : '<th></th>'}</tr>`;
+    <tr><th>שם</th>${`<th class="sep">#</th><th>${netLbl(round)}</th><th>משוער</th><th>מצב</th>`.repeat(rs.length)}${ctx.viewer ? '' : '<th></th>'}</tr>`;
   const rows = round.slots.map((s, k) => {
     if (!s) return '';
     const cs = rs.map(x => cell(k, x)), climb = cs.some(c => c.st.kind === 'wall');
