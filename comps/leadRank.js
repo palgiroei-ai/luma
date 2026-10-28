@@ -5,9 +5,10 @@
 
 // 3.22.0 review fix: whitespace before "+" ("32 +") and any-case "top" are scores; null = empty / not a score
 export function parseScore(s) {
-  const m = /^\s*(?:(top)|(\d+)\s*(\+)?)\s*$/i.exec(String(s ?? ''));
+  // 3.26.0: intermediate holds carry decimals ("23.5", federation live data)
+  const m = /^\s*(?:(top)|(\d+(?:[.,]\d+)?)\s*(\+)?)\s*$/i.exec(String(s ?? ''));
   if (!m) return null;
-  return m[1] ? { top: true, hold: Infinity, plus: false } : { top: false, hold: +m[2], plus: !!m[3] };
+  return m[1] ? { top: true, hold: Infinity, plus: false } : { top: false, hold: +m[2].replace(',', '.'), plus: !!m[3] };
 }
 // negative = a better; no result is worse than any result
 export function cmpScore(a, b) {

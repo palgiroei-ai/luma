@@ -1,7 +1,7 @@
 // Offline support: page files cache-first; data.enc.json network-first (new start lists win when online).
-const CACHE = 'comps-v45';
+const CACHE = 'comps-v46';
 const TIMEOUT_MS = 3000; // weak hall Wi-Fi: don't hang on a stalled network, use the cache
-const FILES = ['./', 'index.html', 'app.js', 'engine.js', 'lead.js', 'leadView.js', 'store.js', 'sync.js', 'install.js', 'changelog.js', 'results.js', 'live.js', 'tags.js', 'ifsc.js', 'seasons.js', 'mine.js', 'roundpick.js', 'labels.js', 'ifscPlan.js', 'entry.js', 'decrypt.js', 'comps.css', 'logo-palgitraining.svg', 'mark.svg', 'icon-180.png', 'fonts/heebo-hebrew.woff2', 'fonts/heebo-latin.woff2', 'fonts/heebo-latin-ext.woff2', 'manifest.webmanifest', 'data.enc.json', 'data.view.enc.json'];
+const FILES = ['./', 'index.html', 'app.js', 'engine.js', 'lead.js', 'leadView.js', 'leadRank.js', 'store.js', 'sync.js', 'install.js', 'changelog.js', 'results.js', 'live.js', 'tags.js', 'ifsc.js', 'seasons.js', 'mine.js', 'roundpick.js', 'labels.js', 'ifscPlan.js', 'entry.js', 'decrypt.js', 'comps.css', 'logo-palgitraining.svg', 'mark.svg', 'icon-180.png', 'fonts/heebo-hebrew.woff2', 'fonts/heebo-latin.woff2', 'fonts/heebo-latin-ext.woff2', 'manifest.webmanifest', 'data.enc.json', 'data.view.enc.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

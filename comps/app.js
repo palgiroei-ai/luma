@@ -7,7 +7,8 @@ import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, r
 import { setupInstall } from './install.js';
 import { catHe, roundTitle, hm, hms, range, placeOnce, fileSource } from './labels.js';
 const srcOf = res => (res.live || res.locked || res.intl ? res.source : fileSource(res.source));
-import { liveRows, liveGroup, fetchLive, liveEvents } from './live.js';
+import { liveRows, liveGroup, fetchLive, liveEvents, liveLeadRows, liveLeadEvents } from './live.js';
+import { toLeadResults } from './leadRank.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
 import { planIfscRounds, sortIntl } from './ifscPlan.js';
@@ -19,7 +20,7 @@ import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadCol
 import { markNext, undoMark, toManual, toAuto, legStatus } from './lead.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.25.0';
+export const APP_VERSION = '3.26.0';
 
 const $ = s => document.querySelector(s);
 
@@ -162,7 +163,9 @@ async function loadLocked() {
     const next = {};
     for (const [id, v] of Object.entries(items || {})) {
       const old = LOCKED[id];
-      next[id] = old && old.at === v.at ? old : { source: `ההתאחדות · תוצאות רשמיות · נקבע כרשמי ${fbDate(v.at)}`, at: v.at, locked: true, final: lastRound(id),
+      const src = `ההתאחדות · תוצאות רשמיות · נקבע כרשמי ${fbDate(v.at)}`;
+      next[id] = old && old.at === v.at ? old : round(id)?.lead ? { ...toLeadResults({ rows: v.rows }, id, leadPrevRank(id)), source: src, at: v.at, locked: true } // 3.26.0 lead
+        : { source: src, at: v.at, locked: true, final: lastRound(id),
         rows: v.rows.map(r => ({ ...r, bs: r.bs.some(Boolean) ? r.bs : [] })) }; // nothing entered = did not start (DNS)
     }
     LOCKED = next; render();
@@ -170,10 +173,13 @@ async function loadLocked() {
 }
 function lockResults(id) {
   const res = resultsOf(id); if (!res?.live) return;
-  const miss = res.total - res.done;
-  askConfirm('קביעה כתוצאות רשמיות', `${roundTitle(round(id).title)}: התוצאות החיות כפי שהן עכשיו (${res.done}/${res.total} בולדרים${miss ? `, ${miss} חסרים — יירשמו בלי תוצאה` : ''}) יישמרו כתוצאות הראונד ויוצגו לכולם בירוק. אפשר לבטל אחר כך.`, 'קבע כרשמי', async () => {
+  const miss = res.total - res.done, u = res.lead ? 'מסלולים' : 'בולדרים';
+  // 3.26.0 lead: the climbers' route scores (res.file = the live rows before ranking), no boulder cells
+  const rows = res.lead ? res.file.map(({ bib, name, club, cat, A, B }) => ({ bib, name, club, cat, bs: [], ...(A != null ? { A } : {}), ...(B != null ? { B } : {}) }))
+    : res.rows.map(({ bib, name, club, cat, bs }) => ({ bib, name, club, cat, bs }));
+  askConfirm('קביעה כתוצאות רשמיות', `${roundTitle(round(id).title)}: התוצאות החיות כפי שהן עכשיו (${res.done}/${res.total} ${u}${miss ? `, ${miss} חסרים — יירשמו בלי תוצאה` : ''}) יישמרו כתוצאות הראונד ויוצגו לכולם בירוק. אפשר לבטל אחר כך.`, 'קבע כרשמי', async () => {
     try {
-      await fbCall('/locked', { round: id, source: `תוצאות חיות מההתאחדות, עודכן ${fmtClock(res.updated)}`, rows: res.rows.map(({ bib, name, club, cat, bs }) => ({ bib, name, club, cat, bs })) });
+      await fbCall('/locked', { round: id, source: `תוצאות חיות מההתאחדות, עודכן ${fmtClock(res.updated)}`, rows });
       await loadLocked(); showToast('נקבע כתוצאות רשמיות ✓');
     } catch { showToast('לא נשמר — אין חיבור לשרת. נסה שוב.'); }
   });
@@ -205,6 +211,7 @@ function liveOf(id) {
   const r = round(id); if (!live.data || !r) return null;
   const key = `${live.at}:${Math.floor(now() / 15000)}`;
   if (liveCache[id]?.key === key) return liveCache[id].v;
+  if (r.lead) return (liveCache[id] = { key, v: liveLeadOf(r) }).v;
   const lr = liveRows(r, live.data.cfg, live.data.results, now());
   let v = null;
   if (lr) {
@@ -221,6 +228,21 @@ function liveOf(id) {
   }
   liveCache[id] = { key, v };
   return v;
+}
+// 3.26.0: lead rounds from the same judging app (it took lead on 27/10) → ranked like a manual file (World Climbing rules),
+// red + LIVE like boulder; a new route result → toast. Round 2 counts back to round 1's places.
+function leadPrevRank(id) {
+  const prevId = id.replace(/-r2$/, '-r1');
+  return prevId !== id && resultsOf(prevId) ? new Map(rankedOf(prevId).filter(x => x.rank != null).map(x => [x.bib, x.rank])) : null;
+}
+function liveLeadOf(r) {
+  const lr = liveLeadRows(r, live.data.cfg, live.data.results, now()); if (!lr) return null;
+  const evs = liveLeadEvents(liveSeen[r.id], lr.rows, lr.routes);
+  liveSeen[r.id] = lr.rows.map(x => ({ ...x }));
+  if (r.id === current && screen === 'round') evs.forEach(e => liveToast({ ...e, kind: 'lead' }));
+  const res = toLeadResults({ rows: lr.rows }, r.id, leadPrevRank(r.id));
+  return { ...res, file: lr.rows, live: true, complete: lr.complete, done: lr.done, total: lr.total, started: lr.started, updated: lr.updated,
+    source: `ההתאחדות · תוצאות חיות · לא רשמי · עודכן ${fmtClock(lr.updated)}` };
 }
 function liveWanted() {
   if (screen !== 'round') return false;
@@ -721,7 +743,8 @@ function lockBar(r, res) {
   if (VIEWER || res.intl || (SIM_AT != null && location.hostname !== 'localhost')) return ''; // World Climbing results are theirs (3.11.0)
   if (res.locked) return `<div class="lock-bar"><span>✓ נקבע כתוצאות רשמיות מהתוצאות החיות</span><button type="button" class="btn btn-sm btn-secondary" data-unlock="${r.id}">ביטול</button></div>`;
   if (!res.live || !(res.complete || stateAt(r, now(), off(r.id)).phase === 'after')) return '';
-  return `<div class="lock-bar"><span>${res.complete ? 'כל הבולדרים הוזנו.' : `הראונד נגמר · ${res.done}/${res.total} בולדרים הוזנו.`} לשמור את המצב הזה כתוצאות הרשמיות של הראונד?</span><button type="button" class="btn btn-sm btn-primary" data-lock="${r.id}">קבע כתוצאות רשמיות</button></div>`;
+  const u = res.lead ? 'מסלולים' : 'בולדרים';
+  return `<div class="lock-bar"><span>${res.complete ? `כל ה${u} הוזנו.` : `הראונד נגמר · ${res.done}/${res.total} ${u} הוזנו.`} לשמור את המצב הזה כתוצאות הרשמיות של הראונד?</span><button type="button" class="btn btn-sm btn-primary" data-lock="${r.id}">קבע כתוצאות רשמיות</button></div>`;
 }
 
 // "Firstname LASTNAME" → the first name in its own span: the phone table hides it (the end of a Latin name is cut in RTL)
@@ -804,6 +827,7 @@ function renderResults(r, part = null, isrKey = r.id) {
 // hold; quals: route place in brackets + combined points), Israelis highlighted, "רק ישראלים", qualifying line. No cards.
 function renderLead(r, part, isrKey) {
   if (part === 'cards') return '';
+  if (!resultsOf(r.id).intl) return renderNatLead(r, part);
   const res = resultsOf(r.id), fem = resFem, nIsr = res.rows.filter(isIsr).length, onlyIsr = !!(nIsr && resIsr[isrKey]);
   const chips = !part && nIsr ? isrSeg(onlyIsr, fem) : '';
   const last = /-f$/.test(r.id), mineBy = intlMineByBib(res.rows, DATA.intlMine), bibOf = Object.fromEntries(res.rows.filter(isIsr).map(x => [x.name, x.bib]));
@@ -817,6 +841,23 @@ function renderLead(r, part, isrKey) {
       <div class="tbl-wrap">${res.rows.length ? leadTableHtml(rankedOf(r.id), { nR: r.boulders, adv: r.adv || 0, onlyIsr, fem, nameHtml, mine, waiting: res.status !== 'finished' && !res.complete })
         : `<p class="muted">${gw(r.id, 'רשימת המטפסים', 'רשימת המטפסות')} תתפרסם לפני הראונד.</p>`}</div></div>
     <p class="muted small">גובה = מספר האחיזה האחרונה שהוחזקה; <bdi dir="ltr">+</bdi> = תנועה ממנה הלאה; TOP = עד סוף המסלול. ${r.boulders > 1 ? 'במוקדמות: ניקוד משולב של המסלולים (נמוך יותר = טוב יותר), ובסוגריים המקום בכל מסלול. ' : ''}הדירוג לפי World Climbing. ${r.adv ? `עולים לראונד הבא: ${r.adv}.` : last ? 'ראונד אחרון — אין ראונד המשך.' : ''}</p>
+  </div>`;
+}
+// 3.26.0 national lead round (federation live / locked): same World Climbing table, my athletes marked (the "שלי"
+// rows), the live bar + lock bar like boulder, qualifying line = the info sheet quota. No cards.
+function renderNatLead(r, part) {
+  const res = resultsOf(r.id), fem = resFem, ranked = rankedOf(r.id);
+  const mineBy = {}; for (const m of mineOf(r.id)) { const s = r.slots[m.k]; if (s) mineBy[s.bib] = m; }
+  const nameHtml = n => { const x = res.rows.find(y => y.name === n), m = x && mineBy[x.bib]; return esc(n) + (m ? ` <span class="tag">${esc(m.short)}</span>` : ''); };
+  const last = res.final || lastRound(r.id), q = last ? 0 : r.info?.quota || 0;
+  const running = res.live && !res.complete;
+  return `<div class="res lead-res${res.live ? ' is-live' : ''}">
+    ${res.live ? `<div class="live-bar${live.err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל המסלולים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} מסלולים הוזנו · ${res.started} התחילו</span>${live.err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · לא רשמי</span></div>` : ''}
+    ${part ? '' : lockBar(r, res)}
+    <div class="res-head"><span class="muted small">מקור: ${esc(srcOf(res))}</span></div>
+    <div class="card"><div class="tbl-head"><b>${fem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'ספורטאי הפלגיה' : 'שלי'}</span></div>
+      <div class="tbl-wrap">${leadTableHtml(ranked, { nR: r.boulders, adv: q, fem, nameHtml, mine: new Set(Object.keys(mineBy).map(Number)), waiting: running })}</div></div>
+    <p class="muted small">גובה = מספר האחיזה האחרונה שהוחזקה; <bdi dir="ltr">+</bdi> = תנועה ממנה הלאה; TOP = עד סוף המסלול. ${r.boulders > 1 ? 'בראונד הראשון: ניקוד משולב של שני המסלולים (נמוך יותר = טוב יותר), ובסוגריים המקום בכל מסלול. ' : 'תיקו: לפי המקום בראונד הראשון. '}${last ? 'ראונד אחרון — אין ראונד המשך.' : q ? `עולים לראונד הבא: ${q}; תיקו על המקום האחרון עולה.` : ''}</p>
   </div>`;
 }
 // 3.16.0: lead rounds count routes, boulder rounds boulders
@@ -1831,6 +1872,7 @@ function liveToast(e) {
   const el = document.createElement('button'); el.type = 'button'; el.className = 'ltoast';
   el.innerHTML = e.kind?.startsWith('appeal') ? `<span class="k">⚖️</span>${esc(e.name)} · בולדר ${e.b} · ${e.kind === 'appeal' ? 'נפתח ערעור' : 'הערעור הוכרע'}` // 3.12.2
     : `<span class="k">${e.kind === 'top' ? 'T' : 'Z'}</span>${esc(e.name)} · בולדר ${e.b} · ${e.kind === 'top' ? 'טופ' : 'זון'} בניסיון ${e.att}`;
+  if (e.kind === 'lead') el.innerHTML = `<span class="k">${e.score === 'TOP' ? 'T' : '↑'}</span>${esc(e.name)} · מסלול ${e.route} · <bdi dir="ltr">${esc(e.score)}</bdi>`; // 3.26.0
   if (e.kind?.startsWith('appeal')) el.classList.add('appeal');
   el.addEventListener('click', () => el.remove());
   box.append(el);

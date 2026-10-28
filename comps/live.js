@@ -8,12 +8,19 @@ import { zoneParts } from './engine.js';
 
 export const LIVE_DB = 'https://realtime-database---test-default-rtdb.europe-west1.firebasedatabase.app/ilca-bldr-7kqm2n9x4wfp';
 
-// our round → the federation's category group (config.categoryGroups) + gender
+// our round → the federation's category group (config.categoryGroups) + gender. 3.26.0: lead ids too (lead1-sen-w-r1)
 export function liveGroup(roundId) {
-  const m = roundId.match(/^(sen|u17)-([mw])/); if (!m) return null;
+  const m = roundId.match(/(?:^|-)(sen|u17)-([mw])(?:-|$)/); if (!m) return null;
   const g = m[2] === 'w' ? 'W' : 'M';
   return { gender: g, group: m[1] === 'sen' ? (g === 'W' ? 'בוגרות' : 'בוגרים') : (g === 'W' ? 'בנות U17' : 'בנים U17') };
 }
+// 3.26.0: the group's categories. The federation renamed the youth groups for lead ("נערות U17" = בנות U15 + בנות U17)
+// → by name first, else the group that holds our main category, else that category alone
+export function groupCats(cfg, lg) {
+  const gs = cfg?.categoryGroups || {};
+  return gs[lg.group] || Object.values(gs).find(c => Array.isArray(c) && c.includes(lg.group)) || [lg.group];
+}
+export const isLeadCfg = cfg => String(cfg?.discipline ?? '').trim().toLowerCase() === 'lead';
 export const roundNumberOf = roundId => Number((roundId.match(/-r(\d)$/) || [])[1] || 1);
 // 'בוגרים' / 'בוגרות' → S, 'בנים U19' → U19 (same codes as src/results.mjs)
 export const catCode = name => (/U\d+/.exec(name) || ['S'])[0];
@@ -25,8 +32,8 @@ const dayOf = ms => { const d = zoneParts(ms); return `${d.y}-${String(d.mo).pad
 // start list (a leftover of another round can never slip in). nowMs: entries after it are ignored (simulation replays).
 export function liveRows(round, cfg, results, nowMs) {
   const lg = liveGroup(round.id); if (!lg || !cfg || !results || !round.slots.length) return null;
-  if (cfg.roundNumber != null && Number(cfg.roundNumber) !== roundNumberOf(round.id)) return null;
-  const cats = cfg.categoryGroups?.[lg.group] || [lg.group], nB = round.boulders;
+  if (isLeadCfg(cfg) || (cfg.roundNumber != null && Number(cfg.roundNumber) !== roundNumberOf(round.id))) return null;
+  const cats = groupCats(cfg, lg), nB = round.boulders;
   const bySlot = new Map(round.slots.filter(Boolean).map(s => [s.bib, { bib: s.bib, name: s.name, club: '', cat: null, bs: Array(nB).fill(null) }]));
   let updated = 0, done = 0; const seen = new Set();
   for (const [key, v] of Object.entries(results)) {
@@ -44,6 +51,43 @@ export function liveRows(round, cfg, results, nowMs) {
   if (!done) return null;
   const rows = [...bySlot.values()], started = rows.filter(r => r.bs.some(Boolean)).length;
   return { rows, done, total: rows.length * nB, started, complete: done === rows.length * nB, updated };
+}
+
+// 3.26.0 lead: one record per climber per route { started?, top?, hold, plus?, timeMs?, updatedAt } (federation app,
+// 27/10). Route 1 = our A, 2 = B. Score text like our manual files: "TOP" / "34" / "34+" / "23.5" (intermediate hold);
+// a record that never started (opened, nothing entered) = no result yet.
+export function leadScore(v) {
+  if (!v) return null;
+  const hold = Math.min(80, Math.max(0, Math.round((Number(String(v.hold ?? '').replace(',', '.')) || 0) * 100) / 100));
+  if (!(v.started === true || v.top === true || hold > 0 || Number(v.timeMs) > 0)) return null;
+  return v.top === true ? 'TOP' : `${hold}${v.plus ? '+' : ''}`;
+}
+// → { rows: [{ bib, name, club, cat, A, B }], done, total, started, complete, updated } or null (not our round / nothing yet)
+export function liveLeadRows(round, cfg, results, nowMs) {
+  const lg = liveGroup(round.id); if (!lg || !cfg || !results || !round.slots.length || !isLeadCfg(cfg)) return null;
+  if (cfg.roundNumber != null && Number(cfg.roundNumber) !== roundNumberOf(round.id)) return null;
+  const cats = groupCats(cfg, lg), routes = round.routes || (round.boulders > 1 ? ['A', 'B'] : ['A']);
+  const bySlot = new Map(round.slots.filter(Boolean).map(s => [s.bib, { bib: s.bib, name: s.name, club: s.club || '', cat: s.cat || null }]));
+  let updated = 0, done = 0;
+  for (const [key, v] of Object.entries(results)) {
+    let k; try { k = decodeURIComponent(key); } catch { continue; }
+    const [bib, cat, gender, route] = k.split('|'), x = routes[Number(String(route).replace(/[^\d]/g, '')) - 1], row = bySlot.get(Number(bib));
+    if (!row || gender !== lg.gender || !cats.includes(cat) || !x || !v) continue;
+    const at = Date.parse(v.updatedAt); if (!at || at > nowMs || dayOf(at) !== round.date) continue;
+    const sc = leadScore(v); if (sc == null) continue;
+    if (row[x] == null) done++;
+    row[x] = sc; if (!row.cat) row.cat = catCode(cat);
+    updated = Math.max(updated, at);
+  }
+  if (!done) return null;
+  const rows = [...bySlot.values()], total = rows.length * routes.length;
+  return { rows, done, total, started: rows.filter(r => routes.some(x => r[x] != null)).length, complete: done === total, updated, routes };
+}
+// new route results since the last poll → [{ bib, name, route: 1|2, score }]; prev = null → nothing (as liveEvents)
+export function liveLeadEvents(prevRows, rows, routes = ['A', 'B']) {
+  if (!prevRows || !rows) return [];
+  const before = new Map(prevRows.map(r => [r.bib, r]));
+  return rows.flatMap(r => routes.flatMap((x, j) => (r[x] != null && before.get(r.bib)?.[x] !== r[x] ? [{ bib: r.bib, name: r.name, route: j + 1, score: r[x] }] : [])));
 }
 
 export async function fetchLive(signal) {
