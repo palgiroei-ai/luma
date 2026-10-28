@@ -1397,3 +1397,9 @@ body.lead-live #round-screen > section { min-width: 0; } /* grid item: let the f
 .full.lall tr.climb td { background: color-mix(in srgb, var(--live) 16%, var(--card)); }
 .full.lall tr.climb td:first-child { box-shadow: inset -6px 0 0 var(--live); }
 .full.lall tr.climb .nm-t { font-weight: 800; color: var(--live); }
+/* 3.26.1 (Roei): my athletes in a route's "next up" list stand out like the boulder next-up — a filled copper box */
+.lr-next li.mine { background: var(--copper); color: var(--on-accent); font-weight: 700; border-radius: var(--r-sm); border-top-color: transparent; padding-inline: 8px; margin-block: 2px; }
+.lr-next li.mine + li { border-top-color: transparent; }
+.lr-next li.mine .nm, .lr-next li.mine .pos, .lr-next li.mine .times .net, .lr-next li.mine .times .eta { color: var(--on-accent); }
+.lr-next li.mine .bib { background: var(--card); color: var(--copper-text); border-color: transparent; }
+.lr-next li.mine .chip.prep { background: var(--card); }

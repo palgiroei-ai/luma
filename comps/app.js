@@ -17,10 +17,10 @@ import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openT
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
-import { markNext, undoMark, toManual, toAuto, legStatus } from './lead.js';
+import { markNext, undoMark, toManual, toAuto, legStatus, withLive, ownCtl } from './lead.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.26.0';
+export const APP_VERSION = '3.27.0';
 
 const $ = s => document.querySelector(s);
 
@@ -516,7 +516,19 @@ function renderDelayBtn(r) {
 function applyDelays() {
   for (const r of DATA.rounds) { if (r.slotSec0 == null) r.slotSec0 = r.slotSec; r.slotSec = r.slotSec0 + store.delay(r.id); }
   // 3.22.0: lead live board — each route's shared mode + marks (store, synced) → round.leadCtl, read by engine.js / lead.js
-  for (const r of DATA.rounds) if (isLeadLive(r)) r.leadCtl = Object.fromEntries(leadRoutes(r).map(x => [x, store.leadCtl(r.id, x)]));
+  // 3.27.0: + the federation's live results move each route on (withLive, derived — the store keeps the coach's own marks)
+  for (const r of DATA.rounds) if (isLeadLive(r)) {
+    const at = leadResAt(r);
+    r.leadCtl = Object.fromEntries(leadRoutes(r).map(x => [x, withLive(r, x, store.leadCtl(r.id, x), at?.[x], now())]));
+  }
+}
+// route → Map slot k → when that climber's live result arrived (null: no live data for this round)
+function leadResAt(r) {
+  if (!live.data || r.ifsc) return null;
+  const lr = liveLeadRows(r, live.data.cfg, live.data.results, now()); if (!lr) return null;
+  const kOf = new Map(r.slots.map((x, k) => [x?.bib, k])), out = {};
+  for (const row of lr.rows) for (const [x, t] of Object.entries(row.at || {})) if (kOf.has(row.bib)) (out[x] ||= new Map()).set(kOf.get(row.bib), t);
+  return out;
 }
 
 function renderNext(r, s) {
@@ -1334,7 +1346,7 @@ function openRouteNote(x) {
 function leadCtlSet(x, f) {
   const r = round(current);
   if (VIEWER || !isLeadLive(r) || !leadRoutes(r).includes(x)) return;
-  const c = store.leadCtl(r.id, x), n = f(r, x, c);
+  const c = store.leadCtl(r.id, x), n = f(r, x, ownCtl(r.leadCtl?.[x]) || c); // 3.27.0: a tap goes on from what the board shows
   if (n && n !== c) store.setLeadCtl(r.id, x, n);
   render();
 }
@@ -2426,7 +2438,7 @@ function start() {
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
     else if (b.id === 'home-btn') { homeOpenEvent = null; homeFinal = null; homeSeason = null; homeFrom = null; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
-    else if (d.leadManual) leadCtlSet(d.leadManual, (r, x) => toManual(r, x, now()));
+    else if (d.leadManual) leadCtlSet(d.leadManual, (r, x, c) => (c?.manual ? c : toManual(r, x, now())));
     else if (d.leadNext) leadCtlSet(d.leadNext, (r, x, c) => markNext(r, x, c, now()));
     else if (d.leadUndo) leadCtlSet(d.leadUndo, (r, x, c) => undoMark(c));
     else if (d.leadAuto) leadCtlSet(d.leadAuto, () => toAuto());

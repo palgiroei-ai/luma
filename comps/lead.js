@@ -45,12 +45,36 @@ export function routeState(round, route, nowMs, ctl = { manual: false, starts: [
   // 3.22.0 Task 8 fix: clock-free plan (marks + pace + NET only) — alerts must not follow the clock between taps
   const planMs = i => (cur < 0 ? nets[i] : i <= cur ? starts[i] : Math.max(nets[i], curStart + (i - cur) * paceMs));
   // 3.22.0 review fix: last climber tapped → her slot end; otherwise the plan end + LEAD_GRACE_MS (a forgotten last tap never stays live)
-  const endMs = cur === last && cur >= 0 ? curStart + LEAD_CLIMB_MS : planMs(last) + LEAD_CLIMB_MS + LEAD_GRACE_MS;
+  // 3.27.0: the last climber's live result came in (ctl.endAt) → the route is over then
+  const endMs = ctl.endAt != null ? ctl.endAt : cur === last && cur >= 0 ? curStart + LEAD_CLIMB_MS : planMs(last) + LEAD_CLIMB_MS + LEAD_GRACE_MS;
   const phase = nowMs >= endMs ? 'after' : cur < 0 ? 'before' : 'live';
   // 3.22.0 fix: late = the current climber started after her NET, or the next NET passed without a tap (chip agrees with estimates)
   const behindMs = cur < 0 ? null : Math.max(curStart - nets[cur], cur < last && nowMs > nets[cur + 1] ? nowMs - nets[cur + 1] : -Infinity);
   return { mode: 'manual', ...at(cur, curStart, phase, paceMs, behindMs, estMs, planMs, endMs) };
 }
+
+// 3.27.0 (Roei): live results move a route on, also over the coach's marks. A climber with a result (also 0, once the
+// judge marked her started) has finished, and so has everyone before her; the next one is on the wall since that result
+// came in (in lead she starts about when the judge enters the previous score). Only ever forward — marks or a schedule
+// already further on stay. resAt: Map slot k → when her result on this route arrived. → a derived manual ctl, never
+// stored: { manual, starts, live: true, fromAuto, endAt? } (the last climber's result = the route is over), or ctl itself.
+export function withLive(round, route, ctl, resAt, nowMs) {
+  if (!resAt || !resAt.size) return ctl;
+  const s = routeState(round, route, nowMs, ctl), order = s.order, last = order.length - 1;
+  let done = -1;
+  order.forEach((k, i) => { if (resAt.has(k)) done = i; });
+  if (done < 0) return ctl;
+  const want = Math.min(done + 1, last), endAt = done === last ? resAt.get(order[last]) : null;
+  if (want <= s.cur && endAt == null) return ctl;
+  const starts = ctl && ctl.manual ? (ctl.starts || []).slice(0, order.length) : order.slice(0, s.cur + 1).map(k => netMs(round, k, route));
+  for (let j = starts.length; j <= want; j++) {
+    const prev = j > 0 ? starts[j - 1] : -Infinity, t = resAt.get(order[j - 1]) ?? resAt.get(order[done]);
+    starts.push(Math.min(nowMs, Math.max(prev, t)));
+  }
+  return { manual: true, starts, live: true, fromAuto: !(ctl && ctl.manual), ...(endAt != null ? { endAt } : {}) };
+}
+// the coach taps over a derived ctl → it becomes her own marks (the live flags dropped)
+export const ownCtl = c => (c && c.live ? { manual: true, starts: c.starts.slice() } : c);
 
 // "הבאה על הקיר": a second tap within DOUBLE_TAP_MS is the same start (Review Focus 2); no marks past the last climber.
 // Callers switch with toManual first — markNext on a non-manual ctl returns it unchanged.

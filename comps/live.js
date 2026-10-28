@@ -77,6 +77,7 @@ export function liveLeadRows(round, cfg, results, nowMs) {
     const sc = leadScore(v); if (sc == null) continue;
     if (row[x] == null) done++;
     row[x] = sc; if (!row.cat) row.cat = catCode(cat);
+    (row.at || Object.defineProperty(row, 'at', { value: {}, enumerable: false }).at)[x] = at; // 3.27.0: when (moves the route on; not a score field)
     updated = Math.max(updated, at);
   }
   if (!done) return null;
