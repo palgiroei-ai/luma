@@ -1403,3 +1403,19 @@ body.lead-live #round-screen > section { min-width: 0; } /* grid item: let the f
 .lr-next li.mine .nm, .lr-next li.mine .pos, .lr-next li.mine .times .net, .lr-next li.mine .times .eta { color: var(--on-accent); }
 .lr-next li.mine .bib { background: var(--card); color: var(--copper-text); border-color: transparent; }
 .lr-next li.mine .chip.prep { background: var(--card); }
+/* 3.29.0 (Roei): lead results — a result that just came in blinks; routes card with topo + stats; boulder photo in the stats card */
+.lead-tbl td.fresh { box-shadow: inset 0 0 0 3px var(--live); }
+@media (prefers-reduced-motion: no-preference) { .lead-tbl td.fresh { animation: lead-blink .5s ease-in-out 20 alternate; } }
+@keyframes lead-blink { to { background: color-mix(in srgb, var(--live) 22%, transparent); } }
+.lstats h3 { margin: 0 0 10px; font-size: 16px; }
+.ls-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.ls-row:first-of-type { border-top: 0; padding-top: 0; }
+.ls-topo { flex: none; padding: 0; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--chalk); cursor: zoom-in; overflow: hidden; }
+.ls-topo img { display: block; width: 72px; height: 120px; object-fit: cover; object-position: top; }
+.ls-body { display: grid; gap: 4px; min-width: 0; }
+.ls-body .c { color: var(--muted); font-size: 13px; }
+.ls-body .mydots { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; font-weight: 700; color: var(--copper-text); }
+.bs-b { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.bs-thumb { padding: 0; border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; background: var(--chalk); cursor: zoom-in; }
+.bs-thumb img { display: block; width: 56px; height: 42px; object-fit: cover; }
+.lead-fc .sc bdi { font-variant-numeric: tabular-nums; }

@@ -17,10 +17,11 @@ import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openT
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
-import { markNext, undoMark, toManual, toAuto, legStatus, withLive, ownCtl, legOrder } from './lead.js';
+import { markNext, undoMark, toManual, toAuto, legStatus, withLive, ownCtl, legOrder, routeState } from './lead.js';
+import { neededOn, routeStats } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.28.1';
+export const APP_VERSION = '3.29.0';
 
 const $ = s => document.querySelector(s);
 
@@ -240,6 +241,7 @@ function liveLeadOf(r) {
   const evs = liveLeadEvents(liveSeen[r.id], lr.rows, lr.routes);
   liveSeen[r.id] = lr.rows.map(x => ({ ...x }));
   if (r.id === current && screen === 'round') evs.forEach(e => liveToast({ ...e, kind: 'lead' }));
+  if (evs.length) { const m = liveFresh[r.id] || (liveFresh[r.id] = new Map()); for (const e of evs) m.set(`${e.bib}:${e.route - 1}`, Date.now()); } // 3.29.0: blink
   const res = toLeadResults({ rows: lr.rows }, r.id, leadPrevRank(r.id));
   return { ...res, file: lr.rows, live: true, complete: lr.complete, done: lr.done, total: lr.total, started: lr.started, updated: lr.updated,
     source: `ההתאחדות · תוצאות חיות · לא רשמי · עודכן ${fmtClock(lr.updated)}` };
@@ -805,7 +807,8 @@ function renderResults(r, part = null, isrKey = r.id) {
     : `<p class="muted">${intl && !nIsr ? (res.rows.length ? gw(r.id, 'אין ישראלים בראונד הזה.', 'אין ישראליות בראונד הזה.') : '') : VIEWER ? 'אין ספורטאי הפלגיה בראונד הזה.' : 'אין ספורטאים שלי בראונד הזה.'}</p>`;
   const stats = boulderStats(ranked, nB).map(b => {
     const md = mine.map(x => `<span>${esc(whoByBib[x.bib].short)} ${cellTxt(x.bs[b.boulder - 1])}</span>`).join('');
-    return `<div class="bs-row"><b>בולדר ${b.boulder}</b><div class="stack"><span class="t" style="width:${b.tops / b.n * 100}%"></span><span class="z" style="width:${b.zoneOnly / b.n * 100}%"></span></div>
+    const u = photoUrl(r.id, b.boulder); // 3.29.0 (Roei): the boulder's photo next to its numbers (tap = big)
+    return `<div class="bs-row"><b class="bs-b">${u ? `<button type="button" class="bs-thumb" data-photo="${b.boulder}" data-ph-round="${r.id}" aria-label="תמונת בולדר ${b.boulder}"><img src="${u}" alt=""></button>` : ''}בולדר ${b.boulder}</b><div class="stack"><span class="t" style="width:${b.tops / b.n * 100}%"></span><span class="z" style="width:${b.zoneOnly / b.n * 100}%"></span></div>
       <span class="c">${b.tops} טופ · ${b.tops + b.zoneOnly} זון / ${b.n}</span><span></span>
       <div class="mydots">${md}<span class="avg">ממוצע ניסיונות לטופ ${b.avgTop ?? '–'}</span><span class="avg">ממוצע ניסיונות לזון ${b.avgZone ?? '–'}</span></div></div>`;
   }).join('');
@@ -870,18 +873,78 @@ function renderNatLead(r, part) {
   const chips = !part && opts.length > 1 ? `<div class="choices res-cats" role="group" aria-label="קטגוריה">${opts.map(o => `<button type="button" class="choice" data-rescat="${o.key}" aria-pressed="${o === opt}">${esc(o.label)}</button>`).join('')}</div>` : '';
   const catOf = x => (x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? catLabel(x.cat, g) : '');
   const mineBy = {}; for (const m of mineOf(r.id)) { const s = r.slots[m.k]; if (s) mineBy[s.bib] = m; }
-  const nameHtml = n => { const x = res.rows.find(y => y.name === n), m = x && mineBy[x.bib]; return esc(n) + (m ? ` <span class="tag">${esc(m.short)}</span>` : ''); };
+  // 3.29.0 (Roei): who climbs now (the board's state) next to the name, a new result blinks 10 s
+  const wall = res.live ? leadWallOf(r) : new Map(), fresh = freshOf(r.id);
+  const wallTag = bib => (wall.has(bib) ? `<span class="onwall"><i></i>על הקיר · מסלול ${wall.get(bib)}</span>` : '');
+  const nameHtml = n => { const x = res.rows.find(y => y.name === n), m = x && mineBy[x.bib]; return esc(n) + (m ? ` <span class="tag">${esc(m.short)}</span>` : '') + (x ? wallTag(x.bib) : ''); };
   const last = res.final || lastRound(r.id), q = last ? 0 : r.info?.quota || 0;
   const running = res.live && !res.complete;
+  const file = res.file || [], fileIn = opt?.cats ? file.filter(x => opt.cats.includes(x.cat)) : file;
+  const cx = { ranked, full, file, q, last, running, overall, wallTag, prevRank: leadPrevRank(r.id) };
+  const mine = ranked.filter(x => mineBy[x.bib]);
+  const cards = part || !mine.length ? '' : `<div class="focus">${mine.map(x => leadCard(r, x, mineBy[x.bib], cx)).join('')}</div>`;
+  const routesCard = part ? '' : leadRoutesCard(r, fileIn, mineBy);
   return `<div class="res lead-res${res.live ? ' is-live' : ''}">
     ${res.live ? `<div class="live-bar${live.err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל המסלולים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} מסלולים הוזנו · ${res.started} התחילו</span>${live.err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · לא רשמי</span></div>` : ''}
     ${part ? '' : lockBar(r, res)}
     ${chips}
     <div class="res-head"><span class="muted small">מקור: ${esc(srcOf(res))}</span></div>
+    ${cards}
+    ${routesCard}
     <div class="card"><div class="tbl-head"><b>${overall ? esc(opt.label) : fem ? 'כל המתחרות' : 'כל המתחרים'}</b><span class="muted small">שורה מסומנת = ${VIEWER ? 'ספורטאי הפלגיה' : 'שלי'}</span></div>
-      <div class="tbl-wrap">${leadTableHtml(ranked, { nR: r.boulders, adv: q, fem, nameHtml, mine: new Set(Object.keys(mineBy).map(Number)), waiting: running, catOf, overall })}</div></div>
+      <div class="tbl-wrap">${leadTableHtml(ranked, { nR: r.boulders, adv: q, fem, nameHtml, mine: new Set(Object.keys(mineBy).map(Number)), waiting: running, catOf, overall, fresh })}</div></div>
     <p class="muted small">גובה = מספר האחיזה האחרונה שהוחזקה; <bdi dir="ltr">+</bdi> = תנועה ממנה הלאה; TOP = עד סוף המסלול. ${r.boulders > 1 ? 'בראונד הראשון: ניקוד משולב של שני המסלולים (נמוך יותר = טוב יותר), ובסוגריים המקום בכל מסלול. ' : 'תיקו: לפי המקום בראונד הראשון. '}${last ? 'ראונד אחרון — אין ראונד המשך.' : q ? `עולים לראונד הבא: ${q}; תיקו על המקום האחרון עולה.` : ''}</p>
   </div>`;
+}
+// 3.29.0: bib → route number (1/2) of whoever is on a wall now, by the board's state (marks, schedule, live results)
+function leadWallOf(r) {
+  const out = new Map(); if (!isLeadLive(r)) return out;
+  leadRoutes(r).forEach((x, j) => { const s = routeState(r, x, now(), r.leadCtl?.[x]); if (s.phase === 'live' && s.curK != null) out.set(r.slots[s.curK]?.bib, j + 1); });
+  return out;
+}
+// 3.29.0 (Roei): my athlete's lead card — place (category + overall), each route's height + place there; a route still to
+// climb → the lowest height that puts her inside the line (round 1) / on the podium + first (last round), as things stand now
+function leadCard(r, x, who, c) {
+  const fem = resFem, gg = (m, f) => (fem ? f : m), one = r.boulders === 1, routes = leadRoutes(r);
+  const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`, bdi = s => `<bdi dir="ltr">${esc(s)}</bdi>`;
+  const ok = c.ranked.filter(y => y.rank != null), ov = c.overall ? c.overall.get(x.bib) : x.rank, fr = c.file.find(y => y.bib === x.bib) || {};
+  const head = `<div class="top"><div><div class="nm">${esc(x.name)}${c.wallTag(x.bib)}</div><div class="club">${x.club ? esc(x.club) + ' · ' : ''}מס׳ ${x.bib}</div></div>
+    <div class="rk">${x.rank ?? '–'}${x.rank != null ? `<small>/${ok.length}</small>` : ''}${c.running ? '<em>זמני</em>' : ''}${c.overall && ov != null ? `<span class="rk-all">כללי ${ov}</span>` : ''}</div></div>`;
+  const needTxt = (n, goal) => (n === '' ? `<span class="yes">${goal} בכל מקרה</span>` : n == null ? `<span class="muted">גם TOP לא מספיק כרגע</span>` : `לפחות ${bdi(n)}`);
+  const missing = routes.filter(rt => fr[rt] == null);
+  const lines = routes.map((rt, j) => {
+    const sc = fr[rt], n = c.file.filter(y => y[rt] != null).length, place = one ? x.rank : x.rs?.[j]?.[1];
+    if (sc != null) return kv(`מסלול ${j + 1}`, `${bdi(sc)}<small class="d">${place != null ? `מקום ${place} מתוך ${n}` : ''}</small>`);
+    let need = '';
+    // only once (almost) everyone else climbed this route — before that the others count as last there and the number lies
+    const left = c.file.filter(y => y.bib !== x.bib && y[rt] == null && (y.A != null || y.B != null)).length, soon = left <= 3;
+    if (!c.last && c.q && !one && missing.length === 1) need = `<small class="d">${soon ? `כדי לעלות: ${needTxt(neededOn(c.file, x.bib, rt, c.q), 'עולה')}` : 'הגובה שצריך יחושב לקראת סוף המסלול'}</small>`;
+    return kv(`מסלול ${j + 1}`, `${gg('עוד לא טיפס', 'עוד לא טיפסה')}${need}`);
+  }).join('');
+  let goals = '';
+  const leftA = c.file.filter(y => y.bib !== x.bib && y.A == null).length;
+  if (one && c.last && missing.length && leftA <= 3) {
+    const o = { oneRoute: true, prevRank: c.prevRank };
+    goals = kv('לפודיום', needTxt(neededOn(c.file, x.bib, 'A', 3, o), 'בפודיום')) + kv('למקום ראשון', needTxt(neededOn(c.file, x.bib, 'A', 1, o), 'ראשון'));
+  }
+  const fullOk = c.full.filter(y => y.rank != null), line = c.q ? fullOk[Math.min(c.q, fullOk.length) - 1] : null;
+  const cut = !c.last && c.q && x.rank != null && line ? kv('קו העלייה', ov <= c.q ? `<span class="yes">בפנים ✓</span>` : `בחוץ<small class="d">מקום ${c.q}: ${bdi(line.score)}</small>`) : '';
+  const i = ok.indexOf(x), above = i > 0 ? ok.slice(0, i).reverse().find(y => y.rank < x.rank) : null;
+  const ab = x.rank != null ? kv('המקום שמעל', above ? `${esc(above.name)}<small class="d">מקום ${above.rank} · ${bdi(above.score)}</small>` : 'מקום ראשון') : '';
+  const pl = !one && fr.A != null && fr.B != null && x.rs?.[0]?.[1] != null && x.rs?.[1]?.[1] != null && x.rs[0][1] !== x.rs[1][1] ? (j => kv('מסלול חזק', `מסלול ${j + 1}<small class="d">מקום ${x.rs[j][1]}</small>`))(x.rs[0][1] < x.rs[1][1] ? 0 : 1) : '';
+  return `<article class="card fc lead-fc${c.running ? ' live' : ''}${who.added ? ' added' : ''}">${head}
+    <div class="sc">${x.score != null ? `<b>${bdi(x.score)}</b> ${one ? 'גובה' : 'נק׳ משולב'}` : `<span class="muted">${'עדיין בלי תוצאה'}</span>`}</div>
+    <div class="ins"><div class="grp"><span class="gh">מסלולים</span>${lines}${pl}</div>
+      ${goals || cut || ab ? `<div class="grp"><span class="gh">מיקום${c.running ? ' זמני' : ''}</span>${goals}${cut}${ab}</div>` : ''}</div></article>`;
+}
+// 3.29.0 (Roei): the round's routes — topo (tap = big, the hold numbers readable) + how far they got + my athletes' heights
+function leadRoutesCard(r, rows, mineBy) {
+  return `<div class="card lstats"><h3>המסלולים בראונד</h3>${leadRoutes(r).map((rt, j) => {
+    const st = routeStats(rows, rt), u = photoUrl(r.id, topoB(rt));
+    const md = rows.filter(y => mineBy[y.bib] && y[rt] != null).map(y => `<span>${esc(mineBy[y.bib].short)} <bdi dir="ltr">${esc(y[rt])}</bdi></span>`).join('');
+    return `<div class="ls-row">${u ? `<button type="button" class="ls-topo" data-photo="${topoB(rt)}" data-ph-round="${r.id}" aria-label="טופו מסלול ${j + 1}"><img src="${u}" alt=""></button>` : ''}
+      <div class="ls-body"><b>מסלול ${j + 1}</b><span class="c">${st.n ? `TOP: ${st.tops} מתוך ${st.n} · חציון <bdi dir="ltr">${esc(st.median)}</bdi>${st.band ? ` · רוב הנפילות באחיזות ${st.band.from}–${st.band.to} (${st.band.count})` : ''}` : 'עוד אין תוצאות'}</span>${md ? `<div class="mydots">${md}</div>` : ''}</div></div>`;
+  }).join('')}</div>`;
 }
 // 3.16.0: lead rounds count routes, boulder rounds boulders
 const unitsOf = r => (r.lead ? (r.boulders === 1 ? 'מסלול אחד' : `${r.boulders} מסלולים`) : `${r.boulders} בולדרים`);
@@ -1066,13 +1129,13 @@ function renderFinal() {
   const f = fs.find(x => x.key === homeFinal.key) || fs[0];
   if (!f) { homeFinal = null; return renderHome(); }
   const two = /-r2$/.test(f.id), fin = f.rows.filter(x => x.round === 2).length;
-  const tr = x => `<tr class="${f.mine.has(x.bib) ? 'fin-me' : ''}"><td class="fin-rk">${x.rank == null ? '—' : x.rank <= 3 ? `<span class="medal">${x.rank}</span>` : x.rank}</td><td class="fin-nm">${esc(x.name)}<small>${esc(x.club || '')}</small></td>${two ? `<td><span class="fin-rd r${x.round}">R${x.round}</span></td>` : ''}<td class="fin-pt">${x.score == null ? gw(f.id, 'לא התחיל', 'לא התחילה') : x.score.toFixed(1)}</td></tr>`;
+  const tr = x => `<tr class="${f.mine.has(x.bib) ? 'fin-me' : ''}"><td class="fin-rk">${x.rank == null ? '—' : x.rank <= 3 ? `<span class="medal">${x.rank}</span>` : x.rank}</td><td class="fin-nm">${esc(x.name)}<small>${esc(x.club || '')}</small></td>${two ? `<td><span class="fin-rd r${x.round}">R${x.round}</span></td>` : ''}<td class="fin-pt">${x.score == null ? gw(f.id, 'לא התחיל', 'לא התחילה') : typeof x.score === 'number' ? x.score.toFixed(1) : `<bdi dir="ltr">${esc(x.score)}</bdi>`}</td></tr>`; // 3.29.0: lead = text (points "1.225" / height "38+")
   const firstOut = f.rows.findIndex(x => x.round === 1);
   const body = f.rows.map((x, i) => (two && i === firstOut ? `<tr class="fin-cut"><td colspan="4">לא עלו לראונד השני · לפי הראונד הראשון</td></tr>` : '') + tr(x)).join('');
   patch($('#home'), `<div class="h-head"><button type="button" class="icon-btn h-back" id="final-back" aria-label="חזרה"><span class="ios-back-chev" aria-hidden="true"></span></button><h2 class="h-event fin-h">${CUP}תוצאות סופיות <span class="muted">· ${esc(evName(cur.event))}</span></h2></div>
     <div class="fin-chips choices" role="group" aria-label="קטגוריה">${fs.map(x => `<button type="button" class="choice" data-final="${homeFinal.ev}:${x.key}:${homeFinal.from}" aria-pressed="${x === f}">${esc(x.title)}</button>`).join('')}</div>
     <p class="muted small">${two ? `מי שעלה לראונד השני (${fin}) מדורג לפי הראונד השני בלבד; השאר אחריהם לפי הראונד הראשון.` : 'ראונד אחד: הדירוג שלו הוא הדירוג הסופי.'}</p>
-    <div class="card fin-tbl"><table><thead><tr><th>#</th><th class="fin-nm">מתחרה</th>${two ? '<th>נקבע ב</th>' : ''}<th>ניקוד</th></tr></thead><tbody>${body}</tbody></table></div>`);
+    <div class="card fin-tbl"><table><thead><tr><th>#</th><th class="fin-nm">מתחרה</th>${two ? '<th>נקבע ב</th>' : ''}<th>${round(f.id)?.lead && two ? 'תוצאה' : 'ניקוד'}</th></tr></thead><tbody>${body}</tbody></table></div>`);
 }
 
 // 3.6.1 (Roei): no רשימה/מפורט switch — home = the list; on a competition day it opens straight on that
