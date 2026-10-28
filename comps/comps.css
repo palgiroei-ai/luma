@@ -135,6 +135,7 @@ body.in-round .alert-stack { top: calc(var(--top-h, 112px) + 8px); } /* under th
 @keyframes pulse { 50% { filter: brightness(1.25); } }
 
 .main { padding: 4px 16px 32px; display: grid; gap: 14px; }
+.main > * { min-width: 0; } /* 3.30.1: a wide table scrolls in its own box instead of widening the section past the phone screen (clipped buttons) */
 
 /* board */
 .lanes { display: grid; gap: 6px; align-items: stretch; }

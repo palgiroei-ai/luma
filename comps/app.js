@@ -21,7 +21,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, ownCtl, legO
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.30.0';
+export const APP_VERSION = '3.30.1';
 
 const $ = s => document.querySelector(s);
 
@@ -1572,9 +1572,10 @@ function setupSwipe() {
     const t = e.touches[0], tg = e.target;
     if (t.clientX < 28 || t.clientX > innerWidth - 28) return;
     if (tg.closest('input, textarea, select, .rp-btn, #round-pick')) return;
-    // 3.11.1: only areas that really scroll sideways (the phone results table fits — 3.9.0 — so swiping works over it)
-    for (let el = tg.closest('.full-wrap, .tbl-wrap, .seg, .choices, #round-tabs, .ev-chips, .ev-filters'); el; el = el.parentElement?.closest('.full-wrap, .tbl-wrap, .seg, .choices, #round-tabs, .ev-chips, .ev-filters')) {
-      if (el.scrollWidth > el.clientWidth + 1) return;
+    // 3.11.1: only areas that really scroll sideways (the phone results table fits — 3.9.0 — so swiping works over it).
+    // 3.30.1: any element that scrolls sideways, not a class list (the lead full list .lall-wrap was missing — Roei)
+    for (let el = tg; el && el !== main; el = el.parentElement) {
+      if (el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return;
     }
     st = { x: t.clientX, y: t.clientY, at: Date.now(), drag: false };
   }, { passive: true });
