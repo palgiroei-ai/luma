@@ -17,10 +17,10 @@ import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openT
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
-import { markNext, undoMark, toManual, toAuto, legStatus, withLive, ownCtl } from './lead.js';
+import { markNext, undoMark, toManual, toAuto, legStatus, withLive, ownCtl, legOrder } from './lead.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.28.0';
+export const APP_VERSION = '3.28.1';
 
 const $ = s => document.querySelector(s);
 
@@ -518,8 +518,11 @@ function applyDelays() {
   // 3.22.0: lead live board — each route's shared mode + marks (store, synced) → round.leadCtl, read by engine.js / lead.js
   // 3.27.0: + the federation's live results move each route on (withLive, derived — the store keeps the coach's own marks)
   for (const r of DATA.rounds) if (isLeadLive(r)) {
-    const at = leadResAt(r);
-    r.leadCtl = Object.fromEntries(leadRoutes(r).map(x => [x, withLive(r, x, store.leadCtl(r.id, x), at?.done[x], now(), at?.on[x])]));
+    // 3.28.1: official results (locked / file) = every climber finished → each route over at that moment (after a lock the
+    // live data is no longer fetched, so the coach's last marks alone kept a route "live" with a running timer)
+    const off = DATA.results?.[r.id] ? 0 : LOCKED[r.id]?.at, at = off == null ? leadResAt(r) : null;
+    r.leadCtl = Object.fromEntries(leadRoutes(r).map(x => [x, off != null ? withLive(r, x, store.leadCtl(r.id, x), new Map(legOrder(r, x).map(k => [k, off])), now())
+      : withLive(r, x, store.leadCtl(r.id, x), at?.done[x], now(), at?.on[x])]));
   }
 }
 // route → Map slot k → when that climber's live result arrived (null: no live data for this round)
