@@ -18,10 +18,10 @@ import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
 import { markNext, undoMark, toManual, toAuto, legStatus, withLive, ownCtl, legOrder, routeState } from './lead.js';
-import { neededOn, routeStats } from './leadStats.js';
+import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.29.0';
+export const APP_VERSION = '3.30.0';
 
 const $ = s => document.querySelector(s);
 
@@ -932,10 +932,21 @@ function leadCard(r, x, who, c) {
   const i = ok.indexOf(x), above = i > 0 ? ok.slice(0, i).reverse().find(y => y.rank < x.rank) : null;
   const ab = x.rank != null ? kv('המקום שמעל', above ? `${esc(above.name)}<small class="d">מקום ${above.rank} · ${bdi(above.score)}</small>` : 'מקום ראשון') : '';
   const pl = !one && fr.A != null && fr.B != null && x.rs?.[0]?.[1] != null && x.rs?.[1]?.[1] != null && x.rs[0][1] !== x.rs[1][1] ? (j => kv('מסלול חזק', `מסלול ${j + 1}<small class="d">מקום ${x.rs[j][1]}</small>`))(x.rs[0][1] < x.rs[1][1] ? 0 : 1) : '';
+  // 3.30.0 (Roei): what if — a "+" / 1–3 holds more on each route and on both: the place (overall) + points, everyone recomputed
+  const w = whatIf(c.file, x.bib, routes, { prevRank: c.prevRank });
+  const wiCell = v => {
+    if (!v) return '<td class="muted">—</td>';
+    const d = w.now.rank - v.rank, up = !c.last && c.q && w.now.rank > c.q && v.rank <= c.q;
+    return `<td${d ? ' class="wi-up"' : ''}>${d ? `מקום ${v.rank}<small class="d">↑${d}${up ? ' · עולה' : ''}</small>` : '<span class="muted">ללא שינוי</span>'}${!one && d ? `<small class="pt">${v.pts.toFixed(3)}</small>` : ''}</td>`;
+  };
+  const wi = w ? `<div class="grp wi-grp"><span class="gh">מה היה אילו${c.overall ? ' · מקום כללי' : ''}</span>
+    <div class="wi-wrap"><table class="wi"><thead><tr><th></th>${routes.map((_, j) => `<th>מסלול ${j + 1}</th>`).join('')}${one ? '' : '<th>בשניהם</th>'}</tr></thead>
+    <tbody>${w.rows.map(row => `<tr><th><bdi dir="ltr">${esc(row.label.split(' ')[0])}</bdi>${row.label.includes(' ') ? ' ' + esc(row.label.split(' ').slice(1).join(' ')) : ''}</th>${row.cells.map(wiCell).join('')}</tr>`).join('')}</tbody></table></div>
+    <small class="muted">עכשיו: מקום ${w.now.rank}${one ? '' : ` · ${w.now.pts.toFixed(3)} נק׳`} · "+" = תנועה מהאחיזה (אם כבר היה + — האחיזה הבאה)</small></div>` : '';
   return `<article class="card fc lead-fc${c.running ? ' live' : ''}${who.added ? ' added' : ''}">${head}
     <div class="sc">${x.score != null ? `<b>${bdi(x.score)}</b> ${one ? 'גובה' : 'נק׳ משולב'}` : `<span class="muted">${'עדיין בלי תוצאה'}</span>`}</div>
     <div class="ins"><div class="grp"><span class="gh">מסלולים</span>${lines}${pl}</div>
-      ${goals || cut || ab ? `<div class="grp"><span class="gh">מיקום${c.running ? ' זמני' : ''}</span>${goals}${cut}${ab}</div>` : ''}</div></article>`;
+      ${goals || cut || ab ? `<div class="grp"><span class="gh">מיקום${c.running ? ' זמני' : ''}</span>${goals}${cut}${ab}</div>` : ''}${wi}</div></article>`;
 }
 // 3.29.0 (Roei): the round's routes — topo (tap = big, the hold numbers readable) + how far they got + my athletes' heights
 function leadRoutesCard(r, rows, mineBy) {

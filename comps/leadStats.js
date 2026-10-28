@@ -42,3 +42,26 @@ export function routeStats(rows, route) {
   }
   return { n, tops, median, band };
 }
+
+// 3.30.0 (Roei): "what if" — her place (and round-1 points) had she climbed a little higher: a "+" (a move past her hold;
+// already "+" → the next hold), or 1 / 2 / 3 holds more (her "+" kept), on each route alone and on all of them together.
+// Everyone else as they are; route places and every climber's points are recomputed (rankQual / rankFinal).
+// → { now: { rank, pts }, rows: [{ key, label, cells: [{ rank, pts } | null] }] } — cells = each route, then "all" (2+ routes);
+// null = no higher score exists (already TOP). Climbers without a result on every route → null.
+export const WHAT_IF_STEPS = [['plus', '+'], ['h1', '+1 אחיזה'], ['h2', '+2 אחיזות'], ['h3', '+3 אחיזות']];
+function stepUp(s, key) {
+  const p = parseScore(s); if (!p || p.top) return null;
+  const h = Math.floor(p.hold);
+  if (key === 'plus') return p.plus ? String(Math.min(80, h + 1)) : `${p.hold}+`;
+  return `${Math.min(80, h + Number(key.slice(1)))}${p.plus ? '+' : ''}`;
+}
+export function whatIf(rows, bib, routes, { prevRank = null } = {}) {
+  const me = rows.find(r => r.bib === bib); if (!me || routes.some(rt => parseScore(me[rt]) == null)) return null;
+  const one = routes.length === 1;
+  const at = ch => { const x = (one ? rankFinal : rankQual)(rows.map(r => (r.bib === bib ? { ...r, ...ch } : r)), prevRank, { medal: false }).find(r => r.bib === bib); return { rank: x.rank, pts: one ? null : x.qp }; };
+  const cols = one ? routes.map(rt => [rt]) : [...routes.map(rt => [rt]), routes];
+  return { now: at({}), rows: WHAT_IF_STEPS.map(([key, label]) => ({ key, label, cells: cols.map(rs => {
+    const ch = {}; for (const rt of rs) { const v = stepUp(me[rt], key); if (v != null) ch[rt] = v; }
+    return Object.keys(ch).length ? at(ch) : null;
+  }) })) };
+}
