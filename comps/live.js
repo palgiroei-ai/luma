@@ -69,10 +69,17 @@ export function liveLeadRows(round, cfg, results, nowMs) {
   const cats = groupCats(cfg, lg), routes = round.routes || (round.boulders > 1 ? ['A', 'B'] : ['A']);
   // 3.28.0: categories as in boulder (S / U21 / U19 / U17 / U15) — the start lists say 'Senior'
   const bySlot = new Map(round.slots.filter(Boolean).map(s => [s.bib, { bib: s.bib, name: s.name, club: s.club || '', cat: s.cat === 'Senior' ? 'S' : s.cat || null }]));
+  // 3.31.2 (real data 29/10): the federation roster can carry another bib than our list (יובל עובדיה 83 vs 54) → a bib not
+  // on the list counts for the climber of the same name, only when her own bib has no record of this gender
+  const keys = Object.keys(results).map(key => { try { return decodeURIComponent(key).split('|'); } catch { return []; } });
+  const own = new Set(keys.filter(p => p[2] === lg.gender).map(p => Number(p[0])));
+  const nm = s => String(s ?? '').replace(/\s+/g, ' ').trim();
+  const byName = new Map([...bySlot.values()].filter(r => !own.has(r.bib)).map(r => [nm(r.name), r]));
   let updated = 0, done = 0;
   for (const [key, v] of Object.entries(results)) {
     let k; try { k = decodeURIComponent(key); } catch { continue; }
-    const [bib, cat, gender, route] = k.split('|'), x = routes[Number(String(route).replace(/[^\d]/g, '')) - 1], row = bySlot.get(Number(bib));
+    const [bib, cat, gender, route] = k.split('|'), x = routes[Number(String(route).replace(/[^\d]/g, '')) - 1];
+    const row = bySlot.get(Number(bib)) || (v && byName.get(nm(v.name)));
     if (!row || gender !== lg.gender || !cats.includes(cat) || !x || !v) continue;
     const at = Date.parse(v.updatedAt); if (!at || at > nowMs || dayOf(at) !== round.date) continue;
     const sc = leadScore(v); if (sc == null) continue;
