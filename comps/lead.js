@@ -94,6 +94,15 @@ export function withPair(round, route, ctl, partner, pctl, nowMs) {
   const idx = [...Array(n).keys()];
   return { manual: false, starts: [], sched: idx.map(i => ps.estMs(off + i)), plan: idx.map(i => ps.planMs(off + i)), pair: true };
 }
+// 3.31.1 (lead1 R2 seniors 29/10): a judge marked the first girl "started" at 09:56, 2 h before the round → withLive took it
+// as her climb, the route ran from 09:56 with zero pace and showed "הסתיים". Live records from before the round's start
+// (minus LIVE_EARLY_MS) are not part of this round's climbing order. Map k → t, filtered (null stays null).
+export const LIVE_EARLY_MS = 900000;
+export function dropEarly(round, m) {
+  if (!m) return m;
+  const from = zonedMs(round.start) - LIVE_EARLY_MS;
+  return new Map([...m].filter(([, t]) => t >= from));
+}
 // the coach taps over a derived ctl → it becomes her own marks (the live flags dropped)
 export const ownCtl = c => (c && c.live ? { manual: true, starts: c.starts.slice() } : c);
 

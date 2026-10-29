@@ -17,11 +17,11 @@ import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openT
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
-import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ownCtl, legOrder, routeState } from './lead.js';
+import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ownCtl, legOrder, routeState, dropEarly } from './lead.js';
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.31.0';
+export const APP_VERSION = '3.31.1';
 
 const $ = s => document.querySelector(s);
 
@@ -538,6 +538,7 @@ function leadResAt(r) {
   const lr = liveLeadRows(r, live.data.cfg, live.data.results, now()); if (!lr) return null;
   const kOf = new Map(r.slots.map((x, k) => [x?.bib, k])), out = { done: {}, on: {} };
   for (const row of lr.rows) if (kOf.has(row.bib)) for (const f of ['done', 'on']) for (const [x, t] of Object.entries((f === 'done' ? row.at : row.on) || {})) (out[f][x] ||= new Map()).set(kOf.get(row.bib), t);
+  for (const f of ['done', 'on']) for (const x in out[f]) out[f][x] = dropEarly(r, out[f][x]); // 3.31.1
   return out;
 }
 
