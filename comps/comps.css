@@ -413,7 +413,7 @@ body.in-round .alert-stack { top: calc(var(--top-h, 112px) + 8px); } /* under th
 .full-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--r); }
 @media (max-width: 600px) {
   .topbar { gap: 10px; padding: 6px 12px; }
-  .top-logo { height: 23px; }
+  .top-logo { height: 34px; }
   .title-block h1 { font-size: 13.5px; line-height: 1.25; } /* the full competition name, up to two lines (no ellipsis) */
   .title-block p { font-size: 12px; line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; } /* round sub-line wraps to a second line instead of "5 בולדר…" (at most two) */
   .clock { font-size: 18px; }
