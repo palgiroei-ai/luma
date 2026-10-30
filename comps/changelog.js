@@ -2,6 +2,7 @@
 // Add an entry with every code deploy — tests/changelog.test.mjs keeps the first versioned entry = APP_VERSION.
 // Start-list updates (data only, no code version) are entries with `data: true` instead of `v`.
 export const CHANGELOG = [
+  { v: '3.31.4', date: '2026-10-30', items: ['לוגו PalgiTraining: דמות מלאה ובלי השורה CLIMBING COACH בכל המסכים'] },
   { v: '3.31.3', date: '2026-10-30', items: ['לוגו PalgiTraining חדש: מטפס בקשת, CLIMBING COACH'] },
   { v: '3.31.2', date: '2026-10-29', items: ['תיקון: תוצאה חיה שההתאחדות רשמה עם מספר חזה אחר מסדר העלייה (יובל עובדיה — 83 במקום 54) לא הופיעה. עכשיו תוצאה עם מספר שלא ברשימה משויכת לפי השם המלא — רק אם למטפס/ת אין תוצאה עם המספר שלו/ה'] },
   { v: '3.31.1', date: '2026-10-29', items: ['תיקון: בוגרות סיבוב שני סומן "הסתיים" לפני שהתחיל — סימון "התחילה" של שופט מ-09:56 נחשב כתחילת הטיפוס. רישומים חיים מלפני תחילת הראונד (פחות 15 דקות) לא מזיזים יותר את סדר העלייה'] },
