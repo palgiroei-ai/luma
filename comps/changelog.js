@@ -2,6 +2,7 @@
 // Add an entry with every code deploy — tests/changelog.test.mjs keeps the first versioned entry = APP_VERSION.
 // Start-list updates (data only, no code version) are entries with `data: true` instead of `v`.
 export const CHANGELOG = [
+  { data: true, date: '2026-11-08', items: ['ליגת העל בבולדר 2: סדרי העלייה של המוקדמות בכל הקטגוריות — בוגרים 09:00 (60 מטפסים, שני סבבים ריקים אחרי #30), בנים U17 16:50, בוגרות 09:00, בנות U17 14:30', 'שעות בידוד וצפייה במסלולים (U17) מדף המידע — לכל הסבבים, כולל הסיבוב השני', 'הסיבוב השני (12/11) יתווסף כשיגיעו סדרי העלייה שלו'] },
   { v: '3.31.4', date: '2026-10-30', items: ['לוגו PalgiTraining: דמות מלאה ובלי השורה CLIMBING COACH בכל המסכים'] },
   { v: '3.31.3', date: '2026-10-30', items: ['לוגו PalgiTraining חדש: מטפס בקשת, CLIMBING COACH'] },
   { v: '3.31.2', date: '2026-10-29', items: ['תיקון: תוצאה חיה שההתאחדות רשמה עם מספר חזה אחר מסדר העלייה (יובל עובדיה — 83 במקום 54) לא הופיעה. עכשיו תוצאה עם מספר שלא ברשימה משויכת לפי השם המלא — רק אם למטפס/ת אין תוצאה עם המספר שלו/ה'] },
