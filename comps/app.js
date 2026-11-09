@@ -22,7 +22,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ow
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.32.0';
+export const APP_VERSION = '3.32.1';
 
 const $ = s => document.querySelector(s);
 
@@ -411,8 +411,30 @@ function pickDefaultRound() {
 // ---- render ----
 function patch(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } }
 
+// 3.32.1: where the ‹ next to ⌂ leads — round → its competition; final standings / competition → the list; season → seasons
+function navBackKind() {
+  if (screen === 'round') return 'round';
+  if (ME && homeTab === 'me') return null;
+  if (homeFinal) return 'final';
+  if (homeOpenEvent != null) return 'event';
+  return homeSeason ? 'season' : null;
+}
+function navBack() {
+  const k = navBackKind();
+  if (k === 'round') { // back to the competition of the open round (all its categories)
+    const evs = homeEvents(), id = evOf(round(current))?.id, i = evs.findIndex(x => x.event.id === id);
+    if (i >= 0 && homeOpenEvent !== i) { homeOpenEvent = i; homeFrom = seasonOf(evs[i]); }
+    homeFinal = null; homeTab = 'all'; showScreen('home'); window.scrollTo(0, 0); return;
+  }
+  if (k === 'final') { if (homeFinal.from === 'list') homeOpenEvent = null; else homeOpenEvent = homeFinal.ev; homeFinal = null; }
+  else if (k === 'event') { homeSeason = homeFrom; homeOpenEvent = null; }
+  else if (k === 'season') { ddOpen = null; homeSeason = null; }
+  render(); window.scrollTo(0, 0);
+}
+
 // round screen: one button naming the round (opens the list "ראונדים באירוע"); the home screen has no row (its cards list the rounds)
 function renderTabs() {
+  $('#nav-back').hidden = navBackKind() == null; // 3.32.1 (Roei): the back chevron sits next to ⌂, on every level below home
   $('#round-tabs').classList.toggle('rp-host', screen === 'round');
   if (screen !== 'round') { patch($('#round-tabs'), ''); return; }
   const cur = round(current), has = roundsOf(evOf(cur)).length > 0; // tabs = the competition of the open round
@@ -1151,7 +1173,7 @@ function renderFinal() {
   const tr = x => `<tr class="${f.mine.has(x.bib) ? 'fin-me' : ''}"><td class="fin-rk">${x.rank == null ? '—' : x.rank <= 3 ? `<span class="medal">${x.rank}</span>` : x.rank}</td><td class="fin-nm">${esc(x.name)}<small>${esc(x.club || '')}</small></td>${two ? `<td><span class="fin-rd r${x.round}">R${x.round}</span></td>` : ''}<td class="fin-pt">${x.score == null ? gw(f.id, 'לא התחיל', 'לא התחילה') : typeof x.score === 'number' ? x.score.toFixed(1) : `<bdi dir="ltr">${esc(x.score)}</bdi>`}</td></tr>`; // 3.29.0: lead = text (points "1.225" / height "38+")
   const firstOut = f.rows.findIndex(x => x.round === 1);
   const body = f.rows.map((x, i) => (two && i === firstOut ? `<tr class="fin-cut"><td colspan="4">לא עלו לראונד השני · לפי הראונד הראשון</td></tr>` : '') + tr(x)).join('');
-  patch($('#home'), `<div class="h-head"><button type="button" class="icon-btn h-back" id="final-back" aria-label="חזרה"><span class="ios-back-chev" aria-hidden="true"></span></button><h2 class="h-event fin-h">${CUP}תוצאות סופיות <span class="muted">· ${esc(evName(cur.event))}</span></h2></div>
+  patch($('#home'), `<div class="h-head"><h2 class="h-event fin-h">${CUP}תוצאות סופיות <span class="muted">· ${esc(evName(cur.event))}</span></h2></div>
     <div class="fin-chips choices" role="group" aria-label="קטגוריה">${fs.map(x => `<button type="button" class="choice" data-final="${homeFinal.ev}:${x.key}:${homeFinal.from}" aria-pressed="${x === f}">${esc(x.title)}</button>`).join('')}</div>
     <p class="muted small">${two ? `מי שעלה לראונד השני (${fin}) מדורג לפי הראונד השני בלבד; השאר אחריהם לפי הראונד הראשון.` : 'ראונד אחד: הדירוג שלו הוא הדירוג הסופי.'}</p>
     <div class="card fin-tbl"><table><thead><tr><th>#</th><th class="fin-nm">מתחרה</th>${two ? '<th>נקבע ב</th>' : ''}<th>${round(f.id)?.lead && two ? 'תוצאה' : 'ניקוד'}</th></tr></thead><tbody>${body}</tbody></table></div>`);
@@ -1256,7 +1278,7 @@ function renderHomeList(seg) {
   const shown = intl ? filterEvents(all.map(x => ({ ...x, event: x.ev.event })), ef) : all;
   const body = shown.length ? shown.map(x => evRowHtml(x.ev, x.i, evs, t)).join('')
     : `<div class="card h-empty"><p>אין תחרויות שמתאימות לסינון</p><button type="button" class="btn btn-sm" id="filt-reset">הצג הכל</button></div>`;
-  patch($('#home'), `<div class="h-head"><button type="button" class="icon-btn h-back" id="season-back" aria-label="חזרה"><span class="ios-back-chev" aria-hidden="true"></span></button><h2 class="h-event">${esc(seasonLabel(homeSeason))}</h2>${seg}</div>
+  patch($('#home'), `<div class="h-head"><h2 class="h-event">${esc(seasonLabel(homeSeason))}</h2>${seg}</div>
     ${intl ? `<div class="ev-fbar"><div class="ev-filters">${dd('disc')}${dd('type')}${dd('age')}${menu}</div><p class="ev-count muted small">${shown.length === 1 ? 'תחרות אחת' : `${shown.length} תחרויות`}</p></div>` : ''}<div class="ev-list">${body}</div>`);
 }
 
@@ -1295,7 +1317,7 @@ function renderHomeDetail(seg, fromList) {
       ${hubOf(r.id).length > 1 && !LL ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} רוטציות של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
-  patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="icon-btn h-back" id="home-back" aria-label="חזרה"><span class="ios-back-chev" aria-hidden="true"></span></button>' : ''}<h2 class="h-event">${bidiParts(evName(ev))} <span class="muted">· ${placeOnce(evName(ev), ev.place) ? `<bdi>${esc(ev.place)}</bdi>` + tbdMark(ev.placeTbd) + ' · ' : ''}${rangeLabel(cur.dates)}${tbdMark(ev.dateTbd)}</span></h2>${seg}</div>${chips}` +
+  patch($('#home'), `<div class="h-head"><h2 class="h-event">${bidiParts(evName(ev))} <span class="muted">· ${placeOnce(evName(ev), ev.place) ? `<bdi>${esc(ev.place)}</bdi>` + tbdMark(ev.placeTbd) + ' · ' : ''}${rangeLabel(cur.dates)}${tbdMark(ev.dateTbd)}</span></h2>${seg}</div>${chips}` +
     (rounds.length ? '' : `<div class="card h-empty"><p><b>${evBadge(cur, evs)}</b></p><p class="muted">הראונדים וסדרי העלייה יתווספו כשיתפרסמו.${ev.place ? '' : ' המיקום עוד לא פורסם.'}</p></div>`) +
     finalCards(cur, ei) + days.map(d => `<section class="h-day"><h3 class="h-day-title">${dayLabel(d)}</h3><div class="h-grid">${rounds.filter(r => r.date === d).map(card).join('')}</div></section>`).join(''));
 }
@@ -2515,9 +2537,8 @@ function start() {
     if (d.page) { setPage(d.page); return; }
     if (d.leadAlert) { if (!VIEWER) { store.setSetting('leadAlert', d.leadAlert); syncLeadAlertSeg(); } return; } // 3.22.0 Task 8 (the push plan follows on the 5 s syncPush tick)
     if (d.final) { const [ev, key, from] = d.final.split(':'); homeFinal = { ev: Number(ev), key, from }; render(); window.scrollTo(0, 0); return; }
-    if (b.id === 'final-back') { if (homeFinal.from === 'list') homeOpenEvent = null; else homeOpenEvent = homeFinal.ev; homeFinal = null; render(); return; }
+    if (b.id === 'nav-back') { navBack(); return; }
     if (d.season) { ddOpen = null; homeSeason = d.season; render(); window.scrollTo(0, 0); return; }
-    if (b.id === 'season-back') { ddOpen = null; homeSeason = null; render(); window.scrollTo(0, 0); return; }
     if (d.dd) { ddOpen = ddOpen === d.dd ? null : d.dd; render(); return; }
     if (d.filt) { // 3.14.0 menu toggle: a row with nothing selected = all on; selecting every option = back to all ([])
       const [k, v] = d.filt.split(':'), opts = filterOptions(homeEvents().filter(x => seasonOf(x) === homeSeason).map(x => x.event))[k];
@@ -2528,7 +2549,6 @@ function start() {
     if (d.homeTab) { homeTab = d.homeTab === 'me' && ME ? 'me' : 'all'; render(); window.scrollTo(0, 0); return; }
     if (d.meOpen) { openMine(d.meOpen); return; }
     if (d.ev != null) { homeFrom = homeSeason; homeOpenEvent = Number(d.ev); render(); window.scrollTo(0, 0); return; }
-    if (b.id === 'home-back') { homeSeason = homeFrom; homeOpenEvent = null; render(); return; }
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
     else if (b.id === 'home-btn') { homeOpenEvent = null; homeFinal = null; homeSeason = null; homeFrom = null; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
