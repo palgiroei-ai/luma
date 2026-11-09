@@ -17,11 +17,12 @@ import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openT
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
+import { hubOnly, alertable } from './blue.js';
 import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ownCtl, legOrder, routeState, dropEarly } from './lead.js';
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.31.4';
+export const APP_VERSION = '3.32.0';
 
 const $ = s => document.querySelector(s);
 
@@ -383,6 +384,7 @@ const mineOf = id => {
   return [...base, ...extra].sort((a, b) => a.k - b.k);
 };
 const mineK = id => new Set(mineOf(id).map(m => m.k));
+const hubOf = id => hubOnly(mineOf(id)); // 3.32.0: Hub athletes only (home screen + overlaps) — blue ones are not "mine" there
 const shortOf = (id, k) => mineOf(id).find(m => m.k === k)?.short;
 const off = id => store.offset(id);
 
@@ -623,7 +625,7 @@ function mineCards(r, t, el) {
     const c = { ...leadCtx(r), now: t, mine: list, notes: k => store.notes(n => n.round === r.id && n.k === k), appeals: k => store.appeals(a => a.round === r.id && a.k === k) };
     const par = leadParRound(r), pm = par ? mineOf(par.id) : [];
     const pc = par && { ...leadCtx(par), now: t, mine: pm, notes: k => store.notes(n => n.round === par.id && n.k === k), appeals: k => store.appeals(a => a.round === par.id && a.k === k) };
-    patch(el, (VIEWER ? '<p class="muted small viewer-hint">מודגשים: ספורטאי הפלגיה</p>' : leadOverlapHtml(r, c)) + leadMineHtml(r, c) + (par ? leadParMineHtml(par, pc) : '')); return;
+    patch(el, (VIEWER ? '<p class="muted small viewer-hint">מודגשים: ספורטאי הפלגיה</p>' : leadOverlapHtml(r, { ...c, mine: hubOnly(list) })) + leadMineHtml(r, c) + (par ? leadParMineHtml(par, pc) : '')); return;
   }
   patch(el, (VIEWER ? '<p class="muted small viewer-hint">מודגשים: ספורטאי הפלגיה</p>' : overlapHtml(r, t)) + list.map(m => {
     const s = r.slots[m.k];
@@ -631,7 +633,7 @@ function mineCards(r, t, el) {
     const notes = store.notes(n => n.round === r.id && n.k === m.k);
     const appeals = store.appeals(a => a.round === r.id && a.k === m.k);
     const big = st.kind === 'waiting' ? `עולה בעוד <span data-until="${st.startMs}"></span>` : statusText(r, st);
-    return `<article class="ath card ${st.kind}">
+    return `<article class="ath card ${st.kind}${m.added ? ' added' : ''}">
       <header><h3>${esc(m.short)}</h3><span class="muted small">${esc(s.name)} · ${esc(/^(Senior|S|U\d+)$/.test(m.cat) ? catHe(m.cat, genderOf(r.id)) : m.cat)}</span></header>
       <div class="ath-status">${big}</div>
       <dl class="ath-meta"><div><dt>סדר</dt><dd>#${s.order}</dd></div><div><dt>גב</dt><dd>${s.bib}</dd></div>
@@ -1042,9 +1044,9 @@ function renderLog() {
 function roundEndMs(r) { return engineEnd(r, off(r.id)); }
 
 // Windows where 2+ of my athletes are on a boulder at the same time (resting between boulders is fine — Roei).
-const overlapsOf = r => climbOverlaps(r, mineOf(r.id).map(m => m.k), off(r.id));
+const overlapsOf = r => climbOverlaps(r, hubOf(r.id).map(m => m.k), off(r.id)); // 3.32.0: blue athletes not counted
 function overlapHtml(r, t) {
-  if (mineOf(r.id).length < 2) return '';
+  if (hubOf(r.id).length < 2) return '';
   const ov = overlapsOf(r);
   if (!ov.length) return '<div class="ovl card ok"><b>✓ אין חפיפות בטיפוס</b> <span class="muted small">אף פעם לא מטפסים שניים שלך באותו זמן.</span></div>';
   const max = Math.max(...ov.map(w => w.climbers.length));
@@ -1123,7 +1125,7 @@ function finalsOf(ev) {
   return Object.keys(groups).sort().map(key => {
     const rs = groups[key].sort((a, b) => (a.id < b.id ? -1 : 1));
     const ready = rs.every(r => { const res = resultsOf(r.id); return res && !res.live; });
-    const mine = new Map(rs.flatMap(r => mineOf(r.id).map(m => [r.slots[m.k]?.bib, m.short])));
+    const mine = new Map(rs.flatMap(r => hubOf(r.id).map(m => [r.slots[m.k]?.bib, m.short])));
     // (club: round 1's when a later round's row has none)
     const club = Object.fromEntries(rs.flatMap(r => resultsOf(r.id)?.rows || []).filter(x => x.club).map(x => [x.bib, x.club]));
     return { key, id: rs.at(-1).id, title: roundTitle(rs[0].title).split(' · ')[0], ready, mine, rows: ready ? finalStandings(rs.map(r => rankedOf(r.id))).map(x => (x.club ? x : { ...x, club: club[x.bib] })) : null };
@@ -1212,10 +1214,10 @@ function openMine(id) {
 function evRowHtml(ev, i, evs, t) {
   const ph = evPhase(ev, t), badge = evBadge(ev, evs);
   const meta = [placeOnce(evName(ev.event), ev.event.place) && `<bdi>${esc(ev.event.place)}</bdi>` + tbdMark(ev.event.placeTbd), rangeLabel(ev.dates) + tbdMark(ev.event.dateTbd), ev.rounds.length ? `${ev.rounds.length} ראונדים` : 'הראונדים יתווספו בהמשך'].filter(Boolean).join(' · ');
-  const people = new Set(ev.rounds.flatMap(r => (r.ifsc ? (ifscRes(r.id)?.rows || []).filter(isIsr).map(x => x.name) : mineOf(r.id).map(m => r.slots[m.k].name))));
+  const people = new Set(ev.rounds.flatMap(r => (r.ifsc ? (ifscRes(r.id)?.rows || []).filter(isIsr).map(x => x.name) : hubOf(r.id).map(m => r.slots[m.k].name))));
   // 3.18.0 (Roei): international → also how many of them are mine
   const myIntl = ev.event.intl ? new Set(ev.rounds.flatMap(r => (r.ifsc ? Object.values(intlMineByBib(ifscRes(r.id)?.rows, DATA.intlMine)).map(m => m.short) : []))).size : 0;
-  const ovl = ev.rounds.reduce((n, r) => n + (mineOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
+  const ovl = ev.rounds.reduce((n, r) => n + (hubOf(r.id).length > 1 ? overlapsOf(r).length : 0), 0);
   const fin = finalsReady(ev);
   const tone = `ev-t-${evTone(ev.event)}`;
   return `${fin ? `<div class="ev-item card ${tone} ph-${ph}">` : ''}<button type="button" class="ev-row${fin ? '' : ' card'} ${tone} ph-${ph}" data-ev="${i}">
@@ -1283,14 +1285,14 @@ function renderHomeDetail(seg, fromList) {
     const rk = rankedOf(r.id), rankOfK = k => rk?.find(x => x.bib === r.slots[k].bib)?.rank;
     const LL = isLeadLive(r); // 3.22.0 lead: a climber's time = her next leg (done → סיימה)
     const leadAt = k => { const a = athleteStatus(r, k, t); return a.kind === 'done' ? gw(r.id, 'סיים', 'סיימה') : fmtHM(a.startMs); };
-    const mine = mineOf(r.id).map(m => `<li><b>${esc(m.short)}</b> <span>${rk ? (rankOfK(m.k) ? `מקום ${rankOfK(m.k)}` : gw(r.id, 'לא התחיל', 'לא התחילה')) : `#${r.slots[m.k].order} · ${LL ? leadAt(m.k) : fmtHM(slotStartMs(r, m.k, off(r.id)))}`}</span></li>`).join('');
+    const mine = hubOf(r.id).map(m => `<li><b>${esc(m.short)}</b> <span>${rk ? (rankOfK(m.k) ? `מקום ${rankOfK(m.k)}` : gw(r.id, 'לא התחיל', 'לא התחילה')) : `#${r.slots[m.k].order} · ${LL ? leadAt(m.k) : fmtHM(slotStartMs(r, m.k, off(r.id)))}`}</span></li>`).join('');
     const live = ph !== 'live' ? '' : LL ? leadHomeLine(r, t)
       : (() => { const s = stateAt(r, t, off(r.id)); const b1 = s.boulders[0]; return `<p class="h-live">רוטציה ${s.n + 1} מתוך ${windowCount(r)} · בולדר 1: ${b1 ? `#${b1.order} ${esc(b1.name)}` : '—'}</p>`; })();
     return `<button type="button" class="h-card card ph-${ph}" data-open="${r.id}">
       <div class="h-top"><h3>${esc(roundTitle(r.title))}</h3>${rk ? '<span class="hb res">תוצאות</span>' : ''}${badge}</div>
       <p class="muted small">${r.slots.length ? range(fmtHM(roundStart(r) + off(r.id)), fmtHM(roundEndMs(r))) : fmtHM(roundStart(r) + off(r.id))} · ${LL ? unitsOf(r) : `${r.boulders} בולדרים · רוטציה ${fmtDur(r.slotSec0 * 1000)}`}${r.slots.length ? ` · ${r.slots.filter(Boolean).length} מתחרים` : ''}</p>
       ${isoRow(r)}${live}${mine ? `<ul class="h-mine">${mine}</ul>` : `<p class="muted small">${r.slots.length ? 'אין ספורטאים שלי' : ''}</p>`}
-      ${mineOf(r.id).length > 1 && !LL ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} רוטציות של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
+      ${hubOf(r.id).length > 1 && !LL ? (n => n ? `<p class="small ovl-count">⚠︎ ${n} רוטציות של חפיפה בטיפוס</p>` : '<p class="small ok-text">✓ ללא חפיפות בטיפוס</p>')(overlapsOf(r).length) : ''}
     </button>`;
   };
   patch($('#home'), `<div class="h-head">${fromList ? '<button type="button" class="icon-btn h-back" id="home-back" aria-label="חזרה"><span class="ios-back-chev" aria-hidden="true"></span></button>' : ''}<h2 class="h-event">${bidiParts(evName(ev))} <span class="muted">· ${placeOnce(evName(ev), ev.place) ? `<bdi>${esc(ev.place)}</bdi>` + tbdMark(ev.placeTbd) + ' · ' : ''}${rangeLabel(cur.dates)}${tbdMark(ev.dateTbd)}</span></h2>${seg}</div>${chips}` +
@@ -1658,8 +1660,8 @@ function alertEntries() {
   const out = [], t = now();
   for (const r of DATA.rounds) {
     // 3.22.0 Task 8: lead = N climbers before her / 10 min before her estimate, per route (r.leadCtl from applyDelays)
-    if (isLeadLive(r)) { out.push(...leadAlertEntries(r, mineOf(r.id), t, store.settings.leadAlert, roundTitle(r.title))); continue; }
-    for (const m of mineOf(r.id)) {
+    if (isLeadLive(r)) { out.push(...leadAlertEntries(r, alertable(mineOf(r.id), store.settings.alertsAdded), t, store.settings.leadAlert, roundTitle(r.title))); continue; }
+    for (const m of alertable(mineOf(r.id), store.settings.alertsAdded)) {
       const startMs = slotStartMs(r, m.k, off(r.id));
       const s = r.slots[m.k];
       const transferMs = s.transfer ? zonedMs(`${r.date}T${s.transfer.padStart(8, '0')}`) : null;

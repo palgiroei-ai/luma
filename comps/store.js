@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS = {
   lock: true,        // calibration locked by default (Roei 2026-10-12); unlock in settings or the board
   theme: 'light',    // light | dark | auto
   dark: 'plum',      // dark style like Wingate: plum | charcoal | black
+  alertsAdded: true, // 3.32.0: alerts also for athletes added by hand (blue) — off = Hub athletes only
   swipeMine: true,   // swipe between rounds: only rounds with my athletes (3.2.0, Roei); off = every round of the competition
   autoArm: true,     // 3.6.0: sound + screen-on start on the first touch (no start button; bell in the header)
   leadAlert: 'n2',  // 3.22.0: lead alert — n2 / n3 = that many climbers before her on the route, m10 = 10 min before her estimate
