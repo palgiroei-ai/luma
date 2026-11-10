@@ -23,6 +23,12 @@
     try {
       var key = /[?&]at=/.test(location.search) ? 'comps.sim.v1' : 'comps.v1';
       var st = (JSON.parse(localStorage.getItem(key) || '{}').settings) || {};
+      // 3.36.0 glass look: the portal's own switch (coach only; app.js start() removes it for a viewer / athlete entry).
+      // Read before the app-entry branch below replaces st with the app's theme.
+      // Same rule as applyLook(): no app entry, or a stored coach entry; a new #entry= pass = role not known yet → start() decides.
+      var ent = null; try { ent = JSON.parse(localStorage.getItem('comps.appEntry') || 'null'); } catch (e) { /* bad entry: treat as none */ }
+      var coach = !/^#entry=/.test(location.hash) && (!ent || typeof ent !== 'object' || !ent.role || ent.role === 'coach');
+      if (st.glass === true && coach) document.documentElement.setAttribute('data-look', 'glass');
       // opened from the Palgi app (same origin): its theme wins (ThemeBoot.html keys; entry.js appTheme() = same mapping)
       if (/^#entry=/.test(location.hash) || localStorage.getItem('comps.appEntry')) {
         var am = localStorage.getItem('wa-theme-mode'), ad = localStorage.getItem('wa-theme-dark');
@@ -39,6 +45,7 @@
   </script>
   <link rel="preload" href="fonts/heebo-hebrew.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="comps.css">
+  <link rel="stylesheet" href="glass.css">
   <script>
   // Loading-screen failsafe (final review 2026-10-24): app.js or one of its imports fails to load / throws while
   // loading → hideSplash() never runs. Then, instead of "still loading…" forever: "לא הצלחנו לטעון" + reload.
@@ -218,6 +225,14 @@
     </section>
   </main>
   <footer class="app-footer" lang="en" dir="ltr"><span class="app-ver"></span> · Powered by <a class="footer-luma" href="https://luma.palgitraining.com" target="_blank" rel="noopener">LUMA<svg class="luma-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg></a> · By Roei Palgi</footer>
+  <!-- 3.36.0 glass look: floating bottom bar (glass only; renderBar() in app.js keeps it hidden otherwise + on gate/loading) -->
+  <nav id="gbar" class="gbar" aria-label="ניווט" hidden>
+    <span class="gbar-lens" aria-hidden="true"></span>
+    <button type="button" data-gbar="home"><i class="gbar-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/><path d="M10 19v-5h4v5"/></svg></i><span class="gbar-lbl">בית</span></button>
+    <button type="button" data-gbar="live"><i class="gbar-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg><b class="gbar-dot" hidden></b></i><span class="gbar-lbl">לייב</span><small class="gbar-hint" hidden></small></button>
+    <button type="button" data-gbar="res"><i class="gbar-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 20V9h6v11"/><path d="M3 20v-6h6"/><path d="M15 20v-8h6v8"/><path d="M2 20h20"/></svg></i><span class="gbar-lbl">תוצאות</span></button>
+    <button type="button" data-gbar="mine"><i class="gbar-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></i><span class="gbar-lbl">שלי</span></button>
+  </nav>
 </div>
 
 <dialog id="round-pick" class="rp" aria-labelledby="rp-title">
@@ -264,6 +279,7 @@
       </div></div>
       <div class="ios-group"><p class="ios-gtitle">כללי</p><div class="ios-box">
         <button type="button" class="ios-row nav not-in-app" data-page="look"><span class="ico">🌓</span><span class="lbl">מראה</span><span class="val" id="v-look"></span><span class="chev"></span></button>
+        <label class="ios-row coach-only glass-row"><span class="ico">✨</span><span class="lbl">עיצוב חדש (ניסיון)</span><input type="checkbox" class="ios-sw" data-set="glass"></label>
         <button type="button" class="ios-row nav" data-page="sync"><span class="ico">☁️</span><span class="lbl">סנכרון בין מכשירים</span><span class="val" id="v-sync"></span><span class="chev"></span></button>
         <button type="button" class="ios-row nav not-in-app" data-page="data"><span class="ico">📝</span><span class="lbl">הערות וערעורים</span><span class="val" id="v-data"></span><span class="chev"></span></button>
         <button type="button" class="ios-row nav not-in-app" data-page="feedback"><span class="ico">📮</span><span class="lbl">דיווח תקלה או הצעה לשיפור</span><span class="val" id="v-feedback"></span><span class="chev"></span></button>

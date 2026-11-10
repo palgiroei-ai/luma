@@ -1,0 +1,261 @@
+/* 3.36.0 glass look (spec docs/superpowers/specs/2026-11-10-glass-look-bottom-bar-design.md, "The look").
+   Only with html[data-look="glass"] (settings.glass, coach only; boot script in index.html + applySettings in app.js).
+   Every rule here is scoped under [data-look="glass"] (tests/glass.test.mjs) → switch off = today's UI, untouched.
+   Colours only in the token blocks, radius only from tokens (tests/palgi-look.test.mjs).
+   Base targets use :where() so a rule keeps the specificity of the base rule it replaces: later file wins over
+   `.card`, but every existing variant (.ath.boulder, .icon-btn.filled, pressed tabs, mine lanes…) keeps its colours. */
+
+/* light tokens (approved screenshot "א · דמות ענקית") */
+:root:is([data-look="glass"]) {
+  --chalk: #F3EEE6;
+  --card: #FFFFFF;
+  --border: #E6DDD0;
+  --line: #ECE5DA;
+  --shadow: 0 10px 28px rgba(60, 40, 20, .10);
+  --r: 22px;
+  --r-sm: 12px;
+  --boulder-bg: #FFF4EA;
+  --glass-bg: rgba(255, 255, 255, .62);
+  --glass-blur: blur(20px) saturate(1.6);
+  --glass-line: rgba(255, 255, 255, .75);
+  --glass-shadow: 0 10px 28px rgba(60, 40, 20, .10), inset 0 1px 0 rgba(255, 255, 255, .9);
+  --glass-head: rgba(255, 255, 255, .55);
+  --glass-head-blur: blur(24px) saturate(1.8);
+  --glass-head-line: rgba(255, 255, 255, .7);
+  --glass-rest-line: rgba(60, 40, 20, .25);
+  --glass-logo: url("logo-figure.svg");
+  /* bottom bar (Task 3, recipe of the app bar 13.5.1): white glass, black shadow, copper active tab on a copper bubble */
+  --gbar-bg: rgba(255, 255, 255, .74);
+  --gbar-solid: #FFFFFF;
+  --gbar-ink: rgba(46, 26, 71, .78);
+  --gbar-active: #8B5E3C;
+  --gbar-icon: #8B5E3C;
+  --gbar-bubble: rgba(139, 94, 60, .14);
+  --gbar-shadow: 0 14px 34px rgba(0, 0, 0, .30), 0 2px 6px rgba(0, 0, 0, .14);
+  --gbar-hi: rgba(255, 255, 255, .9);
+  --gbar-line: rgba(255, 255, 255, .8);
+  --gbar-spring: cubic-bezier(.34, 1.35, .64, 1); /* the app bar's settle (overshoots a little) */
+  --gbar-press: cubic-bezier(.2, .8, .2, 1);
+  --gbar-h: calc(86px + env(safe-area-inset-bottom, 0px)); /* 62px bar + 16px float + 8px gap; app.js sets the measured value */
+}
+
+/* dark themes ("קשת זוהרת"): the theme's own background + card colour at ~.55 alpha, light logo ink.
+   These blocks (specificity 0,3,0) win over the light glass block (0,2,0) and restore each theme's own tokens. */
+:root:is([data-look="glass"][data-theme="plum"]) {
+  --chalk: #1A1024; --card: #251838; --border: #3A2C4E; --line: #2E2042; --boulder-bg: #3D2420;
+  --glass-bg: rgba(37, 24, 56, .55);
+  --glass-head: rgba(26, 16, 36, .6);
+  --gbar-bg: rgba(40, 28, 58, .88); --gbar-solid: #281C3A;
+}
+:root:is([data-look="glass"][data-theme="charcoal"]) {
+  --chalk: #141216; --card: #1E1B22; --border: #2F2B35; --line: #2A2531; --boulder-bg: #3A2419;
+  --glass-bg: rgba(30, 27, 34, .55);
+  --glass-head: rgba(20, 18, 22, .6);
+  --gbar-bg: rgba(36, 33, 41, .88); --gbar-solid: #242129;
+}
+:root:is([data-look="glass"][data-theme="black"]) {
+  --chalk: #000000; --card: #121014; --border: #26222A; --line: #1C1820; --boulder-bg: #2E1B12;
+  --glass-bg: rgba(18, 16, 20, .55);
+  --glass-head: rgba(0, 0, 0, .55);
+  --gbar-bg: rgba(32, 30, 36, .88); --gbar-solid: #201E24;
+}
+:root:is([data-look="glass"][data-theme="plum"], [data-look="glass"][data-theme="charcoal"], [data-look="glass"][data-theme="black"]) {
+  --shadow: 0 10px 28px rgba(0, 0, 0, .35);
+  --glass-blur: blur(20px) saturate(1.4);
+  --glass-line: rgba(255, 255, 255, .08);
+  --glass-shadow: 0 10px 28px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .06);
+  --glass-head-line: rgba(255, 255, 255, .08);
+  --glass-rest-line: rgba(255, 255, 255, .22);
+  --glass-logo: url("logo-figure-dark.svg");
+  /* bottom bar: dark glass (.88, per theme above) with a thin outline, sand label + brown icon (the app's Palgi dark bar) */
+  --gbar-ink: rgba(255, 255, 255, .88);
+  --gbar-active: #E5D3BE;
+  --gbar-icon: #C49A74;
+  --gbar-bubble: rgba(255, 255, 255, .16);
+  --gbar-shadow: 0 10px 30px rgba(0, 0, 0, .55);
+  --gbar-hi: rgba(255, 255, 255, .22);
+  --gbar-line: rgba(255, 255, 255, .12);
+}
+
+/* page + the huge faint logo figure, fixed behind everything (does not scroll with the content) */
+[data-look="glass"] body { background: var(--chalk); }
+[data-look="glass"] body::after {
+  content: ""; position: fixed; z-index: -1; pointer-events: none;
+  top: 7vh; left: 50%; width: 128vw; aspect-ratio: 730 / 800; transform: translateX(-50%);
+  background: var(--glass-logo) center / contain no-repeat;
+}
+
+/* frosted white glass: cards, lanes, timer, next, athlete cards, icon buttons, tabs, secondary buttons, segmented */
+[data-look="glass"] :where(.card, .next-card, .timer-card, .ath, .btn-secondary, .seg, .icon-btn:not(#home-btn)),
+[data-look="glass"] :where(.tabs-scroll) button,
+[data-look="glass"] .lane.boulder:not(.mine) {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border-color: var(--glass-line);
+  box-shadow: var(--glass-shadow);
+}
+/* rest lanes: transparent, dashed */
+[data-look="glass"] .lane.rest:not(.mine) { background: transparent; border-color: var(--glass-rest-line); }
+
+/* header: topbar + the in-round tab row */
+[data-look="glass"] :where(.topbar),
+[data-look="glass"] body.in-round .top-stack .tabs {
+  background: var(--glass-head);
+  -webkit-backdrop-filter: var(--glass-head-blur); backdrop-filter: var(--glass-head-blur);
+  border-bottom-color: var(--glass-head-line);
+}
+
+/* ---- floating bottom bar (Task 3; spec "The bottom bar"). Motion (Task 6) = the app bar 13.5.1: see the no-preference block below. ---- */
+[data-look="glass"] .gbar {
+  --gpad: 7px; --gvpad: 5px; --gn: 4; /* side / top padding, tab count: the lens below is placed from them */
+  position: fixed; z-index: 55; inset-inline: 14px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); height: 62px;
+  box-sizing: border-box; display: flex; gap: 2px; padding: var(--gvpad) var(--gpad);
+  border: 1px solid var(--gbar-line); border-radius: var(--r-pill);
+  background: var(--gbar-bg);
+  box-shadow: var(--gbar-shadow), inset 0 1px 1px var(--gbar-hi);
+  -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
+}
+[data-look="glass"] .gbar[hidden] { display: none; }
+/* an in-page text field has focus (the keyboard is up): the bar steps aside; visibility only → its box (and --gbar-h) stay */
+[data-look="glass"] .gbar.kb { visibility: hidden; pointer-events: none; }
+@media (min-width: 700px) {
+  [data-look="glass"] .gbar { inset-inline: 0; width: 560px; margin-inline: auto; }
+}
+[data-look="glass"] .gbar button {
+  position: relative; z-index: 1; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; margin: 0; padding: 0; border: 0; border-radius: var(--r-pill); background: none; color: var(--gbar-ink);
+  font: inherit; font-size: 11.5px; font-weight: 600; line-height: 1.1; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+[data-look="glass"] .gbar button[aria-current="page"] { color: var(--gbar-active); }
+/* The active bubble = one lens behind the tabs. Pure CSS geometry: tab --gi (renderBar) of --gn equal shares with a 2px gap,
+   so it stays on its tab through any resize / the shrink with no measuring. Hidden when no tab is active (a non-live round). */
+[data-look="glass"] .gbar .gbar-lens {
+  --gw: calc((100% - 2 * var(--gpad) - (var(--gn) - 1) * 2px) / var(--gn));
+  position: absolute; z-index: 0; top: var(--gvpad); bottom: var(--gvpad); width: var(--gw);
+  inset-inline-start: calc(var(--gpad) + var(--gi, 0) * (var(--gw) + 2px));
+  border-radius: var(--r-pill); background: var(--gbar-bubble); pointer-events: none;
+}
+[data-look="glass"] .gbar.no-act .gbar-lens { opacity: 0; }
+[data-look="glass"] .gbar .gbar-ico { position: relative; display: grid; place-items: center; height: 24px; font-style: normal; }
+[data-look="glass"] .gbar svg { display: block; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+[data-look="glass"] .gbar button[aria-current="page"] .gbar-ico { color: var(--gbar-icon); }
+[data-look="glass"] .gbar .gbar-lbl { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* live: red dot while a round is live; "הבא HH:MM" pill on the top edge of the tab otherwise */
+[data-look="glass"] .gbar .gbar-dot {
+  position: absolute; top: -2px; inset-inline-end: -5px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--live); box-shadow: 0 0 0 2px var(--gbar-solid);
+}
+[data-look="glass"] .gbar .gbar-hint {
+  position: absolute; top: -13px; inset-inline: 0; margin-inline: auto; width: max-content; max-width: 100%;
+  padding: 1px 7px; border-radius: var(--r-pill); background: var(--gbar-solid); color: var(--gbar-active);
+  border: 1px solid var(--gbar-line); box-shadow: 0 2px 6px rgba(0, 0, 0, .14);
+  font-size: 10px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+[data-look="glass"] .gbar .gbar-dot[hidden],
+[data-look="glass"] .gbar .gbar-hint[hidden] { display: none; }
+/* Motion (Task 6, port of the app bar 13.5.1 "shell-glass"): one spring (--gbar-spring, .38s) for every settle, --gbar-press
+   for every press. app.js toggles .press on the bar + .down on the touched tab, .mini while scrolled down, and writes --gi.
+   All of it only with no-preference: reduced motion = the static bar (lens jumps, no press scale, never shrinks). */
+@media (prefers-reduced-motion: no-preference) {
+  [data-look="glass"] .gbar {
+    transition: transform .38s var(--gbar-spring), height .38s var(--gbar-spring), padding .38s var(--gbar-spring),
+      inset .38s var(--gbar-spring), width .38s var(--gbar-spring);
+  }
+  [data-look="glass"] .gbar .gbar-lens {
+    transition: inset-inline-start .38s var(--gbar-spring), left .38s var(--gbar-spring), right .38s var(--gbar-spring),
+      width .38s var(--gbar-spring), top .38s var(--gbar-spring), bottom .38s var(--gbar-spring), scale .38s var(--gbar-spring),
+      filter .38s, opacity .2s;
+  }
+  [data-look="glass"] .gbar button { transition: gap .38s var(--gbar-spring); }
+  [data-look="glass"] .gbar .gbar-ico { transition: transform .38s var(--gbar-spring), scale .38s var(--gbar-spring); }
+  [data-look="glass"] .gbar .gbar-lbl {
+    max-height: 1.4em; transition: opacity .22s ease-out .12s, max-height .38s var(--gbar-spring), transform .3s var(--gbar-spring) .12s;
+  }
+  /* finger down: the bar swells, the touched icon dips, the bubble reaches under the finger and brightens */
+  [data-look="glass"] .gbar.press {
+    transform: scale(1.04);
+    transition: transform .2s var(--gbar-press), height .38s var(--gbar-spring), padding .38s var(--gbar-spring),
+      inset .38s var(--gbar-spring), width .38s var(--gbar-spring);
+  }
+  [data-look="glass"] .gbar button.down .gbar-ico { transform: scale(.84); transition: transform .16s var(--gbar-press), scale .4s var(--gbar-spring); }
+  [data-look="glass"] .gbar.press .gbar-lens {
+    scale: 1.02 1.05; filter: brightness(1.25);
+    transition: inset-inline-start .22s var(--gbar-press), left .22s var(--gbar-press), right .22s var(--gbar-press),
+      width .22s var(--gbar-press), scale .16s var(--gbar-press), filter .16s, opacity .16s;
+  }
+  [data-look="glass"] .gbar.press.no-act .gbar-lens { opacity: 1; }
+  /* small bar (scrolled down, PHONE ONLY): a little lower and narrower on the spring after .06s, labels stay (spec: labels
+     always visible; "תוצאות" fits a 375px phone); scroll up / a tap grows it. The page keeps the FULL bar's --gbar-h
+     (app.js measures only the full bar), so nothing ends under it when it grows. */
+  @media (max-width: 699px) {
+    [data-look="glass"] .gbar.mini {
+      --gpad: 5px; --gvpad: 3px; height: 52px; inset-inline: 44px;
+      transition: transform .38s var(--gbar-spring), height .38s var(--gbar-spring) .06s, padding .38s var(--gbar-spring) .06s,
+        inset .38s var(--gbar-spring) .06s, width .38s var(--gbar-spring) .06s;
+    }
+    [data-look="glass"] .gbar.mini .gbar-lens { transition-delay: .06s; } /* on the bar's own delay → glued to its tab */
+    [data-look="glass"] .gbar.mini button { gap: 2px; transition: gap .38s var(--gbar-spring) .06s; }
+    [data-look="glass"] .gbar.mini .gbar-ico { scale: .86; transition: transform .38s var(--gbar-spring), scale .38s var(--gbar-spring) .06s; }
+  }
+}
+
+/* the bar replaces ⌂ and the athlete's "כללי | שלי" switch */
+[data-look="glass"] #home-btn { display: none; }
+[data-look="glass"] .me-seg { display: none; }
+/* nothing ends under the bar: page padding = measured bar + offset + gap (--gbar-h); toasts sit above it */
+[data-look="glass"] body { padding-bottom: var(--gbar-h); }
+[data-look="glass"] #live-toasts { bottom: var(--gbar-h); }
+[data-look="glass"] .toast,
+[data-look="glass"] .toast.swipe { bottom: var(--gbar-h); }
+/* the tag popover (z 50) opens under a tag — near the bottom of the screen it must sit over the bar (55), not under it */
+[data-look="glass"] .tag-pop { z-index: 56; }
+
+/* "תוצאות" list (Task 4): one .card.ev-item per competition as a <details>; round rows open the round's results */
+[data-look="glass"] .res-list { display: grid; gap: 12px; }
+[data-look="glass"] .res-g > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px;
+  border-radius: var(--r);
+}
+[data-look="glass"] .res-g > summary::-webkit-details-marker { display: none; }
+[data-look="glass"] .res-g:not([open]) { padding-bottom: 0; }
+[data-look="glass"] .res-g:not([open]) > summary { padding-bottom: 14px; }
+[data-look="glass"] .res-g-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+[data-look="glass"] .res-g .chev {
+  width: 8px; height: 8px; flex: none; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(135deg);
+}
+[data-look="glass"] .res-g > summary .chev { transform: rotate(45deg); transition: transform .15s; }
+[data-look="glass"] .res-g[open] > summary .chev { transform: rotate(225deg); }
+[data-look="glass"] .res-rows { display: grid; padding-inline: 8px; margin-bottom: 4px; }
+[data-look="glass"] .res-row {
+  all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  min-height: 48px; padding: 8px; border-top: 1px solid var(--line);
+}
+[data-look="glass"] .res-row-t { flex: 1; min-width: 0; display: grid; gap: 1px; }
+[data-look="glass"] .res-row:active { opacity: .7; }
+[data-look="glass"] .res-row:focus-visible,
+[data-look="glass"] .res-g > summary:focus-visible { outline: 2px solid var(--copper); outline-offset: -2px; }
+[data-look="glass"] .res-g .fin-btn { margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  [data-look="glass"] .res-g > summary .chev { transition: none; }
+}
+
+/* competition "שלי" (Task 5): one .card per athlete; a row per round opens that round on "שלי" */
+[data-look="glass"] .cm-list { display: grid; gap: 12px; }
+[data-look="glass"] .cm-card { padding: 12px 16px 4px; }
+[data-look="glass"] .cm-card > header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; padding: 2px 2px 6px; }
+[data-look="glass"] .cm-card > header h3 { margin: 0; font-size: 18px; }
+[data-look="glass"] .cm-card.on { box-shadow: inset 0 0 0 2px var(--copper); }
+[data-look="glass"] .cm-card.added > header h3 { color: var(--added); }
+[data-look="glass"] .cm-rows { display: grid; }
+[data-look="glass"] .cm-row {
+  all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  min-height: 48px; padding: 8px 2px; border-top: 1px solid var(--line);
+}
+[data-look="glass"] .cm-row-t { flex: 1; min-width: 0; display: grid; gap: 3px; }
+[data-look="glass"] .cm-st { font-weight: 800; color: var(--copper-text); }
+[data-look="glass"] .cm-row .res-line { display: block; justify-self: start; }
+[data-look="glass"] .cm-row .chev {
+  width: 8px; height: 8px; flex: none; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(135deg);
+}
+[data-look="glass"] .cm-row:active { opacity: .7; }
+[data-look="glass"] .cm-row:focus-visible { outline: 2px solid var(--copper); outline-offset: -2px; }

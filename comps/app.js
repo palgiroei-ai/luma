@@ -3,7 +3,7 @@ import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, delayOf
 import { store } from './store.js';
 import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
-import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats, isLastRound, finalStandings, finalInCats, tzText } from './results.js';
+import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats, isLastRound, finalStandings, finalInCats, tzText, placeByBib } from './results.js';
 import { setupInstall } from './install.js';
 import { catHe, roundTitle, hm, hms, range, placeOnce, fileSource } from './labels.js';
 const srcOf = res => (res.live || res.locked || res.intl ? res.source : fileSource(res.source));
@@ -16,6 +16,7 @@ import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, is
 import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openTarget, appTheme, backToApp } from './entry.js';
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
+import { liveTarget, currentSeasonIds, resultsGroups, compMine, barMiniNext } from './bar.js';
 import { athleteHistory, whoFromRow, keysOf, personKey, compAge } from './athlete.js';
 import { athleteCardHtml } from './athleteCard.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
@@ -24,7 +25,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ow
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC, evMeta } from './seasons.js';
 
-export const APP_VERSION = '3.35.0';
+export const APP_VERSION = '3.36.0';
 
 const $ = s => document.querySelector(s);
 
@@ -420,6 +421,8 @@ function navBackKind() {
   if (athReturn) { if (athLandKey() === athReturn.land) return 'ath'; athReturn = null; } // 3.34.0: back to the athlete card
   if (screen === 'round') return 'round';
   if (ME && homeTab === 'me') return null;
+  if (homeTab === 'res' && homeFinal) return 'final'; // final standings opened from "תוצאות" → back to that list
+  if (homeTab === 'res' || homeTab === 'comp') return null; // 3.36.0 glass bar: top-level screens (bar tabs), no ‹
   if (homeFinal) return 'final';
   if (homeOpenEvent != null) return 'event';
   return homeSeason ? 'season' : null;
@@ -1316,9 +1319,99 @@ function renderFinal() {
 
 // 3.6.1 (Roei): no רשימה/מפורט switch — home = the list; on a competition day it opens straight on that
 // competition's detail (the back chevron goes to the list until the home button is tapped again)
+// 3.36.0 glass bar "תוצאות": the current seasons' rounds with results, one card per competition, newest first
+// (national: every round with results; international: rounds with an Israeli). Cards after the first two start closed;
+// a card the user opened / closed keeps that state across re-renders (resOpen, by event id).
+const resOpen = new Map();
+function renderResList() {
+  const evs = homeEvents(), fin = new Map(), finOf = ev => { if (!fin.has(ev)) fin.set(ev, finalsOf(ev)); return fin.get(ev); }; // finalsOf once per competition per render
+  const groups = resultsGroups(evs, {
+    seasons: currentSeasonIds(evs.map(seasonOf), todayStr()),
+    resultsOf, hasIsraeli: (r, res) => (res.rows || []).some(isIsr), finalsReady: ev => { const f = finOf(ev); return f.length > 0 && f.every(x => x.ready); }, titleOf: x => evName(x.event),
+  });
+  const card = (g, i) => {
+    const item = evs[g.ei], live = g.rounds.some(x => x.live), n = g.rounds.length;
+    const rows = g.rounds.map(x => { const r = round(x.id);
+      return `<button type="button" class="res-row" data-res-open="${x.id}"><span class="res-row-t"><b>${esc(roundTitle(r.title))}</b><span class="muted small">${dayLabel(r.date)}</span></span>${x.live ? '<span class="hb live">חי עכשיו</span>' : ''}<span class="chev" aria-hidden="true"></span></button>`; }).join('');
+    const open = resOpen.has(g.eventId) ? resOpen.get(g.eventId) : i < 2;
+    return `<details class="card ev-item res-g ev-t-${evTone(item.event)}${live ? ' ph-live' : ''}" data-res-ev="${esc(g.eventId)}"${open ? ' open' : ''}>
+      <summary><span class="res-g-main"><b>${bidiParts(g.title)}</b><span class="muted small">${rangeLabel(item.dates)} · ${n === 1 ? 'ראונד אחד' : `${n} ראונדים`}</span></span>${live ? '<span class="hb live">חי עכשיו</span>' : ''}<span class="chev" aria-hidden="true"></span></summary>
+      <div class="res-rows">${rows}</div>${g.finals ? `<button type="button" class="fin-btn" data-final="${g.ei}:${finOf(item)[0].key}:list">${CUP}תוצאות סופיות<span class="go" aria-hidden="true">‹</span></button>` : ''}
+    </details>`;
+  };
+  patch($('#home'), `<div class="h-head"><h2 class="h-event">תוצאות</h2></div>` +
+    (groups.length ? `<div class="res-list">${groups.map(card).join('')}</div>` : '<div class="card h-empty"><p>עוד אין תוצאות בעונה הזו</p></div>'));
+}
+// 3.36.0 glass bar "שלי": the current competition (live, else the nearest upcoming, else the latest finished; only
+// competitions with rounds this device shows), one card per athlete of mine across its rounds (bar.js compMine).
+// International = the Israelis (World Climbing results). Viewer: same screen, visible rounds only, read-only, no overlaps.
+function compNowIdx(evs, t) {
+  const idx = evs.map((x, i) => i).filter(i => evs[i].rounds.length && !evs[i].event.cancelled);
+  const ph = new Map(idx.map(i => [evs[i], evPhase(evs[i], t)])), items = idx.map(i => evs[i]);
+  let j = pickNow(items, ev => ph.get(ev), ev => evToday(ev.event));
+  if (j < 0) items.forEach((x, k) => { if (ph.get(x) === 'before' && (j < 0 || x.dates[0] < items[j].dates[0])) j = k; });
+  if (j < 0) items.forEach((x, k) => { if (j < 0 || x.dates.at(-1) >= items[j].dates.at(-1)) j = k; });
+  return j < 0 ? -1 : idx[j];
+}
+const CM_ON = new Set(['boulder', 'rest', 'trailing', 'climbing']); // on the wall / resting → the live status line
+const cmScore = x => (typeof x.score === 'number' ? x.score.toFixed(1) : `<bdi dir="ltr">${esc(String(x.score ?? ''))}</bdi>`);
+// per round, computed once per render: who is mine + status / start / result per athlete
+function compMineCtx(r, t) {
+  const res = resultsOf(r.id);
+  if (r.ifsc) {
+    const rows = res ? rankedOf(r.id).filter(isIsr) : [], by = new Map(rows.map(x => [x.bib, x])), at = roundStart(r);
+    const start = r.noTime || !Number.isFinite(at) ? null : at;
+    return { mine: rows.map(x => ({ k: x.bib, short: x.name })), name: k => by.get(k).name, cat: () => '', added: () => false, live: !!res?.live,
+      status: () => null, start: () => start,
+      result: k => { const x = by.get(k); return x?.rank == null ? null : `<b>מקום ${x.rank}</b>${res.lead ? ` · ${cmScore(x)}` : x.bs ? ` · <bdi dir="ltr">${tzText(x.bs)}</bdi>` : ''}`; } };
+  }
+  const list = mineOf(r.id).filter(m => r.slots[m.k]), o = off(r.id);
+  const live = r.slots.length > 0 && stateAt(r, t, o).phase === 'live';
+  const st = new Map(list.map(m => [m.k, athleteStatus(r, m.k, t, o)])), byK = new Map(list.map(m => [m.k, m]));
+  // the place = the athlete's own category (U17 rounds) / overall (seniors), never the round's category chip (resCat)
+  const R = res && !res.lead ? resByBib(r) : null, own = R ? placeByBib(res.rows, genderOf(r.id), prevRankOf(r.id)) : null, lead = res?.lead ? new Map(rankedOf(r.id).map(x => [String(x.bib), x])) : null;
+  return { mine: list, name: k => r.slots[k].name, live: !!res?.live, added: k => !!byK.get(k)?.added,
+    cat: k => { const c = byK.get(k)?.cat || ''; return /^(Senior|S|U\d+)$/.test(c) ? catHe(c, genderOf(r.id)) : c; },
+    status: k => (live && CM_ON.has(st.get(k).kind) ? statusText(r, st.get(k)) : null),
+    start: k => (Number.isFinite(st.get(k).startMs) ? st.get(k).startMs : null),
+    result: k => {
+      const bib = r.slots[k].bib;
+      if (lead) { const x = lead.get(String(bib)); return x?.rank == null ? null : `<b>מקום ${x.rank}</b> · ${cmScore(x)}`; }
+      const x = own?.[bib]; return x?.rank == null ? null : `<b>מקום ${x.rank}${provisional(R)}</b> · <bdi dir="ltr">${tzText(x.bs)}</bdi>`;
+    } };
+}
+function renderCompMine() {
+  const t = now(), evs = homeEvents(), i = compNowIdx(evs, t), item = i >= 0 ? evs[i] : null;
+  const head = `<div class="h-head"><h2 class="h-event">${MINE_NAME()}${item ? ` <span class="muted">· ${bidiParts(evName(item.event))}</span>` : ''}</h2></div>`;
+  // a combined A + B entry is reached through its groups here (each athlete climbs in one group)
+  const rounds = item ? item.rounds.filter(r => !r.combo) : [], C = new Map(rounds.map(r => [r.id, compMineCtx(r, t)]));
+  const cards = compMine({ event: item?.event, rounds }, {
+    now: t, mineOf: id => C.get(id).mine, slotName: (r, k) => C.get(r.id).name(k), statusOf: (r, k) => C.get(r.id).status(k),
+    resultOf: (r, k) => C.get(r.id).result(k), titleOf: r => roundTitle(r.title), startOf: (r, k) => C.get(r.id).start(k),
+  });
+  if (!cards.length) { patch($('#home'), `${head}<div class="card h-empty"><p>אין ${MINE_NAME()} בתחרות הנוכחית</p></div>`); return; }
+  // overlap warnings of the live / upcoming rounds on top (coach only, as in a round's "שלי"), each under its round's title
+  const ovl = VIEWER ? '' : rounds.filter(r => !r.ifsc && r.slots.length && stateAt(r, t, off(r.id)).phase !== 'after').map(r => {
+    const h = isLeadLive(r) ? leadOverlapHtml(r, { ...leadCtx(r), now: t, mine: hubOnly(C.get(r.id).mine) }) : overlapsOf(r).length ? overlapHtml(r, t) : '';
+    return h && `<h3 class="par-h">${esc(roundTitle(r.title))}</h3>${h}`;
+  }).join('');
+  const card = c => {
+    const x0 = c.rounds[0], cx = C.get(x0.id), cat = c.rounds.map(x => C.get(x.id).cat(x.k)).find(Boolean) || '';
+    const on = c.rounds.some(x => x.status != null), added = c.rounds.every(x => C.get(x.id).added(x.k));
+    const rows = c.rounds.map(x => {
+      const r = round(x.id), when = [dayLabel(r.date), x.startMs != null && fmtHM(x.startMs)].filter(Boolean).join(' · ');
+      return `<button type="button" class="cm-row${x.status ? ' on' : ''}" data-comp-open="${x.id}"><span class="cm-row-t"><b>${esc(x.title)}</b><span class="muted small"><bdi>${when}</bdi></span>${x.status ? `<span class="cm-st">${x.status}</span>` : ''}${x.result ? `<span class="res-line${C.get(x.id).live ? ' live' : ''}">${x.result}</span>` : ''}</span><span class="chev" aria-hidden="true"></span></button>`;
+    }).join('');
+    return `<article class="card cm-card${on ? ' on' : ''}${added ? ' added' : ''}"><header><h3>${esc(c.name)}</h3>${cat ? `<span class="muted small">${esc(cat)}</span>` : ''}</header><div class="cm-rows">${rows}</div></article>`;
+  };
+  patch($('#home'), `${head}${ovl}<div class="cm-list">${cards.map(card).join('')}</div>`);
+}
 function renderHome() {
   const seg = ME ? `<div class="seg h-seg me-seg" role="group" aria-label="תצוגה"><button type="button" data-home-tab="all" aria-pressed="${homeTab === 'all'}">כללי</button><button type="button" data-home-tab="me" aria-pressed="${homeTab === 'me'}">שלי</button></div>` : '';
   if (ME && homeTab === 'me') return renderMe(seg);
+  if (!GLASS() && (homeTab === 'res' || homeTab === 'comp')) homeTab = 'all'; // bar screens exist only under glass (athBack can restore one)
+  if (homeTab === 'res') return homeFinal ? renderFinal() : renderResList(); // final standings opened from the results list
+  if (homeTab === 'comp') return renderCompMine();
   if (homeFinal) return renderFinal();
   if (homeOpenEvent == null) return renderHomeList(seg);
   renderHomeDetail('', true);
@@ -1495,6 +1588,138 @@ function showScreen(sc) {
   render();
 }
 
+// ---- 3.36.0 glass look: floating bottom bar (בית · לייב · תוצאות · שלי), spec "The bottom bar" ----
+// a group of a combined A + B entry is reached through that entry (as on home); only rounds this device already shows
+const inCombo = r => !!r.group && DATA.rounds.some(c => c.combo?.includes(r.id));
+function barLive() {
+  const t = now();
+  return liveTarget(DATA.rounds.filter(r => visible(r) && !inCombo(r)), {
+    now: t,
+    isLive: r => (r.ifsc ? ifscPhase(r) === 'live' : r.slots.length > 0 && stateAt(r, t, off(r.id)).phase === 'live'),
+    hasList: r => r.slots.length > 0,
+    startOf: r => (r.ifsc && r.noTime ? null : (ms => (Number.isFinite(ms) ? ms : null))(roundStart(r) + (r.ifsc ? 0 : off(r.id)))),
+    mineCount: r => (r.ifsc ? isrCount(r.id) : hubOf(r.id).length), // Israelis for World Climbing, as home counts them
+    isIntl: r => !!r.ifsc,
+  });
+}
+function barActive(lt) {
+  if (screen === 'round') return lt.kind !== 'none' && current === lt.id ? 'live' : null; // in a round only לייב can light up
+  if (homeTab === 'res') return 'res';
+  if (homeTab === 'comp' || (ME && homeTab === 'me')) return 'mine';
+  return 'home';
+}
+function renderBar() {
+  const bar = $('#gbar'); if (!bar) return;
+  const off_ = !GLASS() || $('#app').hidden || !$('#gate').hidden;
+  if (bar.hidden !== off_) { bar.hidden = off_; if (off_) barSetMini(bar, false); measureBar(); }
+  if (off_) return;
+  barKb(bar); // a focused in-page field (a re-render can drop it without a focusout)
+  const lt = barLive(), act = barActive(lt);
+  bar.querySelectorAll('[data-gbar]').forEach(b => { if (b.dataset.gbar === act) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  // the lens moves only on a real change of the active tab (render runs every 250 ms); never while a finger is down
+  if (BAR_M.act !== act && !BAR_M.press) { BAR_M.act = act; barLensTo(bar, act); }
+  const live = bar.querySelector('[data-gbar="live"]'), dot = live.querySelector('.gbar-dot'), hint = live.querySelector('.gbar-hint');
+  dot.hidden = lt.kind !== 'live';
+  const txt = lt.kind !== 'next' ? '' : `הבא ${dayIn(lt.at) === todayStr() ? fmtHM(lt.at) : (d => `${Number(d.slice(8))}/${Number(d.slice(5, 7))}`)(dayIn(lt.at))}`;
+  if (hint.textContent !== txt) hint.textContent = txt;
+  hint.hidden = !txt;
+  const al = lt.kind === 'live' ? 'לייב · יש ראונד חי' : txt ? `לייב · ${txt}` : 'לייב';
+  if (live.getAttribute('aria-label') !== al) live.setAttribute('aria-label', al);
+}
+// --gbar-h = what the bar takes from the bottom of the screen (height + float offset + safe area) + 8px gap; 0 when hidden.
+// Only the FULL bar is measured (Task 6): a small or resizing bar keeps the last value, so the page height never changes
+// mid-scroll and nothing ends under the bar when it grows back.
+function measureBar() {
+  const bar = $('#gbar');
+  if (bar && !bar.hidden && (bar.classList.contains('mini') || Date.now() < BAR_M.animUntil)) return;
+  const h = bar && !bar.hidden && bar.offsetHeight ? Math.ceil(innerHeight - bar.getBoundingClientRect().top) + 8 : 0;
+  document.documentElement.style.setProperty('--gbar-h', h + 'px');
+}
+// ---- bar motion (Task 6, port of the app bar 13.5.1, 17-shell-bar.html): the CSS owns every curve (glass.css, all under
+// prefers-reduced-motion: no-preference); this only writes --gi (lens tab) and toggles .press / .down / .mini / .no-act.
+const BAR_TABS = ['home', 'live', 'res', 'mine'];
+const BAR_M = { act: undefined, press: null, mini: false, lastY: 0, raf: 0, animUntil: 0 };
+const mq = q => { try { return matchMedia(q); } catch { return null; } };
+const MQ_REDUCE = mq('(prefers-reduced-motion: reduce)'), MQ_PHONE = mq('(max-width: 699px)');
+const reducedMotion = () => !!MQ_REDUCE?.matches;
+const barCanShrink = () => !reducedMotion() && !!MQ_PHONE?.matches; // phone only, never with reduced motion
+function barLensTo(bar, act) {
+  const i = BAR_TABS.indexOf(act);
+  bar.classList.toggle('no-act', i < 0);
+  if (i >= 0) bar.style.setProperty('--gi', String(i));
+}
+function barSetMini(bar, want) {
+  want = !!want && barCanShrink();
+  BAR_M.mini = want;
+  if (bar.classList.contains('mini') === want) return;
+  BAR_M.animUntil = Date.now() + 520; // the resize runs .06 + .38 s: measureBar waits it out
+  bar.classList.toggle('mini', want);
+  setTimeout(measureBar, 540);
+}
+function barOnScroll() {
+  BAR_M.raf = 0;
+  const bar = $('#gbar'); if (!bar || bar.hidden) return;
+  const y = scrollY, max = document.documentElement.scrollHeight - innerHeight;
+  if (y > max + 1) return; // iOS rubber band past the bottom: not a scroll up
+  if (Math.abs(y - BAR_M.lastY) < 8 && y > 0) return;
+  const next = barMiniNext(BAR_M.lastY, y, BAR_M.mini);
+  BAR_M.lastY = Math.max(0, y);
+  if (next !== null && !BAR_M.press) barSetMini(bar, next);
+}
+function barPointerDown(e) {
+  if (e.button > 0) return;
+  const bar = $('#gbar'), b = e.target.closest('[data-gbar]');
+  // small bar: an empty spot grows it now; a tab does NOT grow here (the tabs would slide under the finger before the
+  // click) — its click navigates and barTap grows the bar
+  if (!b) { if (bar.classList.contains('mini')) { BAR_M.lastY = scrollY; barSetMini(bar, false); } return; }
+  bar.classList.add('press'); b.classList.add('down');
+  barLensTo(bar, b.dataset.gbar); // the bubble reaches under the finger
+  BAR_M.press = { bar, b };
+}
+function barPointerEnd(e) {
+  const p = BAR_M.press; if (!p) return;
+  BAR_M.press = null;
+  p.bar.classList.remove('press'); p.b.classList.remove('down');
+  // the click that follows navigates (renderBar moves the lens); a cancel (a scroll took over) or a tap that changes
+  // nothing sends the bubble back to the real active tab
+  const back = () => { if (!BAR_M.press) barLensTo(p.bar, BAR_M.act); };
+  if (e.type === 'pointerup') setTimeout(back, 450); else back();
+}
+// the keyboard: while an in-page text field has focus (note edit, appeal outcome…) the bar hides (.kb = visibility only, so
+// its box and --gbar-h stay → no layout jump); fields inside a dialog sit in the top layer over the bar anyway
+const KB_FIELD = 'textarea, [contenteditable]:not([contenteditable="false"]), input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="image"]):not([type="hidden"])';
+const kbField = el => !!(el && el.matches && el.matches(KB_FIELD) && !el.closest('dialog') && !el.closest('#gbar'));
+function barKb(bar) { const on = kbField(document.activeElement); if (bar.classList.contains('kb') !== on) bar.classList.toggle('kb', on); }
+function wireBarMotion() {
+  const bar = $('#gbar'); if (!bar) return;
+  document.addEventListener('focusin', () => barKb(bar));
+  document.addEventListener('focusout', () => setTimeout(() => barKb(bar), 0)); // activeElement = the next field (or body) by then
+  bar.addEventListener('pointerdown', barPointerDown, { passive: true });
+  addEventListener('pointerup', barPointerEnd, { passive: true });
+  addEventListener('pointercancel', barPointerEnd, { passive: true });
+  addEventListener('scroll', () => { if (!BAR_M.raf) BAR_M.raf = requestAnimationFrame(barOnScroll); }, { passive: true });
+  // reduced motion switched on / the width crosses to the iPad layout while small → full bar
+  const regrow = () => { if (!barCanShrink()) barSetMini(bar, false); };
+  for (const m of [MQ_REDUCE, MQ_PHONE]) m?.addEventListener?.('change', regrow);
+}
+
+function barTap(kind) {
+  athReturn = null;
+  const gb = $('#gbar'); if (gb) { BAR_M.lastY = 0; barSetMini(gb, false); } // a tab tap on the small bar grows it
+  if (kind === 'live') {
+    const lt = barLive();
+    if (lt.kind !== 'none') {
+      if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); }
+      goRound(lt.id); window.scrollTo(0, 0); return;
+    }
+    kind = 'home'; showToast('אין ראונד חי או קרוב');
+  }
+  if (kind === 'home') { homeTab = 'all'; homeFinal = null; homeOpenEvent = null; homeSeason = null; homeFrom = null; }
+  else if (kind === 'res') { homeTab = 'res'; homeFinal = null; }
+  else if (kind === 'mine') homeTab = ME ? 'me' : 'comp';
+  showScreen('home'); window.scrollTo(0, 0);
+}
+
 // header title: HTML (bidi-safe parts) + plain sub line; empty → the block is hidden
 function setTitle(html, sub) {
   const h = $('#event-title');
@@ -1505,6 +1730,7 @@ function setTitle(html, sub) {
 
 function render() {
   document.body.classList.toggle('in-round', screen !== 'home'); // the sticky header + button row block (CSS .top-stack)
+  renderBar();
   if (pick && (screen === 'home' || pick.round !== current)) { pick = null; pickScroll = false; } // left that round → no ring on a later visit
   applyDelays();
   if (DATA.rounds.some(r => r.ifsc)) ifscWanted().forEach(id => pollIfsc(id)); // 3.11.0: each round waits 15 s between fetches itself
@@ -2461,7 +2687,19 @@ async function sendFeedback() {
 // ---- settings ----
 const THEME_BG = { light: '#F5F1EA', plum: '#1A1024', charcoal: '#141216', black: '#000000' };
 const DARK_NAMES = { plum: 'שזיף', charcoal: 'פחם', black: 'שחור' };
+// 3.36.0 glass look (Roei-only phase): settings.glass, coach only — never a viewer, an athlete entry (ME) or any
+// non-coach app entry, so a device that once had it on shows today's UI after such a login (start() → applySettings)
+const coachEntry = () => !store.appEntry || store.appEntry.role === 'coach'; // no app entry (typed code) or a coach one
+const GLASS = () => document.documentElement.dataset.look === 'glass';
+function applyLook() {
+  const on = !!(store.settings.glass && !VIEWER && !ME) && coachEntry();
+  if (!on && GLASS()) athReturn = null; // the look goes off: a "back to the card" saved on a bar screen ends here
+  if (on) document.documentElement.dataset.look = 'glass'; else delete document.documentElement.dataset.look;
+  if (!on && (homeTab === 'res' || homeTab === 'comp')) homeTab = 'all'; // Review Focus 5: switch off on a bar screen → today's home
+  const row = document.querySelector('.glass-row'); if (row) row.hidden = VIEWER || !!ME || !coachEntry();
+}
 function applySettings() {
+  applyLook();
   const st0 = store.settings;
   // opened from the Palgi app: the app's theme (same origin localStorage, entry.js appTheme), not the portal's own
   const at = store.appEntry ? appTheme(k => localStorage.getItem(k)) : null;
@@ -2646,12 +2884,16 @@ function start() {
   // consistency round §8: from the app an athlete / viewer has nothing portal-specific to set → no ⚙︎ (row = ⌂ + 🔔);
   // the coach keeps ⚙︎ with the portal rows only (body.app-entry .not-in-app). A typed code keeps everything.
   $('#settings-btn').hidden = !!entry && VIEWER;
+  applyLook(); // 3.36.0: role known → drop a stored glass look for a viewer / athlete before the first render
   hideSplash();
   $('#app').hidden = false;
   // --top-h = header + button row height (the phone title wraps to 1–2 lines) → the alerts sit under the sticky block
   const topH = () => document.documentElement.style.setProperty('--top-h', Math.round($('.topbar').offsetHeight + $('.tabs').offsetHeight) + 'px');
   if ('ResizeObserver' in window) { const ro = new ResizeObserver(topH); ro.observe($('.topbar')); ro.observe($('.tabs')); }
   topH();
+  if ('ResizeObserver' in window) new ResizeObserver(measureBar).observe($('#gbar')); // 3.36.0: the bar's real height → --gbar-h
+  addEventListener('resize', measureBar);
+  wireBarMotion(); // 3.36.0 Task 6: press / lens / shrink-on-scroll
   document.querySelectorAll('.app-ver').forEach(el => { el.textContent = APP_VERSION; });
   current = params.get('round') && round(params.get('round')) ? params.get('round') : pickDefaultRound();
   if (SIM_AT != null) { $('#sim-bar').hidden = false; $('#sim-open').hidden = true; } // already in a replay
@@ -2661,12 +2903,14 @@ function start() {
   $('#home-btn').setAttribute('aria-pressed', String(screen === 'home'));
   if (screen === 'round') openRoundView(); // a link to a finished round with results opens on them
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && ddOpen) { ddOpen = null; render(); } });
+  document.addEventListener('toggle', e => { const id = e.target?.dataset?.resEv; if (id) resOpen.set(id, e.target.open); }, true); // "תוצאות" cards keep open / closed
   document.addEventListener('click', e => {
     if (ddOpen && !e.target.closest('.ev-filters')) { ddOpen = null; render(); }
     const rp = $('#round-pick');
     if (e.target === rp) { rp.close(); return; } // tap on the dim area
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
+    if (d.gbar) { barTap(d.gbar); return; } // 3.36.0 glass bottom bar
     if (b.id === 'round-pick-btn') { openRoundPick(); return; }
     if (b.id === 'rp-close') { rp.close(); return; }
     if (d.round && rp.open) rp.close(); // falls through to the normal open-round branch
@@ -2686,6 +2930,14 @@ function start() {
     if (b.id === 'filt-reset') { evFilter = { disc: [], type: [], age: [] }; saveFilter(); render(); return; }
     if (d.homeTab) { homeTab = d.homeTab === 'me' && ME ? 'me' : 'all'; render(); window.scrollTo(0, 0); return; }
     if (d.meOpen) { openMine(d.meOpen); return; }
+    if (d.resOpen) { // 3.36.0 "תוצאות" list → the round, on its results view
+      if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); }
+      goRound(d.resOpen); if (view !== 'results' && resultsOf(d.resOpen)) setView('results'); window.scrollTo(0, 0); return;
+    }
+    if (d.compOpen) { // 3.36.0 competition "שלי" → that round, on its "שלי" view (World Climbing rounds: results only)
+      if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); }
+      goRound(d.compOpen); if (view !== 'mine' && !round(d.compOpen)?.ifsc) setView('mine'); window.scrollTo(0, 0); return;
+    }
     if (d.ev != null) { homeFrom = homeSeason; homeOpenEvent = Number(d.ev); render(); window.scrollTo(0, 0); return; }
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
     else if (b.id === 'home-btn') { athReturn = null; homeOpenEvent = null; homeFinal = null; homeSeason = null; homeFrom = null; showScreen('home'); }

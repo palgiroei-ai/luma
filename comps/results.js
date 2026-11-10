@@ -128,6 +128,16 @@ export function rankInCats(rows, cats, prevRank = null) {
   return rankRows(cats ? rows.filter(r => cats.includes(r.cat)) : rows, prevRank);
 }
 
+// 3.36.0 (final review): each athlete's place in the round, independent of the results tab's category chip. Rounds whose
+// default chip is one category (U17 rounds: U17 | U15) → the place inside the athlete's own category (row.cat);
+// seniors rounds (default = everyone) and cat-less rows → the overall place. Returns { [bib]: ranked row }.
+export function placeByBib(rows, gender, prevRank = null) {
+  const opts = catOptions(rows, gender), all = rankRows(rows, prevRank), out = Object.fromEntries(all.map(x => [x.bib, x]));
+  if (!opts[0]?.cats) return out;
+  for (const c of new Set(rows.map(r => r.cat).filter(Boolean))) for (const x of rankInCats(rows, [c], prevRank)) out[x.bib] = x;
+  return out;
+}
+
 // 3.10.0 (Roei 2026-10-15): the competition's final standings per category. stages = rankRows() of round 1 [, round 2].
 // One round → its ranking. Two rounds → whoever is in round 2 is ranked by round 2 only (a finalist who did not start
 // it = last of the finalists); everyone else follows by round 1 (ties kept), places continuing after the finalists
