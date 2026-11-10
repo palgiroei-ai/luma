@@ -142,3 +142,11 @@ export function finalStandings(stages) {
   const rest = out.map(x => ({ ...x, round: 1, rank: x.rank == null ? null : fin.length + 1 + outOk.filter(y => y.rank < x.rank).length }));
   return [...fin, ...rest.filter(x => x.rank != null), ...rest.filter(x => x.rank == null)];
 }
+
+// 3.35.0 (Roei 2026-11-10): the final standings inside one category option. rows = finalStandings output (each with cat);
+// cats null = everyone. Overall order kept, places renumbered 1..n from the filtered list (equal overall rank = equal
+// category rank, competition style 1,1,3), unranked (rank null) stay last without a place. overall = the row's overall place.
+export function finalInCats(rows, cats) {
+  const keep = cats ? rows.filter(x => cats.includes(x.cat)) : rows;
+  return keep.map(x => ({ ...x, overall: x.rank, rank: x.rank == null ? null : 1 + keep.filter(y => y.rank != null && y.rank < x.rank).length }));
+}

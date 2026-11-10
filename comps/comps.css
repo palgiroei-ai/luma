@@ -1137,7 +1137,7 @@ body:not(.viewer) .viewer-only { display: none !important; }
 .fin-tbl td { padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: center; }
 .fin-tbl .fin-nm { text-align: start; }
 .fin-tbl td.fin-nm small { display: block; color: var(--muted); font-size: 12px; }
-.fin-rk { font-weight: 800; font-size: 16px; width: 2.2em; }
+.fin-rk { font-weight: 800; font-size: 16px; width: 2.2em; } .fin-rk.cat { min-width: 3.4em; }
 .fin-pt { font-weight: 700; }
 .medal { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--fin-bg); color: var(--fin); }
 .fin-rd { font-size: 11px; font-weight: 800; border-radius: var(--r-sm); padding: 0 6px; border: 1.5px solid currentColor; }
@@ -1514,3 +1514,4 @@ button.ac-row { cursor: pointer; }
   .ath-sheet[open] { animation: ath-up .22s ease-out; }
   @keyframes ath-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 }
+.fin-rk .rk-all { display: block; white-space: nowrap; font-size: 11px; font-weight: 500; color: var(--muted); }

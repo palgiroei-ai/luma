@@ -3,7 +3,7 @@ import { stateAt, athleteStatus, slotStartMs, roundStart, syncWindowNow, delayOf
 import { store } from './store.js';
 import { startSync, startViewSync, syncNow, syncState, authHeaders, apiKey, SYNC_URL } from './sync.js';
 import { CHANGELOG } from './changelog.js';
-import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats, isLastRound, finalStandings, tzText } from './results.js';
+import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, rankInCats, isLastRound, finalStandings, finalInCats, tzText } from './results.js';
 import { setupInstall } from './install.js';
 import { catHe, roundTitle, hm, hms, range, placeOnce, fileSource } from './labels.js';
 const srcOf = res => (res.live || res.locked || res.intl ? res.source : fileSource(res.source));
@@ -24,7 +24,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ow
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC, evMeta } from './seasons.js';
 
-export const APP_VERSION = '3.34.2';
+export const APP_VERSION = '3.35.0';
 
 const $ = s => document.querySelector(s);
 
@@ -373,6 +373,8 @@ function ifscWanted() {
 const gw = (id, m, f) => (genderOf(id) === 'W' ? f : m);
 let resFem = false; // set by renderResults for the result cards built inside it
 const resCat = {}; // chosen category per round (this session)
+let finCur = null; // the final group key on screen
+const finCat = {}; // 3.35.0: chosen category per final group key (this session)
 const resIsr = {}; // 3.11.0: international round → table shows only Israelis (this session)
 const roundsOf = ev => DATA.rounds.filter(r => (r.event || 'bl1') === ev.id && visible(r));
 const MINE_NAME = () => (VIEWER ? 'ספורטאי הפלגיה' : 'שלי');
@@ -1274,7 +1276,8 @@ function finalsOf(ev) {
     const mine = new Map(rs.flatMap(r => hubOf(r.id).map(m => [r.slots[m.k]?.bib, m.short])));
     // (club: round 1's when a later round's row has none)
     const club = Object.fromEntries(rs.flatMap(r => resultsOf(r.id)?.rows || []).filter(x => x.club).map(x => [x.bib, x.club]));
-    return { key, id: rs.at(-1).id, title: roundTitle(rs[0].title).split(' · ')[0], ready, mine, rows: ready ? finalStandings(rs.map(r => rankedOf(r.id))).map(x => (x.club ? x : { ...x, club: club[x.bib] })) : null };
+    const cat = Object.fromEntries(rs.flatMap(r => resultsOf(r.id)?.rows || []).filter(x => x.cat).map(x => [x.bib, x.cat])); // 3.35.0: the competition category (round 1's, any round's)
+    return { key, id: rs.at(-1).id, title: roundTitle(rs[0].title).split(' · ')[0], ready, mine, rows: ready ? finalStandings(rs.map(r => rankedOf(r.id))).map(x => ({ ...x, club: x.club || club[x.bib], cat: x.cat || cat[x.bib] })) : null };
   });
 }
 const finalsReady = ev => { const f = finalsOf(ev); return f.length > 0 && f.every(x => x.ready); };
@@ -1293,12 +1296,20 @@ function renderFinal() {
   const evs = homeEvents(), cur = evs[homeFinal.ev], fs = cur ? finalsOf(cur).filter(f => f.ready) : [];
   const f = fs.find(x => x.key === homeFinal.key) || fs[0];
   if (!f) { homeFinal = null; return renderHome(); }
-  const two = /-r2$/.test(f.id), fin = f.rows.filter(x => x.round === 2).length;
-  const tr = x => `<tr class="${f.mine.has(x.bib) ? 'fin-me' : ''}"><td class="fin-rk">${x.rank == null ? '—' : x.rank <= 3 ? `<span class="medal">${x.rank}</span>` : x.rank}</td><td class="fin-nm">${athBtn(x.round === 2 || !two ? f.id : f.id.replace(/-r2$/, '-r1'), x.bib, esc(x.name))}<small>${esc(x.club || '')}</small></td>${two ? `<td><span class="fin-rd r${x.round}">R${x.round}</span></td>` : ''}<td class="fin-pt">${x.score == null ? gw(f.id, 'לא התחיל', 'לא התחילה') : typeof x.score === 'number' ? x.score.toFixed(1) : `<bdi dir="ltr">${esc(x.score)}</bdi>`}</td></tr>`; // 3.29.0: lead = text (points "1.225" / height "38+")
-  const firstOut = f.rows.findIndex(x => x.round === 1);
-  const body = f.rows.map((x, i) => (two && i === firstOut ? `<tr class="fin-cut"><td colspan="4">לא עלו לראונד השני · לפי הראונד הראשון</td></tr>` : '') + tr(x)).join('');
+  const two = /-r2$/.test(f.id);
+  finCur = f.key;
+  // default + "everyone" option (cats null, or the U17+U15 one) = today's table, nothing filtered (cat-less rows stay); <= 1 option = no chips, no filter
+  const g = genderOf(f.id), opts = catOptions(f.rows, g), isAll = o => !o.cats || o.cats.length > 1;
+  const opt = opts.find(o => o.key === finCat[f.key]) || opts.find(isAll) || opts[0];
+  const inCat = opts.length > 1 && !!opt && !isAll(opt);
+  const rows = inCat ? finalInCats(f.rows, opt.cats) : f.rows.map(x => ({ ...x, overall: x.rank }));
+  const fin = rows.filter(x => x.round === 2).length;
+  const tr = x => `<tr class="${f.mine.has(x.bib) ? 'fin-me' : ''}"><td class="fin-rk${inCat ? ' cat' : ''}">${x.rank == null ? '—' : x.rank <= 3 ? `<span class="medal">${x.rank}</span>` : x.rank}${inCat && x.rank != null ? `<small class="rk-all">כללי ${x.overall}</small>` : ''}</td><td class="fin-nm">${athBtn(x.round === 2 || !two ? f.id : f.id.replace(/-r2$/, '-r1'), x.bib, esc(x.name))}<small>${esc(x.club || '')}</small></td>${two ? `<td><span class="fin-rd r${x.round}">R${x.round}</span></td>` : ''}<td class="fin-pt">${x.score == null ? gw(f.id, 'לא התחיל', 'לא התחילה') : typeof x.score === 'number' ? x.score.toFixed(1) : `<bdi dir="ltr">${esc(x.score)}</bdi>`}</td></tr>`; // 3.29.0: lead = text (points "1.225" / height "38+")
+  const firstOut = rows.findIndex(x => x.round === 1);
+  const body = rows.map((x, i) => (two && i === firstOut ? `<tr class="fin-cut"><td colspan="4">לא עלו לראונד השני · לפי הראונד הראשון</td></tr>` : '') + tr(x)).join('');
   patch($('#home'), `<div class="h-head"><h2 class="h-event fin-h">${CUP}תוצאות סופיות <span class="muted">· ${esc(evName(cur.event))}</span></h2></div>
     <div class="fin-chips choices" role="group" aria-label="קטגוריה">${fs.map(x => `<button type="button" class="choice" data-final="${homeFinal.ev}:${x.key}:${homeFinal.from}" aria-pressed="${x === f}">${esc(x.title)}</button>`).join('')}</div>
+    ${opts.length > 1 ? `<div class="res-cats choices" role="group" aria-label="קטגוריה בדירוג הסופי">${opts.map(o => `<button type="button" class="choice" data-fincat="${esc(o.key)}" aria-pressed="${o === opt}">${esc(o.label)}</button>`).join('')}</div>` : ''}
     <p class="muted small">${two ? `מי שעלה לראונד השני (${fin}) מדורג לפי הראונד השני בלבד; השאר אחריהם לפי הראונד הראשון.` : 'ראונד אחד: הדירוג שלו הוא הדירוג הסופי.'}</p>
     <div class="card fin-tbl"><table><thead><tr><th>#</th><th class="fin-nm">מתחרה</th>${two ? '<th>נקבע ב</th>' : ''}<th>${round(f.id)?.lead && two ? 'תוצאה' : 'ניקוד'}</th></tr></thead><tbody>${body}</tbody></table></div>`);
 }
@@ -2662,6 +2673,7 @@ function start() {
     if (d.round || d.open || d.ev != null || d.final || d.season || d.homeTab) athReturn = null; // 3.34.0: any other navigation
     if (d.page) { setPage(d.page); return; }
     if (d.leadAlert) { if (!VIEWER) { store.setSetting('leadAlert', d.leadAlert); syncLeadAlertSeg(); } return; } // 3.22.0 Task 8 (the push plan follows on the 5 s syncPush tick)
+    if (d.fincat != null && homeFinal) { if (finCur) finCat[finCur] = d.fincat; render(); return; }
     if (d.final) { const [ev, key, from] = d.final.split(':'); homeFinal = { ev: Number(ev), key, from }; render(); window.scrollTo(0, 0); return; }
     if (b.id === 'nav-back') { navBack(); return; }
     if (d.season) { ddOpen = null; homeSeason = d.season; render(); window.scrollTo(0, 0); return; }
