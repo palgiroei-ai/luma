@@ -24,7 +24,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ow
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC, evMeta } from './seasons.js';
 
-export const APP_VERSION = '3.34.0';
+export const APP_VERSION = '3.34.1';
 
 const $ = s => document.querySelector(s);
 
@@ -1073,8 +1073,8 @@ function renderLog() {
 const sameBib = (a, b) => String(a) === String(b);
 // the name inside a table cell → a button that looks exactly like the text (CSS .ath-nm). opt.fin = final standings
 // row (its place = the final place, no "next round")
-const athBtn = (rid, bib, html, opt = null) => `<button type="button" class="ath-nm" data-ath="${esc(rid)}|${esc(bib)}"${opt?.fin ? ` data-ath-fin="${opt.place ?? ''}"` : ''}>${html}</button>`;
-let ATH = null; // the open card: { rid, bib, fin, disc, age, catMode, aid, wc, wcAt, wcState }
+const athBtn = (rid, bib, html) => `<button type="button" class="ath-nm" data-ath="${esc(rid)}|${esc(bib)}">${html}</button>`;
+let ATH = null; // the open card: { rid, bib, disc, age, catMode, aid, wc, wcAt, wcState }
 // 3.34.0 (Roei): a round / competition opened from the card → the ‹ next to ⌂ returns to the screen the card was opened on,
 // card open again in the same state. athReturn = { back: that screen's state, card: the card's state, land: athLandKey() of
 // the screen the link led to }. Any other navigation (⌂, round picker, swipe, a list tap, another card) changes the
@@ -1083,7 +1083,7 @@ let athReturn = null;
 const athLandKey = () => JSON.stringify(screen === 'round' ? ['round', current] : ['home', homeOpenEvent, homeSeason, homeFinal, homeTab]);
 const athNavState = () => ({ screen, current, view, homeOpenEvent, homeSeason, homeFrom, homeFinal, homeTab, y: window.scrollY });
 function athLeave(go) {
-  const card = ATH && { rid: ATH.rid, bib: ATH.bib, fin: ATH.fin, disc: ATH.disc, age: ATH.age, catMode: ATH.catMode, top: $('#ath-body').scrollTop }, back = athNavState();
+  const card = ATH && { rid: ATH.rid, bib: ATH.bib, disc: ATH.disc, age: ATH.age, catMode: ATH.catMode, top: $('#ath-body').scrollTop }, back = athNavState();
   go();
   if (card) { athReturn = { back, card, land: athLandKey() }; renderTabs(); }
 }
@@ -1096,7 +1096,7 @@ function athBack() {
     showScreen('round'); if (view !== back.view) setView(back.view);
   } else showScreen('home');
   window.scrollTo(0, back.y);
-  openAthlete(card.rid, card.bib, card.fin, card);
+  openAthlete(card.rid, card.bib, card);
   if (ATH && $('#ath-dlg').open) $('#ath-body').scrollTop = card.top || 0; // the card where the row was tapped
 }
 let athMemo = null; // like meMemo: per day + LOCKED identity, one history per person
@@ -1106,25 +1106,6 @@ function athHist(who) {
   const k = JSON.stringify([who.key, who.aid, who.wcName, who.country, who.gender]);
   if (!athMemo.m.has(k)) athMemo.m.set(k, athleteHistory(DATA, who, day, { locked: LOCKED, merges: DATA.nameMerges || [] }));
   return athMemo.m.get(k);
-}
-// "בתחרות הזו": the place in the same ranking the table shows, the category place (rankInCats / per-category lead
-// ranking, as the category chips), next round = the table's own qualifying number (national boulder quota, World
-// Climbing r.adv, national lead info.quota; none in a last round or while the round still runs)
-function athNow(r, res, bib) {
-  const full = rankedOf(r.id) || [], row = full.find(x => sameBib(x.bib, bib)); if (!row) return null;
-  const g = genderOf(r.id), running = !!(res.live && !res.complete);
-  let catPlace = null, catText = '';
-  if (!res.intl && row.cat && row.cat !== 'S' && row.rank != null && catOptions(res.rows, g).some(o => o.cats?.length === 1 && o.cats[0] === row.cat)) {
-    const sub = res.lead ? (res.file ? leadRanked(toLeadResults({ rows: res.file.filter(x => x.cat === row.cat) }, r.id, leadPrevRank(r.id)).rows) : null)
-      : rankInCats(res.rows, [row.cat], prevRankOf(r.id));
-    const me = sub && sub.length !== full.length ? sub.find(x => sameBib(x.bib, bib)) : null;
-    if (me?.rank != null) { catPlace = me.rank; catText = row.cat; }
-  }
-  const q = res.intl ? (/-f(-[a-z])?$/.test(r.id) ? 0 : r.adv || 0)
-    : res.lead ? (res.final || lastRound(r.id) ? 0 : r.info?.quota || 0)
-    : res.final ? 0 : res.live ? quota(res.rows.length) : analyze(full, full[0]).quota;
-  const adv = q && !running && row.rank != null ? row.rank <= q : null;
-  return { place: row.rank ?? null, overall: row.rank ?? null, catPlace, catText, adv, live: !!res.live };
 }
 // coach notes on this person: notes on a start-list slot whose name is this person (same gender + tokens, name merges)
 function athNotes(who) {
@@ -1161,17 +1142,16 @@ function renderAth() {
   if (!x) { if (dlg.open) dlg.close(); return; }
   const { r, res, row } = x, g = genderOf(r.id), who = whoFromRow(row, r, DATA);
   const mine = res.intl ? !!intlMineByBib(res.rows, DATA.intlMine)[row.bib] : mineOf(r.id).some(m => sameBib(r.slots?.[m.k]?.bib, row.bib));
-  const now = ATH.fin != null ? (ATH.fin === '' ? null : { place: Number(ATH.fin), overall: Number(ATH.fin), catPlace: null, catText: '', adv: null, live: false }) : athNow(r, res, row.bib);
   const body = $('#ath-body'), top = body.scrollTop;
   body.innerHTML = athleteCardHtml({ name: row.name, club: res.intl ? '' : row.club, country: row.country || (res.intl ? row.club : ''),
-    catLabel: row.cat && row.cat !== 'S' ? catLabel(row.cat, g) : roundTitle(r.title).split(' · ')[0], gender: g, mine, now,
+    catLabel: row.cat && row.cat !== 'S' ? catLabel(row.cat, g) : roundTitle(r.title).split(' · ')[0], gender: g, mine,
     hist: athHist(who), wc: ATH.wc, wcState: ATH.wcState, wcAt: ATH.wcAt, disc: ATH.disc, age: ATH.age, viewer: VIEWER, notes: athNotes(who).length, roundId: r.id, catMode: ATH.catMode });
   body.scrollTop = top;
 }
-function openAthlete(rid, bib, fin = null, keep = null) {
+function openAthlete(rid, bib, keep = null) {
   athReturn = null; renderTabs(); // another card ends a "back to the card" (the restore path cleared it already)
   const r0 = round(rid);
-  const a = { rid, bib, fin, disc: r0?.lead ? 'L' : 'B', age: r0 ? compAge(evOf(r0), rid) : 'S', catMode: 0, aid: null, wc: null, wcState: 'none' };
+  const a = { rid, bib, disc: r0?.lead ? 'L' : 'B', age: r0 ? compAge(evOf(r0), rid) : 'S', catMode: 0, aid: null, wc: null, wcState: 'none' };
   if (keep) { a.disc = keep.disc; a.age = keep.age; a.catMode = keep.catMode; } // athBack: the card as it was
   const x = athRow(a); if (!x) return;
   const aid = whoFromRow(x.row, x.r, DATA).aid;
@@ -1314,7 +1294,7 @@ function renderFinal() {
   const f = fs.find(x => x.key === homeFinal.key) || fs[0];
   if (!f) { homeFinal = null; return renderHome(); }
   const two = /-r2$/.test(f.id), fin = f.rows.filter(x => x.round === 2).length;
-  const tr = x => `<tr class="${f.mine.has(x.bib) ? 'fin-me' : ''}"><td class="fin-rk">${x.rank == null ? '—' : x.rank <= 3 ? `<span class="medal">${x.rank}</span>` : x.rank}</td><td class="fin-nm">${athBtn(x.round === 2 || !two ? f.id : f.id.replace(/-r2$/, '-r1'), x.bib, esc(x.name), { fin: true, place: x.rank })}<small>${esc(x.club || '')}</small></td>${two ? `<td><span class="fin-rd r${x.round}">R${x.round}</span></td>` : ''}<td class="fin-pt">${x.score == null ? gw(f.id, 'לא התחיל', 'לא התחילה') : typeof x.score === 'number' ? x.score.toFixed(1) : `<bdi dir="ltr">${esc(x.score)}</bdi>`}</td></tr>`; // 3.29.0: lead = text (points "1.225" / height "38+")
+  const tr = x => `<tr class="${f.mine.has(x.bib) ? 'fin-me' : ''}"><td class="fin-rk">${x.rank == null ? '—' : x.rank <= 3 ? `<span class="medal">${x.rank}</span>` : x.rank}</td><td class="fin-nm">${athBtn(x.round === 2 || !two ? f.id : f.id.replace(/-r2$/, '-r1'), x.bib, esc(x.name))}<small>${esc(x.club || '')}</small></td>${two ? `<td><span class="fin-rd r${x.round}">R${x.round}</span></td>` : ''}<td class="fin-pt">${x.score == null ? gw(f.id, 'לא התחיל', 'לא התחילה') : typeof x.score === 'number' ? x.score.toFixed(1) : `<bdi dir="ltr">${esc(x.score)}</bdi>`}</td></tr>`; // 3.29.0: lead = text (points "1.225" / height "38+")
   const firstOut = f.rows.findIndex(x => x.round === 1);
   const body = f.rows.map((x, i) => (two && i === firstOut ? `<tr class="fin-cut"><td colspan="4">לא עלו לראונד השני · לפי הראונד הראשון</td></tr>` : '') + tr(x)).join('');
   patch($('#home'), `<div class="h-head"><h2 class="h-event fin-h">${CUP}תוצאות סופיות <span class="muted">· ${esc(evName(cur.event))}</span></h2></div>
@@ -2786,7 +2766,7 @@ function start() {
   $('#video-dlg').addEventListener('close', () => { $('#video-frame').src = 'about:blank'; }); // tap anywhere closes the big photo
   $('#tags-dlg').addEventListener('click', tagClick);
   // 3.33.0 athlete card: a name in a results table → the sheet; the sheet's own taps; closing forgets the athlete
-  document.addEventListener('click', e => { const b = e.target.closest('[data-ath]'); if (!b) return; const [rid, bib] = b.dataset.ath.split('|'); openAthlete(rid, bib, b.dataset.athFin ?? null); });
+  document.addEventListener('click', e => { const b = e.target.closest('[data-ath]'); if (!b) return; const [rid, bib] = b.dataset.ath.split('|'); openAthlete(rid, bib); });
   $('#ath-dlg').addEventListener('click', athClick);
   $('#ath-dlg').addEventListener('close', e => { if (!e.target.open) ATH = null; }); // (a close queued before a quick re-open must not drop the new one)
   // tag popover on the board: tap a tag → show; tap anywhere else / scroll → hide

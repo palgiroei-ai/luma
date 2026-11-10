@@ -7,7 +7,7 @@
 // saved ifscData in the payload — a live-only round (Worker /ifsc) appears once it is saved. National rounds also count
 // from opts.locked (the coach's "קבע כתוצאות רשמיות" results, app.js LOCKED), after the results file.
 import { catHe, roundTitle } from './labels.js';
-import { rankRows, rankInCats, catOptions, catLabel, isLastRound, tzText, score } from './results.js';
+import { rankRows, rankInCats, catOptions, catLabel, isLastRound, tzText, score, quota } from './results.js';
 import { ifscAnyResults, ifscRanked, leadRanked, intlMineByBib, genderOf } from './ifsc.js';
 import { seasonsOf, seasonStart, seasonEnd, evMeta } from './seasons.js';
 
@@ -44,6 +44,26 @@ export function historyOf(data, pick, todayYmd, { locked } = {}) {
   // a final = World Climbing's '-f', or a national league's last round of 2+ ('sen-m-r2' — app.js: "seniors R2 = the final");
   // with '-f' alone no national final would ever count. A single-round competition (u17-m) is not a final.
   const isFinal = id => /-f$/.test(id) || (/-r[2-9]$/.test(id) && isLastRound(id, ids));
+  // 3.34.1 not finished: the athlete's latest round has a later round of the same group (national '-r1' → '-r2'; World Climbing
+  // q → s → f) WITHOUT results, and he could still be in it. Decided = the later round has results, or his round's official
+  // results put him below the known cut (national boulder: ILCA quota of the started rows; national lead: info.quota; World
+  // Climbing: r.adv) → finished (eliminated). Cut unknown → open until the later round has results. open = this round's number.
+  const STAGE = { q: 1, s: 2, f: 3 };
+  const openOf = (r, x) => {
+    const id = r.id, m = id.match(/-r(\d)$/), q = id.match(/^(.*)-([qsf])$/);
+    let nextIds = [], n = 0;
+    if (m) { nextIds = [id.slice(0, -1) + (Number(m[1]) + 1)]; n = Number(m[1]); }
+    else if (q) { nextIds = ['s', 'f'].filter(l => STAGE[l] > STAGE[q[2]]).map(l => `${q[1]}-${l}`); n = STAGE[q[2]]; }
+    nextIds = nextIds.filter(i => ids.includes(i));
+    if (!nextIds.length || nextIds.some(i => resultsOf(i))) return 0;
+    const res = resultsOf(id), full = rankedOf(id);
+    if (res && full && x?.overall != null) {
+      const started = full.filter(y => y.rank != null).length;
+      const cut = res.intl ? (r.adv || 0) : res.lead ? (r.info?.quota || 0) : quota(started);
+      if (cut > 0 && x.overall > cut) return 0;
+    }
+    return n;
+  };
   const comps = [];
   for (const e of data.events || []) {
     const rs = rounds.filter(r => (r.event || 'bl1') === e.id);
@@ -52,7 +72,7 @@ export function historyOf(data, pick, todayYmd, { locked } = {}) {
     if (!last) continue;
     comps.push({ season: seasonsOf([e])[0].id, final: isFinal(last.r.id), c: { eventId: e.id, title: e.title, date: e.dates?.[0] || rs.map(r => r.date).sort()[0],
       cat: last.x.cat, roundId: last.r.id, roundLabel: last.r.title, place: last.x.place, line: last.x.line, score: last.x.score,
-      overall: last.x.overall, catPlace: last.x.catPlace, catKey: last.x.catKey, disc: last.x.disc, intl: last.x.intl, final: isFinal(last.r.id),
+      overall: last.x.overall, catPlace: last.x.catPlace, catKey: last.x.catKey, disc: last.x.disc, intl: last.x.intl, final: isFinal(last.r.id), open: openOf(last.r, last.x),
       age: compAge(e, last.r.id), type: evMeta(e).type } });
   }
   const seasons = seasonsOf((data.events || []).filter(e => comps.some(c => c.c.eventId === e.id))).reverse().map(({ id, label }) => ({ id, label,
@@ -74,7 +94,7 @@ export function myHistory(data, athleteId, todayYmd, { locked } = {}) {
     intl: (r, res) => new Set(Object.keys(intlMineByBib(res.rows, mineIntl)).map(String)),
   };
   const h = historyOf(data, pick, todayYmd, { locked });
-  return { current: h.current, seasons: h.seasons.map(s => ({ ...s, comps: s.comps.map(({ overall, catPlace, catKey, disc, intl, final, age, type, ...c }) => c) })) };
+  return { current: h.current, seasons: h.seasons.map(s => ({ ...s, comps: s.comps.map(({ overall, catPlace, catKey, disc, intl, final, age, type, open, ...c }) => c) })) };
 }
 
 // one category style on every "שלי" row: [category, stage] → "נערים U19 · ראונד 2" (labels.js catHe / roundTitle).
