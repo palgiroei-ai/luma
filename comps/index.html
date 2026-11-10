@@ -132,6 +132,9 @@
 </section>
 
 <div id="app" hidden>
+  <!-- glass bar feel Task 2 (the Palgi app 8.2.1 model): with glass the page never scrolls; #app-scroll is the one scroller and
+       the bar (#gbar) sits outside it. Without glass #app-scroll is display: contents (no box) → the document scrolls, as before. -->
+  <div id="app-scroll">
   <!-- final review (ruling 8): inside a round the header + the ⌂/round picker/🔔/⚙︎ row stick as ONE block (CSS body.in-round
        .top-stack); on home the wrapper is display: contents and only the header sticks, as before -->
   <div class="top-stack" id="top-stack">
@@ -225,6 +228,7 @@
     </section>
   </main>
   <footer class="app-footer" lang="en" dir="ltr"><span class="app-ver"></span> · Powered by <a class="footer-luma" href="https://luma.palgitraining.com" target="_blank" rel="noopener">LUMA<svg class="luma-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg></a> · By Roei Palgi</footer>
+  </div>
   <!-- 3.36.0 glass look: floating bottom bar (glass only; renderBar() in app.js keeps it hidden otherwise + on gate/loading) -->
   <nav id="gbar" class="gbar" aria-label="ניווט" hidden>
     <span class="gbar-lens" aria-hidden="true"></span>

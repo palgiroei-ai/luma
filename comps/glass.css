@@ -34,6 +34,14 @@
   --gbar-shadow: 0 14px 34px rgba(0, 0, 0, .30), 0 2px 6px rgba(0, 0, 0, .14);
   --gbar-hi: rgba(255, 255, 255, .9);
   --gbar-line: rgba(255, 255, 255, .8);
+  /* glass bar feel Task 3: the app bar's rim / sheen / glow (Palgi light values, --wa-bar-*) */
+  --gbar-sheen: rgba(255, 255, 255, .35);
+  --gbar-lowlight: rgba(0, 0, 0, .18);
+  --gbar-glow: rgba(255, 255, 255, .28);
+  --gbar-rim1: rgba(255, 255, 255, .95);
+  --gbar-rim1b: rgba(255, 255, 255, .8);
+  --gbar-rim2: rgba(46, 26, 71, .10);
+  --gbar-mask: #000; /* the rim's mask (alpha only, not a visible colour) */
   --gbar-spring: cubic-bezier(.34, 1.35, .64, 1); /* the app bar's settle (overshoots a little) */
   --gbar-press: cubic-bezier(.2, .8, .2, 1);
   --gbar-h: calc(86px + env(safe-area-inset-bottom, 0px)); /* 62px bar + 16px float + 8px gap; app.js sets the measured value */
@@ -75,6 +83,13 @@
   --gbar-shadow: 0 10px 30px rgba(0, 0, 0, .55);
   --gbar-hi: rgba(255, 255, 255, .22);
   --gbar-line: rgba(255, 255, 255, .12);
+  /* rim / sheen / glow: the app's dark-theme values (the same in all three dark themes) */
+  --gbar-sheen: rgba(255, 255, 255, .07);
+  --gbar-lowlight: rgba(0, 0, 0, .18);
+  --gbar-glow: rgba(255, 255, 255, .28);
+  --gbar-rim1: rgba(255, 255, 255, .55);
+  --gbar-rim1b: rgba(255, 255, 255, .30);
+  --gbar-rim2: rgba(255, 255, 255, .04);
 }
 
 /* page + the huge faint logo figure, fixed behind everything (does not scroll with the content) */
@@ -105,17 +120,33 @@
   border-bottom-color: var(--glass-head-line);
 }
 
-/* ---- floating bottom bar (Task 3; spec "The bottom bar"). Motion (Task 6) = the app bar 13.5.1: see the no-preference block below. ---- */
+/* ---- floating bottom bar (Task 3; spec "The bottom bar"). Motion = the app bar 13.5.1 ("shell-glass", glass bar feel Task 3):
+   see the no-preference block below. app.js toggles .press / .mini / .no-act on the bar, .down on a tab, .reach on the lens,
+   and writes --ang (rim), --gx / --gy (touch point) and the lens's inline left / width (px, from the tabs' offsets). ---- */
+/* the rim's bright side: an animatable angle (the conic ::before turns with it) */
+@property --ang { syntax: '<angle>'; inherits: true; initial-value: 210deg; }
 [data-look="glass"] .gbar {
-  --gpad: 7px; --gvpad: 5px; --gn: 4; /* side / top padding, tab count: the lens below is placed from them */
-  position: fixed; z-index: 55; inset-inline: 14px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); height: 62px;
+  --gpad: 7px; --gvpad: 5px; /* side / top padding */
+  position: fixed; z-index: 55; isolation: isolate; inset-inline: 14px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); height: 62px;
   box-sizing: border-box; display: flex; gap: 2px; padding: var(--gvpad) var(--gpad);
-  border: 1px solid var(--gbar-line); border-radius: var(--r-pill);
-  background: var(--gbar-bg);
-  box-shadow: var(--gbar-shadow), inset 0 1px 1px var(--gbar-hi);
+  border: 0; border-radius: var(--r-pill);
+  background: linear-gradient(to bottom, var(--gbar-sheen), transparent 55%), var(--gbar-bg);
+  box-shadow: var(--gbar-shadow), inset 0 1px 1px var(--gbar-hi), inset 0 -1px 1px var(--gbar-lowlight);
   -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
 }
 [data-look="glass"] .gbar[hidden] { display: none; }
+/* glass rim: a 1.3px conic ring whose bright side follows --ang (the finger while pressed, the scroll otherwise) */
+[data-look="glass"] .gbar::before {
+  content: ''; position: absolute; inset: 0; z-index: 2; border-radius: var(--r-pill); padding: 1.3px; pointer-events: none;
+  background: conic-gradient(from var(--ang), var(--gbar-rim1), var(--gbar-rim2) 22%, var(--gbar-rim1b) 50%, var(--gbar-rim2) 78%, var(--gbar-rim1));
+  -webkit-mask: linear-gradient(var(--gbar-mask) 0 0) content-box, linear-gradient(var(--gbar-mask) 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(var(--gbar-mask) 0 0) content-box exclude, linear-gradient(var(--gbar-mask) 0 0);
+}
+/* soft glow at the touch point (shown only while pressed, no-preference block) */
+[data-look="glass"] .gbar::after {
+  content: ''; position: absolute; inset: 0; z-index: 2; border-radius: var(--r-pill); pointer-events: none; opacity: 0;
+  background: radial-gradient(circle 70px at var(--gx, 50%) var(--gy, 50%), var(--gbar-glow), transparent 70%);
+}
 /* an in-page text field has focus (the keyboard is up): the bar steps aside; visibility only → its box (and --gbar-h) stay */
 [data-look="glass"] .gbar.kb { visibility: hidden; pointer-events: none; }
 @media (min-width: 700px) {
@@ -127,19 +158,19 @@
   font: inherit; font-size: 11.5px; font-weight: 600; line-height: 1.1; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 [data-look="glass"] .gbar button[aria-current="page"] { color: var(--gbar-active); }
-/* The active bubble = one lens behind the tabs. Pure CSS geometry: tab --gi (renderBar) of --gn equal shares with a 2px gap,
-   so it stays on its tab through any resize / the shrink with no measuring. Hidden when no tab is active (a non-live round). */
+/* The active bubble = one lens behind the tabs, placed by app.js in px (inline left / width from the tabs' offsetLeft /
+   offsetWidth: it can stretch under the finger, reachRect) and glued to its tab by rAF while the bar resizes. Until the first
+   placement (no inline style) the active tab carries the bubble itself. Hidden when no tab is active (a non-live round). */
 [data-look="glass"] .gbar .gbar-lens {
-  --gw: calc((100% - 2 * var(--gpad) - (var(--gn) - 1) * 2px) / var(--gn));
-  position: absolute; z-index: 0; top: var(--gvpad); bottom: var(--gvpad); width: var(--gw);
-  inset-inline-start: calc(var(--gpad) + var(--gi, 0) * (var(--gw) + 2px));
+  position: absolute; z-index: 0; top: 5px; bottom: 5px; left: 0; width: 0;
   border-radius: var(--r-pill); background: var(--gbar-bubble); pointer-events: none;
 }
+[data-look="glass"] .gbar:not(:has(.gbar-lens[style])) button[aria-current="page"] { background: var(--gbar-bubble); }
 [data-look="glass"] .gbar.no-act .gbar-lens { opacity: 0; }
 [data-look="glass"] .gbar .gbar-ico { position: relative; display: grid; place-items: center; height: 24px; font-style: normal; }
 [data-look="glass"] .gbar svg { display: block; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
 [data-look="glass"] .gbar button[aria-current="page"] .gbar-ico { color: var(--gbar-icon); }
-[data-look="glass"] .gbar .gbar-lbl { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+[data-look="glass"] .gbar .gbar-lbl { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* live: red dot while a round is live; "הבא HH:MM" pill on the top edge of the tab otherwise */
 [data-look="glass"] .gbar .gbar-dot {
   position: absolute; top: -2px; inset-inline-end: -5px; width: 9px; height: 9px; border-radius: 50%;
@@ -153,57 +184,89 @@
 }
 [data-look="glass"] .gbar .gbar-dot[hidden],
 [data-look="glass"] .gbar .gbar-hint[hidden] { display: none; }
-/* Motion (Task 6, port of the app bar 13.5.1 "shell-glass"): one spring (--gbar-spring, .38s) for every settle, --gbar-press
-   for every press. app.js toggles .press on the bar + .down on the touched tab, .mini while scrolled down, and writes --gi.
-   All of it only with no-preference: reduced motion = the static bar (lens jumps, no press scale, never shrinks). */
+/* Motion (the app bar 13.5.1 "shell-glass", values verbatim): one spring (--gbar-spring, .38s) for every settle, --gbar-press
+   for every press. Only with no-preference: reduced motion = the static bar (lens jumps, no press, never shrinks). */
 @media (prefers-reduced-motion: no-preference) {
   [data-look="glass"] .gbar {
     transition: transform .38s var(--gbar-spring), height .38s var(--gbar-spring), padding .38s var(--gbar-spring),
       inset .38s var(--gbar-spring), width .38s var(--gbar-spring);
   }
+  [data-look="glass"] .gbar::after { transition: opacity .38s; }
   [data-look="glass"] .gbar .gbar-lens {
-    transition: inset-inline-start .38s var(--gbar-spring), left .38s var(--gbar-spring), right .38s var(--gbar-spring),
-      width .38s var(--gbar-spring), top .38s var(--gbar-spring), bottom .38s var(--gbar-spring), scale .38s var(--gbar-spring),
-      filter .38s, opacity .2s;
+    transition: transform .38s var(--gbar-spring), left .38s var(--gbar-spring), width .38s var(--gbar-spring),
+      scale .38s var(--gbar-spring), filter .38s, opacity .2s;
   }
   [data-look="glass"] .gbar button { transition: gap .38s var(--gbar-spring); }
   [data-look="glass"] .gbar .gbar-ico { transition: transform .38s var(--gbar-spring), scale .38s var(--gbar-spring); }
   [data-look="glass"] .gbar .gbar-lbl {
     max-height: 1.4em; transition: opacity .22s ease-out .12s, max-height .38s var(--gbar-spring), transform .3s var(--gbar-spring) .12s;
   }
-  /* finger down: the bar swells, the touched icon dips, the bubble reaches under the finger and brightens */
+  [data-look="glass"] .gbar .gbar-hint { transition: opacity .22s ease-out .12s, transform .3s var(--gbar-spring) .12s; }
+  /* finger down: the bar swells, the touched icon dips, the bubble reaches under the finger and brightens, the glow shows,
+     the rim turns toward the finger (--ang animates only here: a scroll writes it once per frame with no transition) */
   [data-look="glass"] .gbar.press {
     transform: scale(1.04);
     transition: transform .2s var(--gbar-press), height .38s var(--gbar-spring), padding .38s var(--gbar-spring),
       inset .38s var(--gbar-spring), width .38s var(--gbar-spring);
   }
+  [data-look="glass"] .gbar.press::before { filter: brightness(1.4); transition: --ang .5s var(--gbar-press); }
+  [data-look="glass"] .gbar.press::after { opacity: 1; transition: opacity .16s; }
   [data-look="glass"] .gbar button.down .gbar-ico { transform: scale(.84); transition: transform .16s var(--gbar-press), scale .4s var(--gbar-spring); }
-  [data-look="glass"] .gbar.press .gbar-lens {
+  [data-look="glass"] .gbar .gbar-lens.reach {
     scale: 1.02 1.05; filter: brightness(1.25);
-    transition: inset-inline-start .22s var(--gbar-press), left .22s var(--gbar-press), right .22s var(--gbar-press),
-      width .22s var(--gbar-press), scale .16s var(--gbar-press), filter .16s, opacity .16s;
+    transition: transform .22s var(--gbar-press), left .22s var(--gbar-press), width .22s var(--gbar-press), scale .16s var(--gbar-press), filter .16s, opacity .16s;
   }
   [data-look="glass"] .gbar.press.no-act .gbar-lens { opacity: 1; }
-  /* small bar (scrolled down, PHONE ONLY): a little lower and narrower on the spring after .06s, labels stay (spec: labels
-     always visible; "תוצאות" fits a 375px phone); scroll up / a tap grows it. The page keeps the FULL bar's --gbar-h
-     (app.js measures only the full bar), so nothing ends under it when it grows. */
+  /* small bar (scrolled down, PHONE ONLY) = the grow played backwards: labels fade first (.1s ease-in), then the bar narrows to
+     the app's 84px insets on the spring after .06s, icons .94 (≈47px bar). Growing: the bar widens, labels fade in after .12s
+     (the defaults above). The page keeps the FULL bar's --gbar-h (app.js measures only the full bar). */
   @media (max-width: 699px) {
     [data-look="glass"] .gbar.mini {
-      --gpad: 5px; --gvpad: 3px; height: 52px; inset-inline: 44px;
+      --gpad: 5px; --gvpad: 3px; height: 47px; inset-inline: 84px;
       transition: transform .38s var(--gbar-spring), height .38s var(--gbar-spring) .06s, padding .38s var(--gbar-spring) .06s,
         inset .38s var(--gbar-spring) .06s, width .38s var(--gbar-spring) .06s;
     }
-    [data-look="glass"] .gbar.mini .gbar-lens { transition-delay: .06s; } /* on the bar's own delay → glued to its tab */
-    [data-look="glass"] .gbar.mini button { gap: 2px; transition: gap .38s var(--gbar-spring) .06s; }
-    [data-look="glass"] .gbar.mini .gbar-ico { scale: .86; transition: transform .38s var(--gbar-spring), scale .38s var(--gbar-spring) .06s; }
+    [data-look="glass"] .gbar.mini button { gap: 0; transition: gap .38s var(--gbar-spring) .06s; }
+    [data-look="glass"] .gbar.mini .gbar-lbl {
+      opacity: 0; max-height: 0; transform: translateY(-4px) scale(.9);
+      transition: opacity .1s ease-in, max-height .38s var(--gbar-spring) .06s, transform .3s var(--gbar-spring);
+    }
+    /* the live tab's "הבא HH:MM" pill goes with the labels (same timings) */
+    [data-look="glass"] .gbar.mini .gbar-hint {
+      opacity: 0; transform: translateY(-4px) scale(.9);
+      transition: opacity .1s ease-in, transform .3s var(--gbar-spring);
+    }
+    [data-look="glass"] .gbar.mini .gbar-ico { scale: .94; transition: transform .38s var(--gbar-spring), scale .38s var(--gbar-spring) .06s; }
   }
+}
+/* reduced motion: every bar state change is instant (inline transitions written by app.js included) */
+@media (prefers-reduced-motion: reduce) {
+  [data-look="glass"] .gbar, [data-look="glass"] .gbar *, [data-look="glass"] .gbar::before, [data-look="glass"] .gbar::after { transition: none !important; }
 }
 
 /* the bar replaces ⌂ and the athlete's "כללי | שלי" switch */
 [data-look="glass"] #home-btn { display: none; }
 [data-look="glass"] .me-seg { display: none; }
-/* nothing ends under the bar: page padding = measured bar + offset + gap (--gbar-h); toasts sit above it */
-[data-look="glass"] body { padding-bottom: var(--gbar-h); }
+/* Inner scroller (glass bar feel Task 2, the Palgi app 8.2.1 model): iOS lets a tap on a position:fixed bar only stop a fling of
+   the document, and iOS 26 draws fixed bars mid-screen while the document scrolls. With glass the document never scrolls:
+   the body is one screen (100dvh, border-box, its safe-area padding kept) and a flex column; #app fills it and #app-scroll
+   (header, alerts, home, round screen, footer) fills #app as the only scroller; #gbar sits outside it. One height source
+   (the body) → the scroller is exactly the body's content box. Only while the app is shown (:has #app not hidden): the gate /
+   loading screen keep the normal scrolling page (a tall gate in landscape stays reachable). The bottom inset is inside --gbar-h;
+   settleDocument() in app.js undoes an iOS document scroll, the scroller's scroll handler a sideways shift. */
+[data-look="glass"]:has(#app:not([hidden])) { height: 100%; overflow: hidden; }
+[data-look="glass"]:has(#app:not([hidden])) body {
+  height: 100vh; height: 100dvh; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; padding-bottom: 0;
+}
+[data-look="glass"]:has(#app:not([hidden])) #app { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* nothing ends under the bar: the scroller's padding = measured bar + offset + gap (--gbar-h), and scroll-padding makes
+   scrollIntoView / focus scrolling stop above it; overflow-x hidden keeps a too-wide row inside (as #app overflow-x: clip) */
+[data-look="glass"] #app-scroll {
+  display: block; box-sizing: border-box; flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: none; -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--gbar-h); scroll-padding-bottom: var(--gbar-h);
+}
+/* toasts sit above the bar */
 [data-look="glass"] #live-toasts { bottom: var(--gbar-h); }
 [data-look="glass"] .toast,
 [data-look="glass"] .toast.swipe { bottom: var(--gbar-h); }

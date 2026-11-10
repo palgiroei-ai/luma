@@ -413,6 +413,8 @@ body.in-round .alert-stack { top: calc(var(--top-h, 112px) + 8px); } /* under th
 
 /* phone: the page itself never scrolls sideways (a wide table used to widen the page and push ⚙︎ / ⌂ out of reach) */
 #app { overflow-x: clip; }
+/* glass bar feel Task 2: the glass look's inner scroller (glass.css); without glass it has no box → the document scrolls as before */
+#app-scroll { display: contents; }
 .full-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--r); }
 @media (max-width: 600px) {
   .topbar { gap: 10px; padding: 6px 12px; }

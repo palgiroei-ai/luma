@@ -75,3 +75,25 @@ export function barMiniNext(lastY, y, isMini) {
   if (want === null || want === !!isMini) return null;
   return want;
 }
+
+// ---- press geometry + rim angles (glass bar feel Task 3: verbatim ports of the app bar 13.5.1, 17-shell-bar.html) ----
+// The bubble under the finger: the touched tab's rect (`it`), its far edge trailing k (22%) of the way toward the old tab (`on`).
+export function reachRect(on, it, k = 0.22) {
+  if (k === undefined || k === null) k = 0.22;
+  const itR = it.left + it.width, onR = on.left + on.width;
+  const left = Math.min(it.left, it.left + k * (on.left - it.left));
+  const right = Math.max(itR, itR + k * (onR - itR));
+  return { left, width: right - left };
+}
+// Rim angle (deg) from the finger's x across the bar, and from the scroll position.
+export const rimAngle = (x, width) => 150 + 120 * (width > 0 ? x / width : 0.5);
+export const scrollAngle = y => 210 + 0.25 * (y || 0);
+// The same angle as target, within 180deg of cur: --ang transitions, so a jump never sweeps more than half a turn.
+export const unwrapAngle = (cur, target) => target + 360 * Math.round((cur - target) / 360);
+// The lens chasing a new tab while the bar resizes (13.5.1 mockup chase): one damped spring step per 60 Hz frame.
+export const BAR_CHASE = Object.freeze({ k: 0.22, damp: 0.62, maxMs: 1400 });
+export function chaseStep(c, target) {
+  c.v = (c.v + (target - c.x) * BAR_CHASE.k) * BAR_CHASE.damp;
+  c.x += c.v;
+  return c;
+}

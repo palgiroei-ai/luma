@@ -16,7 +16,7 @@ import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, is
 import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openTarget, appTheme, backToApp } from './entry.js';
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
-import { liveTarget, currentSeasonIds, resultsGroups, compMine, barMiniNext } from './bar.js';
+import { liveTarget, currentSeasonIds, resultsGroups, compMine, barMiniNext, reachRect, rimAngle, scrollAngle, unwrapAngle, chaseStep, BAR_CHASE } from './bar.js';
 import { athleteHistory, whoFromRow, keysOf, personKey, compAge } from './athlete.js';
 import { athleteCardHtml } from './athleteCard.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
@@ -25,7 +25,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ow
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC, evMeta } from './seasons.js';
 
-export const APP_VERSION = '3.36.0';
+export const APP_VERSION = '3.37.0';
 
 const $ = s => document.querySelector(s);
 
@@ -274,6 +274,7 @@ function prevRankOf(id) {
 // round's screen or its competition on home is open and the round is not finished (finished: once per app open).
 // Israelis (country ISR) = "my athletes" there: highlighted, and only their new zones/tops toast + blink.
 const IFSC = {}; // round id → { data, res, at, err, busy, seen }
+let IFSC_V = 0; // bumped on every World Climbing answer (dataStamp: the bar's cached live target / results list)
 const ifscRes = id => IFSC[id]?.res || null;
 async function pollIfsc(id, force = false) {
   if (round(id)?.ifscStatic) return; // 3.13.0: saved results (finished competitions) — nothing to fetch
@@ -298,7 +299,7 @@ function applyIfsc(id, d) {
   if (s.seen) { const m = liveFresh[id] || (liveFresh[id] = new Map()); for (const e of evs) m.set(`${e.bib}:${e.b - 1}`, Date.now()); }
   s.seen = isr.map(x => ({ bib: x.bib, name: x.name, bs: x.bs.map(c => c && [...c]), ap: x.ap }));
   if ((id === current || round(current)?.combo?.includes(id)) && screen === 'round') evs.forEach(e => liveToast({ ...e, name: '🇮🇱 ' + e.name }));
-  s.data = d; s.res = res;
+  s.data = d; s.res = res; IFSC_V++;
 }
 // international round phase (3.11.1): live from the start time or the first result — never from IFSC's 'active' alone
 const IFSC_EARLY_MS = 10 * 60000; // polling starts 10 min before the start
@@ -433,12 +434,12 @@ function navBack() {
   if (k === 'round') { // back to the competition of the open round (all its categories)
     const evs = homeEvents(), id = evOf(round(current))?.id, i = evs.findIndex(x => x.event.id === id);
     if (i >= 0 && homeOpenEvent !== i) { homeOpenEvent = i; homeFrom = seasonOf(evs[i]); }
-    homeFinal = null; homeTab = 'all'; showScreen('home'); window.scrollTo(0, 0); return;
+    homeFinal = null; homeTab = 'all'; showScreen('home'); scrollToY(0); return;
   }
   if (k === 'final') { if (homeFinal.from === 'list') homeOpenEvent = null; else homeOpenEvent = homeFinal.ev; homeFinal = null; }
   else if (k === 'event') { homeSeason = homeFrom; homeOpenEvent = null; }
   else if (k === 'season') { ddOpen = null; homeSeason = null; }
-  render(); window.scrollTo(0, 0);
+  render(); scrollToY(0);
 }
 
 // round screen: one button naming the round (opens the list "ראונדים באירוע"); the home screen has no row (its cards list the rounds)
@@ -710,7 +711,7 @@ function scrollToBand() {
     scrollAll = false;
     const row = $('#view-all tr.now') || $('#view-all tr.next-line');
     const rc = row?.getBoundingClientRect();
-    if (rc && (rc.top < 0 || rc.bottom > innerHeight)) scrollTo({ top: scrollY + rc.top - innerHeight / 2, behavior: 'smooth' });
+    if (rc && (rc.top < 0 || rc.bottom > viewBottom())) scrollToY(scrollTopNow() + rc.top - viewBottom() / 2, { behavior: 'smooth' });
   }
 }
 let scrollAll = false; // once per opening of the full list (Roei: then it must not move under the finger)
@@ -1086,7 +1087,7 @@ let ATH = null; // the open card: { rid, bib, disc, age, catMode, aid, wc, wcAt,
 // landing state → navBackKind drops athReturn; ⌂ and openAthlete also clear it outright.
 let athReturn = null;
 const athLandKey = () => JSON.stringify(screen === 'round' ? ['round', current] : ['home', homeOpenEvent, homeSeason, homeFinal, homeTab]);
-const athNavState = () => ({ screen, current, view, homeOpenEvent, homeSeason, homeFrom, homeFinal, homeTab, y: window.scrollY });
+const athNavState = () => ({ screen, current, view, homeOpenEvent, homeSeason, homeFrom, homeFinal, homeTab, y: scrollTopNow() });
 function athLeave(go) {
   const card = ATH && { rid: ATH.rid, bib: ATH.bib, disc: ATH.disc, age: ATH.age, catMode: ATH.catMode, top: $('#ath-body').scrollTop }, back = athNavState();
   go();
@@ -1100,7 +1101,7 @@ function athBack() {
     if (current !== back.current) goRound(back.current);
     showScreen('round'); if (view !== back.view) setView(back.view);
   } else showScreen('home');
-  window.scrollTo(0, back.y);
+  scrollToY(back.y);
   openAthlete(card.rid, card.bib, card);
   if (ATH && $('#ath-dlg').open) $('#ath-body').scrollTop = card.top || 0; // the card where the row was tapped
 }
@@ -1167,7 +1168,7 @@ function openAthlete(rid, bib, keep = null) {
 }
 function athToRound(id) {
   if (!round(id)) return;
-  $('#ath-dlg').close(); goRound(id); if (screen !== 'round') showScreen('round'); window.scrollTo(0, 0);
+  $('#ath-dlg').close(); goRound(id); if (screen !== 'round') showScreen('round'); scrollToY(0);
 }
 function athClick(e) {
   const dlg = $('#ath-dlg');
@@ -1183,7 +1184,7 @@ function athClick(e) {
     // one World Climbing event id can be two portal competitions (boulder + lead) → the card's discipline first (3.34.0)
     const evs = homeEvents(), hit = x => x.event.ifscId != null && String(x.event.ifscId) === d.athEv;
     const j = evs.findIndex(x => hit(x) && evMeta(x.event).disc.includes(ATH.disc)), i = j >= 0 ? j : evs.findIndex(hit); if (i < 0) return;
-    athLeave(() => { dlg.close(); homeFinal = null; homeSeason = seasonOf(evs[i]); homeFrom = homeSeason; homeOpenEvent = i; homeTab = 'all'; showScreen('home'); window.scrollTo(0, 0); });
+    athLeave(() => { dlg.close(); homeFinal = null; homeSeason = seasonOf(evs[i]); homeFrom = homeSeason; homeOpenEvent = i; homeTab = 'all'; showScreen('home'); scrollToY(0); });
   } else if (d.athNotes != null && !VIEWER) { // the notes screen, all rounds, this athlete's name chip
     const ax = athRow(ATH); if (!ax) return;
     const ns = athNotes(whoFromRow(ax.row, round(ATH.rid), DATA)).sort((p, q) => q.at - p.at); if (!ns.length) return;
@@ -1324,11 +1325,7 @@ function renderFinal() {
 // a card the user opened / closed keeps that state across re-renders (resOpen, by event id).
 const resOpen = new Map();
 function renderResList() {
-  const evs = homeEvents(), fin = new Map(), finOf = ev => { if (!fin.has(ev)) fin.set(ev, finalsOf(ev)); return fin.get(ev); }; // finalsOf once per competition per render
-  const groups = resultsGroups(evs, {
-    seasons: currentSeasonIds(evs.map(seasonOf), todayStr()),
-    resultsOf, hasIsraeli: (r, res) => (res.rows || []).some(isIsr), finalsReady: ev => { const f = finOf(ev); return f.length > 0 && f.every(x => x.ready); }, titleOf: x => evName(x.event),
-  });
+  const { evs, groups, finOf } = resGroupsCached(); // glass bar feel Task 1: memoised (stamp + 15 s), finalsOf once per competition
   const card = (g, i) => {
     const item = evs[g.ei], live = g.rounds.some(x => x.live), n = g.rounds.length;
     const rows = g.rounds.map(x => { const r = round(x.id);
@@ -1455,7 +1452,7 @@ function openMine(id) {
   }
   lastTabTap = Date.now(); current = id;
   for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null;
-  window.scrollTo(0, 0); // before the results render below scrolls to the picked card
+  scrollToY(0); // before the results render below scrolls to the picked card
   showScreen('round'); // round screen visible first (render() drops pick only on home / another round)
   openRoundView(); if (view !== 'results' && resultsOf(id)) setView('results');
 }
@@ -1602,6 +1599,48 @@ function barLive() {
     isIntl: r => !!r.ifsc,
   });
 }
+// glass bar feel Task 1 (perf): render() runs every 250 ms and a first tap paid for all of it at once. Every input of the
+// live target / results list goes into dataStamp — when unsure, it is in: DATA reload (object + builtAt), the round list
+// (World Climbing auto rounds replace it), locked / federation live / World Climbing results, calibration + delays
+// (off + slotSec), local store changes (my athletes…), role. A remote change that misses the stamp (applyRemote fires no
+// store listener) still shows within the time bucket (1 s live target, 15 s list).
+let STORE_V = 0;
+store.onChange(() => { STORE_V++; });
+const STAMP_IDS = new WeakMap(); let stampN = 0;
+const stampId = o => (o && typeof o === 'object' ? STAMP_IDS.get(o) || (STAMP_IDS.set(o, ++stampN), stampN) : String(o));
+function dataStamp() {
+  let o = '';
+  for (const r of DATA.rounds) o += off(r.id) + ':' + r.slotSec + ',';
+  return [stampId(DATA), stampId(DATA.rounds), DATA.builtAt, stampId(LOCKED), live.at, IFSC_V, STORE_V, VIEWER, o].join('|');
+}
+let barLiveMemo = null;
+function barLiveCached() {
+  const key = Math.floor(now() / 1000) + '|' + dataStamp();
+  if (barLiveMemo?.key !== key) barLiveMemo = { key, v: barLive() };
+  return barLiveMemo.v;
+}
+// the "תוצאות" list data: the competitions (data-ev order), their result groups and finals, once per stamp + 15 s
+let resMemo = null;
+function resGroupsCached() {
+  const key = Math.floor(now() / 15000) + '|' + dataStamp();
+  if (resMemo?.key === key) return resMemo;
+  const evs = homeEvents(), fin = new Map(), finOf = ev => { if (!fin.has(ev)) fin.set(ev, finalsOf(ev)); return fin.get(ev); }; // finalsOf once per competition
+  const groups = resultsGroups(evs, {
+    seasons: currentSeasonIds(evs.map(seasonOf), todayStr()),
+    resultsOf, hasIsraeli: (r, res) => (res.rows || []).some(isIsr), finalsReady: ev => { const f = finOf(ev); return f.length > 0 && f.every(x => x.ready); }, titleOf: x => evName(x.event),
+  });
+  return (resMemo = { key, evs, groups, finOf });
+}
+// idle warm-up after start (glass only): the results list + the competition "שלי" context (rank caches, zone formatter,
+// start times) are computed before the first tap, so that tap only patches the DOM. Never throws into the app.
+function warmBar() {
+  try {
+    if (!GLASS() || !DATA) return;
+    barLiveCached(); resGroupsCached();
+    const t = now(), evs = homeEvents(), i = compNowIdx(evs, t);
+    if (i >= 0) for (const r of evs[i].rounds) if (!r.combo) compMineCtx(r, t);
+  } catch { /* a warm-up only */ }
+}
 function barActive(lt) {
   if (screen === 'round') return lt.kind !== 'none' && current === lt.id ? 'live' : null; // in a round only לייב can light up
   if (homeTab === 'res') return 'res';
@@ -1611,10 +1650,10 @@ function barActive(lt) {
 function renderBar() {
   const bar = $('#gbar'); if (!bar) return;
   const off_ = !GLASS() || $('#app').hidden || !$('#gate').hidden;
-  if (bar.hidden !== off_) { bar.hidden = off_; if (off_) barSetMini(bar, false); measureBar(); }
+  if (bar.hidden !== off_) { bar.hidden = off_; if (off_) barSetMini(bar, false); BAR_M.act = undefined; BAR_M.rect = null; measureBar(); } // shown again: the lens lands without motion
   if (off_) return;
   barKb(bar); // a focused in-page field (a re-render can drop it without a focusout)
-  const lt = barLive(), act = barActive(lt);
+  const lt = barLiveCached(), act = barActive(lt);
   bar.querySelectorAll('[data-gbar]').forEach(b => { if (b.dataset.gbar === act) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   // the lens moves only on a real change of the active tab (render runs every 250 ms); never while a finger is down
   if (BAR_M.act !== act && !BAR_M.press) { BAR_M.act = act; barLensTo(bar, act); }
@@ -1635,18 +1674,98 @@ function measureBar() {
   const h = bar && !bar.hidden && bar.offsetHeight ? Math.ceil(innerHeight - bar.getBoundingClientRect().top) + 8 : 0;
   document.documentElement.style.setProperty('--gbar-h', h + 'px');
 }
-// ---- bar motion (Task 6, port of the app bar 13.5.1, 17-shell-bar.html): the CSS owns every curve (glass.css, all under
-// prefers-reduced-motion: no-preference); this only writes --gi (lens tab) and toggles .press / .down / .mini / .no-act.
-const BAR_TABS = ['home', 'live', 'res', 'mine'];
-const BAR_M = { act: undefined, press: null, mini: false, lastY: 0, raf: 0, animUntil: 0 };
+// ---- bar motion (glass bar feel Task 3: port of the app bar 13.5.1, 17-shell-bar.html): the CSS owns every curve (glass.css,
+// all under prefers-reduced-motion: no-preference); this toggles .press / .down / .mini / .no-act / .reach and writes --ang
+// (rim), --gx / --gy (touch point) and the lens's inline left / width in px (from the tabs' offsetLeft / offsetWidth).
+// Unlike the app, the bar is never re-rendered: renderBar updates it in place every 250 ms, so the state lives on this one
+// element and the app's "written small, grows on mount" path is: a tab tap on the small bar stops the fling → barTap grows
+// the bar → the lens is glued to its tab through the resize and chases the new tab once the navigation marks it.
+const BAR_M = {
+  act: undefined, press: null, mini: false, lastY: 0, raf: 0, animUntil: 0,
+  rect: null,                    // lens: the rect it was last sent to (offsetLeft / offsetWidth basis)
+  ang: 210,                      // the rim angle last written (unwrapped: may leave 0..360)
+  glueRaf: 0, glueUntil: 0,      // the glue loop (lens follows its tab while the bar resizes)
+  scrollAt: 0,                   // the last scroll event (either scroller): a fling is stopped only while it moves
+};
 const mq = q => { try { return matchMedia(q); } catch { return null; } };
 const MQ_REDUCE = mq('(prefers-reduced-motion: reduce)'), MQ_PHONE = mq('(max-width: 699px)');
 const reducedMotion = () => !!MQ_REDUCE?.matches;
 const barCanShrink = () => !reducedMotion() && !!MQ_PHONE?.matches; // phone only, never with reduced motion
+const barItemRect = el => (el ? { left: el.offsetLeft || 0, width: el.offsetWidth || 0 } : { left: 0, width: 0 });
+const barActiveItem = bar => bar.querySelector('[data-gbar][aria-current="page"]');
+const barLens = bar => bar.querySelector('.gbar-lens');
+function barSetAng(bar, target) {
+  BAR_M.ang = unwrapAngle(BAR_M.ang, target);
+  bar.style.setProperty('--ang', BAR_M.ang + 'deg');
+}
+function barSetLens(lens, r, animate) {
+  if (animate && !reducedMotion()) { lens.style.left = r.left + 'px'; lens.style.width = r.width + 'px'; return; }
+  lens.style.transition = 'none';
+  lens.style.left = r.left + 'px'; lens.style.width = r.width + 'px';
+  void lens.offsetWidth; // commit the jump before the transition comes back
+  lens.style.transition = '';
+}
+function barMoveLens(bar, r, animate) {
+  const lens = barLens(bar); if (!lens) return;
+  BAR_M.rect = r;
+  barSetLens(lens, r, animate);
+}
+// the lens onto the active tab; no active tab (a non-live round): it stays where it is, hidden by .no-act
+function barPlaceLens(bar, animate) {
+  const a = barActiveItem(bar);
+  if (a) barMoveLens(bar, barItemRect(a), animate);
+}
 function barLensTo(bar, act) {
-  const i = BAR_TABS.indexOf(act);
-  bar.classList.toggle('no-act', i < 0);
-  if (i >= 0) bar.style.setProperty('--gi', String(i));
+  bar.classList.toggle('no-act', !(act && bar.querySelector(`[data-gbar="${act}"]`)));
+  if (BAR_M.glueRaf || !bar.offsetWidth) return; // a glue loop follows (and chases) the active tab itself; hidden: nothing to measure
+  if (Date.now() < BAR_M.animUntil) { barGlue(bar); return; } // the bar is still resizing: an animated move would land off the tab
+  barPlaceLens(bar, BAR_M.rect != null);        // the first placement lands without motion
+}
+function barStopGlue() {
+  if (!BAR_M.glueRaf) return;
+  cancelAnimationFrame(BAR_M.glueRaf);
+  BAR_M.glueRaf = 0;
+  const lens = barLens($('#gbar')); if (lens) lens.style.transition = '';
+}
+// While the bar resizes (inset / padding / height on the spring) the tabs move every frame: the lens follows the active tab
+// for at least 600 ms with its own transition off, glued to it (never comes loose). When the active tab changes meanwhile (a
+// tab tap on the small bar: barTap grows the bar, the navigation marks the new tab two frames later) — or the lens is not on
+// it when the loop starts — it slides there on the 13.5.1 damped spring per 60 Hz frame (BAR_CHASE) and is glued from the
+// moment it lands. Reduced motion: one placement.
+function barGlue(bar) {
+  const lens = barLens(bar); if (!lens) return;
+  if (reducedMotion()) { barPlaceLens(bar, false); return; }
+  BAR_M.glueUntil = Date.now() + 600;
+  if (BAR_M.glueRaf) return;
+  lens.style.transition = 'none';
+  let el = barActiveItem(bar), c = null, began = 0, last = null;
+  const chase = () => { const f = BAR_M.rect || barItemRect(el); c = { x: { x: f.left, v: 0 }, w: { x: f.width, v: 0 } }; began = Date.now(); last = null; };
+  if (el && BAR_M.rect) { const r0 = barItemRect(el); if (Math.abs(BAR_M.rect.left - r0.left) > 1 || Math.abs(BAR_M.rect.width - r0.width) > 1) chase(); }
+  const step = ts => {
+    const a = bar.hidden ? null : barActiveItem(bar), t = Date.now();
+    // no active tab yet (a tap from a round that is not live: the navigation marks the new tab a frame or two later) —
+    // keep the loop while the bar resizes; the tab, once marked, is chased from where the lens is
+    if (!a && !bar.hidden && t < BAR_M.glueUntil) { BAR_M.glueRaf = requestAnimationFrame(step); return; }
+    if (a) {
+      if (a !== el) { el = a; chase(); }
+      const r = barItemRect(a);
+      if (c) {
+        // frames at 120 Hz (ProMotion) take half steps, so the chase looks the same at any refresh rate
+        const n = last !== null ? Math.max(1, Math.min(4, Math.round((ts - last) / 16.7))) : 1;
+        last = ts;
+        for (let i = 0; i < n; i++) { chaseStep(c.x, r.left); chaseStep(c.w, r.width); }
+        const landed = Math.abs(c.x.x - r.left) < 0.5 && Math.abs(c.w.x - r.width) < 0.5 && Math.abs(c.x.v) < 0.5 && Math.abs(c.w.v) < 0.5;
+        if (landed || t - began > BAR_CHASE.maxMs) c = null; // glued from here on
+      }
+      const at = c ? { left: Math.round(c.x.x * 10) / 10, width: Math.round(c.w.x * 10) / 10 } : r;
+      BAR_M.rect = at;
+      lens.style.left = at.left + 'px'; lens.style.width = at.width + 'px';
+      if (t < BAR_M.glueUntil || c) { BAR_M.glueRaf = requestAnimationFrame(step); return; }
+    }
+    BAR_M.glueRaf = 0;
+    lens.style.transition = '';
+  };
+  BAR_M.glueRaf = requestAnimationFrame(step);
 }
 function barSetMini(bar, want) {
   want = !!want && barCanShrink();
@@ -1654,36 +1773,95 @@ function barSetMini(bar, want) {
   if (bar.classList.contains('mini') === want) return;
   BAR_M.animUntil = Date.now() + 520; // the resize runs .06 + .38 s: measureBar waits it out
   bar.classList.toggle('mini', want);
+  barGlue(bar);
   setTimeout(measureBar, 540);
 }
+// barOnScroll runs once per frame (rAF-throttled below): the rim follows the scroll there, with the latest position, no
+// transition (--ang animates only under the finger), so the glass is not repainted by a trailing animation all scroll long
 function barOnScroll() {
   BAR_M.raf = 0;
   const bar = $('#gbar'); if (!bar || bar.hidden) return;
-  const y = scrollY, max = document.documentElement.scrollHeight - innerHeight;
+  const sc = scroller(), y = scrollTopNow(), max = sc.scrollHeight - sc.clientHeight;
+  if (!BAR_M.press) barSetAng(bar, scrollAngle(Math.max(0, Math.min(max, y))));
   if (y > max + 1) return; // iOS rubber band past the bottom: not a scroll up
   if (Math.abs(y - BAR_M.lastY) < 8 && y > 0) return;
   const next = barMiniNext(BAR_M.lastY, y, BAR_M.mini);
   BAR_M.lastY = Math.max(0, y);
   if (next !== null && !BAR_M.press) barSetMini(bar, next);
 }
+// a width change (the phone turns, split view, iPad ↔ phone layout) moves the tabs: the lens lands on the active one again
+function barOnResize() {
+  const bar = $('#gbar');
+  if (!bar || bar.hidden || BAR_M.press || BAR_M.glueRaf) return; // a glue loop follows the tabs already
+  barPlaceLens(bar, false);
+}
+// A finger on the bar stops a fling of the scroller (the bar is outside #app-scroll, so touching it never does that by
+// itself): overflow off ends the momentum where it is (iOS Safari and Chrome alike) — shellBar_stopFling_. Only while the
+// scroller moves (a scroll event in the last 120 ms): a tap on a still page never touches it. Each next frame that still saw
+// movement writes the position for real (y + 1, then y — a write of the same y is a no-op, and Chrome keeps a smooth
+// scrollTo or a momentum fling running through the first write), up to 3 frames; the first still frame gives scrolling back.
+function barStopFling() {
+  const el = scroller(); if (!el?.style) return;
+  if (Date.now() - BAR_M.scrollAt > 120) return;
+  let last = el.scrollTop;
+  el.style.overflowY = 'hidden';
+  el.scrollTop = last;
+  const hold = n => requestAnimationFrame(() => {
+    const y2 = el.scrollTop;
+    if (y2 === last) { el.style.overflowY = ''; return; }
+    el.scrollTop = y2 + 1; el.scrollTop = y2; last = y2;
+    if (n > 1) hold(n - 1); else el.style.overflowY = '';
+  });
+  hold(3);
+}
+function barPointerXY(bar, e) {
+  const b = bar.getBoundingClientRect();
+  return { x: (e.clientX || 0) - b.left, y: (e.clientY || 0) - b.top, width: b.width || bar.offsetWidth || 0 };
+}
 function barPointerDown(e) {
   if (e.button > 0) return;
   const bar = $('#gbar'), b = e.target.closest('[data-gbar]');
-  // small bar: an empty spot grows it now; a tab does NOT grow here (the tabs would slide under the finger before the
-  // click) — its click navigates and barTap grows the bar
-  if (!b) { if (bar.classList.contains('mini')) { BAR_M.lastY = scrollY; barSetMini(bar, false); } return; }
+  // a finger on the bar stops a fling at once — the small bar as in the app, and the full one too: the iPad bar never
+  // shrinks, and a fling still running would fight the navigation's scroll to the top
+  barStopFling();
+  if (bar.classList.contains('mini')) {
+    // the small bar: an empty spot only grows it; a tab is not grown here (the tabs would slide under the finger before the
+    // click) — its click navigates and barTap grows the bar, the lens chasing the new tab
+    BAR_M.lastY = scrollTopNow();
+    if (!b) { barSetMini(bar, false); return; }
+    return;
+  }
+  if (!b) return;
+  barStopGlue(); // a glue loop would overwrite the reach every frame
+  const p = barPointerXY(bar, e);
+  bar.style.setProperty('--gx', Math.round(p.x) + 'px');
+  bar.style.setProperty('--gy', Math.round(p.y) + 'px');
+  barSetAng(bar, rimAngle(p.x, p.width));
   bar.classList.add('press'); b.classList.add('down');
-  barLensTo(bar, b.dataset.gbar); // the bubble reaches under the finger
+  const lens = barLens(bar);
+  if (lens) lens.classList.add('reach');
+  // the bubble reaches under the finger, its far edge trailing toward the old tab (no active tab: it grows from the touched one)
+  const it = barItemRect(b);
+  if (bar.classList.contains('no-act') || !BAR_M.rect) barMoveLens(bar, it, false);
+  barMoveLens(bar, reachRect(BAR_M.rect, it), true);
   BAR_M.press = { bar, b };
 }
+function barPointerMove(e) {
+  const p = BAR_M.press; if (!p) return;
+  const q = barPointerXY(p.bar, e);
+  p.bar.style.setProperty('--gx', Math.round(q.x) + 'px');
+  barSetAng(p.bar, rimAngle(Math.max(0, Math.min(q.width, q.x)), q.width));
+}
+// Finger up: everything settles together on the spring and the bubble closes onto the touched tab at once; the click that
+// follows navigates (renderBar keeps the lens there). A tap that changes nothing: back to the active tab after 450 ms.
+// Cancel (a scroll took over): back at once.
 function barPointerEnd(e) {
   const p = BAR_M.press; if (!p) return;
   BAR_M.press = null;
   p.bar.classList.remove('press'); p.b.classList.remove('down');
-  // the click that follows navigates (renderBar moves the lens); a cancel (a scroll took over) or a tap that changes
-  // nothing sends the bubble back to the real active tab
+  barLens(p.bar)?.classList.remove('reach');
   const back = () => { if (!BAR_M.press) barLensTo(p.bar, BAR_M.act); };
-  if (e.type === 'pointerup') setTimeout(back, 450); else back();
+  if (e.type === 'pointerup') { barMoveLens(p.bar, barItemRect(p.b), true); setTimeout(back, 450); } else back();
 }
 // the keyboard: while an in-page text field has focus (note edit, appeal outcome…) the bar hides (.kb = visibility only, so
 // its box and --gbar-h stay → no layout jump); fields inside a dialog sit in the top layer over the bar anyway
@@ -1695,29 +1873,40 @@ function wireBarMotion() {
   document.addEventListener('focusin', () => barKb(bar));
   document.addEventListener('focusout', () => setTimeout(() => barKb(bar), 0)); // activeElement = the next field (or body) by then
   bar.addEventListener('pointerdown', barPointerDown, { passive: true });
+  addEventListener('pointermove', barPointerMove, { passive: true });
   addEventListener('pointerup', barPointerEnd, { passive: true });
   addEventListener('pointercancel', barPointerEnd, { passive: true });
-  addEventListener('scroll', () => { if (!BAR_M.raf) BAR_M.raf = requestAnimationFrame(barOnScroll); }, { passive: true });
+  // both scrollers: the document (no glass) and #app-scroll (glass); barOnScroll reads the active one
+  const onScroll = () => { BAR_M.scrollAt = Date.now(); if (!BAR_M.raf) BAR_M.raf = requestAnimationFrame(barOnScroll); };
+  addEventListener('scroll', onScroll, { passive: true });
+  $('#app-scroll')?.addEventListener('scroll', onScroll, { passive: true });
+  addEventListener('resize', barOnResize, { passive: true });
   // reduced motion switched on / the width crosses to the iPad layout while small → full bar
   const regrow = () => { if (!barCanShrink()) barSetMini(bar, false); };
   for (const m of [MQ_REDUCE, MQ_PHONE]) m?.addEventListener?.('change', regrow);
 }
 
+// glass bar feel Task 1: the press visuals (grow, lens from pointerdown) go first; the navigation + its render run two
+// frames later, so the bubble is already moving before any heavy render. Same state changes, scrollTo and toasts as before.
 function barTap(kind) {
   athReturn = null;
   const gb = $('#gbar'); if (gb) { BAR_M.lastY = 0; barSetMini(gb, false); } // a tab tap on the small bar grows it
+  const nav = () => barNav(kind);
+  requestAnimationFrame(() => requestAnimationFrame(nav));
+}
+function barNav(kind) {
   if (kind === 'live') {
     const lt = barLive();
     if (lt.kind !== 'none') {
       if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); }
-      goRound(lt.id); window.scrollTo(0, 0); return;
+      goRound(lt.id); scrollToY(0); return;
     }
     kind = 'home'; showToast('אין ראונד חי או קרוב');
   }
   if (kind === 'home') { homeTab = 'all'; homeFinal = null; homeOpenEvent = null; homeSeason = null; homeFrom = null; }
   else if (kind === 'res') { homeTab = 'res'; homeFinal = null; }
   else if (kind === 'mine') homeTab = ME ? 'me' : 'comp';
-  showScreen('home'); window.scrollTo(0, 0);
+  showScreen('home'); scrollToY(0);
 }
 
 // header title: HTML (bidi-safe parts) + plain sub line; empty → the block is hidden
@@ -2691,10 +2880,40 @@ const DARK_NAMES = { plum: 'שזיף', charcoal: 'פחם', black: 'שחור' };
 // non-coach app entry, so a device that once had it on shows today's UI after such a login (start() → applySettings)
 const coachEntry = () => !store.appEntry || store.appEntry.role === 'coach'; // no app entry (typed code) or a coach one
 const GLASS = () => document.documentElement.dataset.look === 'glass';
+// glass bar feel Task 2 (the Palgi app 8.2.1 model): with glass the document never scrolls — #app-scroll is the one scroller
+// (the bar sits outside it); without glass the document scrolls as before. Every scroll read / write goes through these.
+function scroller() {
+  return (GLASS() && $('#app-scroll')) || document.scrollingElement;
+}
+function scrollTopNow() {
+  return scroller().scrollTop;
+}
+function scrollToY(y, opts) {
+  scroller().scrollTo({ top: y, ...opts });
+}
+// the bottom of what is readable: the screen, minus the bar's share with glass (--gbar-h, measured; 0 when hidden)
+function viewBottom() {
+  return innerHeight - (GLASS() ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gbar-h')) || 0 : 0);
+}
+// iOS can leave the document itself scrolled (keyboard closed, app resumed, the look switched on while scrolled), which moves
+// the whole glass layout — bar included — up. With glass it goes back to 0, but never while a field has focus (the keyboard
+// is up and iOS keeps the field in view that way). Port of the app's appScroll_settleDocument_.
+function settleDocument() {
+  if (!GLASS() || !(window.scrollY > 0 || document.body.scrollTop > 0)) return; // the body box (overflow: hidden) can be scrolled too
+  const a = document.activeElement;
+  if (a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName || '') || a.isContentEditable)) return;
+  if (window.scrollY > 0) window.scrollTo(0, 0);
+  if (document.body.scrollTop > 0) document.body.scrollTop = 0;
+}
 function applyLook() {
   const on = !!(store.settings.glass && !VIEWER && !ME) && coachEntry();
+  const was = GLASS(), y = scrollTopNow(); // glass bar feel Task 2: the reading position, on the scroller of the look now on
   if (!on && GLASS()) athReturn = null; // the look goes off: a "back to the card" saved on a bar screen ends here
   if (on) document.documentElement.dataset.look = 'glass'; else delete document.documentElement.dataset.look;
+  if (on !== was) { // the other scroller takes the position; the document itself never stays scrolled under glass
+    if (on) document.scrollingElement.scrollTop = 0;
+    scrollToY(y); BAR_M.lastY = y;
+  }
   if (!on && (homeTab === 'res' || homeTab === 'comp')) homeTab = 'all'; // Review Focus 5: switch off on a bar screen → today's home
   const row = document.querySelector('.glass-row'); if (row) row.hidden = VIEWER || !!ME || !coachEntry();
 }
@@ -2833,14 +3052,14 @@ function setupPullRefresh() {
   const show = (d, text) => { ind.style.transform = `translate(-50%, ${Math.min(d, 110) - 56}px)`; ind.querySelector('.ptr-text').textContent = text; ind.classList.toggle('ready', d >= TRIGGER); };
   const hide = () => { ind.classList.add('back'); ind.style.transform = ''; ind.classList.remove('ready', 'busy'); setTimeout(() => ind.classList.remove('back'), 250); };
   addEventListener('touchstart', e => {
-    if (busy || e.touches.length !== 1 || scrollY > 0 || document.querySelector('dialog[open]')) { y0 = null; return; }
+    if (busy || e.touches.length !== 1 || scrollTopNow() > 0 || document.querySelector('dialog[open]')) { y0 = null; return; }
     if (e.target.closest('.full-wrap')?.scrollTop > 0) { y0 = null; return; }
     y0 = e.touches[0].clientY; dy = 0;
   }, { passive: true });
   addEventListener('touchmove', e => {
     if (y0 == null) return;
     dy = (e.touches[0].clientY - y0) * 0.55; // resistance
-    if (dy <= 0 || scrollY > 0) { if (dy < 0) y0 = null; ind.style.transform = ''; return; }
+    if (dy <= 0 || scrollTopNow() > 0) { if (dy < 0) y0 = null; ind.style.transform = ''; return; }
     show(dy, dy >= TRIGGER ? 'שחרר לרענון' : 'משוך לרענון');
   }, { passive: true });
   addEventListener('touchend', async () => {
@@ -2894,6 +3113,14 @@ function start() {
   if ('ResizeObserver' in window) new ResizeObserver(measureBar).observe($('#gbar')); // 3.36.0: the bar's real height → --gbar-h
   addEventListener('resize', measureBar);
   wireBarMotion(); // 3.36.0 Task 6: press / lens / shrink-on-scroll
+  { // glass bar feel Task 2: put an iOS document scroll back (after focus moved on, on resume, keyboard / toolbar resize)
+    const later = () => setTimeout(settleDocument, 0);
+    document.addEventListener('focusout', later);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'hidden') later(); });
+    addEventListener('pageshow', later);
+    window.visualViewport?.addEventListener('resize', later);
+  }
+  if ('requestIdleCallback' in window) requestIdleCallback(warmBar, { timeout: 3000 }); else setTimeout(warmBar, 1500); // glass bar feel Task 1
   document.querySelectorAll('.app-ver').forEach(el => { el.textContent = APP_VERSION; });
   current = params.get('round') && round(params.get('round')) ? params.get('round') : pickDefaultRound();
   if (SIM_AT != null) { $('#sim-bar').hidden = false; $('#sim-open').hidden = true; } // already in a replay
@@ -2918,9 +3145,9 @@ function start() {
     if (d.page) { setPage(d.page); return; }
     if (d.leadAlert) { if (!VIEWER) { store.setSetting('leadAlert', d.leadAlert); syncLeadAlertSeg(); } return; } // 3.22.0 Task 8 (the push plan follows on the 5 s syncPush tick)
     if (d.fincat != null && homeFinal) { if (finCur) finCat[finCur] = d.fincat; render(); return; }
-    if (d.final) { const [ev, key, from] = d.final.split(':'); homeFinal = { ev: Number(ev), key, from }; render(); window.scrollTo(0, 0); return; }
+    if (d.final) { const [ev, key, from] = d.final.split(':'); homeFinal = { ev: Number(ev), key, from }; render(); scrollToY(0); return; }
     if (b.id === 'nav-back') { navBack(); return; }
-    if (d.season) { ddOpen = null; homeSeason = d.season; render(); window.scrollTo(0, 0); return; }
+    if (d.season) { ddOpen = null; homeSeason = d.season; render(); scrollToY(0); return; }
     if (d.dd) { ddOpen = ddOpen === d.dd ? null : d.dd; render(); return; }
     if (d.filt) { // 3.14.0 menu toggle: a row with nothing selected = all on; selecting every option = back to all ([])
       const [k, v] = d.filt.split(':'), opts = filterOptions(homeEvents().filter(x => seasonOf(x) === homeSeason).map(x => x.event))[k];
@@ -2928,17 +3155,17 @@ function start() {
       evFilter = { ...evFilter, [k]: opts.every(x => next.includes(x)) ? [] : next }; saveFilter(); render(); return;
     }
     if (b.id === 'filt-reset') { evFilter = { disc: [], type: [], age: [] }; saveFilter(); render(); return; }
-    if (d.homeTab) { homeTab = d.homeTab === 'me' && ME ? 'me' : 'all'; render(); window.scrollTo(0, 0); return; }
+    if (d.homeTab) { homeTab = d.homeTab === 'me' && ME ? 'me' : 'all'; render(); scrollToY(0); return; }
     if (d.meOpen) { openMine(d.meOpen); return; }
     if (d.resOpen) { // 3.36.0 "תוצאות" list → the round, on its results view
       if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); }
-      goRound(d.resOpen); if (view !== 'results' && resultsOf(d.resOpen)) setView('results'); window.scrollTo(0, 0); return;
+      goRound(d.resOpen); if (view !== 'results' && resultsOf(d.resOpen)) setView('results'); scrollToY(0); return;
     }
     if (d.compOpen) { // 3.36.0 competition "שלי" → that round, on its "שלי" view (World Climbing rounds: results only)
       if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); }
-      goRound(d.compOpen); if (view !== 'mine' && !round(d.compOpen)?.ifsc) setView('mine'); window.scrollTo(0, 0); return;
+      goRound(d.compOpen); if (view !== 'mine' && !round(d.compOpen)?.ifsc) setView('mine'); scrollToY(0); return;
     }
-    if (d.ev != null) { homeFrom = homeSeason; homeOpenEvent = Number(d.ev); render(); window.scrollTo(0, 0); return; }
+    if (d.ev != null) { homeFrom = homeSeason; homeOpenEvent = Number(d.ev); render(); scrollToY(0); return; }
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
     else if (b.id === 'home-btn') { athReturn = null; homeOpenEvent = null; homeFinal = null; homeSeason = null; homeFrom = null; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
@@ -3036,6 +3263,10 @@ function start() {
   // tag popover on the board: tap a tag → show; tap anywhere else / scroll → hide
   document.addEventListener('click', e => { const b = e.target.closest('[data-tg-pop]'); if (b) showTagPop(b); else $('#tag-pop').hidden = true; }, true);
   addEventListener('scroll', () => { $('#tag-pop').hidden = true; }, { passive: true });
+  $('#app-scroll')?.addEventListener('scroll', e => {
+    $('#tag-pop').hidden = true; // glass: the inner scroller
+    if (e.target.scrollLeft) e.target.scrollLeft = 0; // overflow-x hidden can still be shifted by focus / scrollIntoView → undo
+  }, { passive: true });
   $('#tags-dlg').addEventListener('close', () => { tagEdit = null; });
   $('#dev-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }); // Enter must not close the dialog
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applySettings);
