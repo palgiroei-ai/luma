@@ -22,7 +22,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ow
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.32.1';
+export const APP_VERSION = '3.32.2';
 
 const $ = s => document.querySelector(s);
 

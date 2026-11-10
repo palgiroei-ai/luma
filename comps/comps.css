@@ -152,6 +152,9 @@ body.in-round .alert-stack { top: calc(var(--top-h, 112px) + 8px); } /* under th
 .lane.empty .who { margin-top: auto; margin-bottom: auto; color: var(--muted); }
 .lane.mine { background: var(--copper); border-color: var(--copper); color: var(--on-accent); }
 .lane.mine .lane-label, .lane.mine .bib { color: rgba(255,255,255,.85); }
+/* 3.32.2: the bib badge (3.25.0) has a light background — on my (copper/blue) cards it was white on white */
+.lane.mine .bib { background: var(--card); color: var(--copper-text); border-color: transparent; }
+.lane.mine.added .bib { color: var(--added-strong); }
 .lane.rest.mine { background: var(--copper-bg); color: var(--copper-text); border: 2px solid var(--copper); }
 .lane.rest.mine .lane-label, .lane.rest.mine .bib { color: var(--copper-text); }
 .board-msg { padding: 28px; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: var(--r); }
@@ -1393,8 +1396,8 @@ body.lead-live #round-screen > section { min-width: 0; } /* grid item: let the f
 .vid-view iframe { width: 100%; height: 100%; border: 0; border-radius: var(--r-sm); background: var(--ink, black); display: block; }
 .vid-view .ph-x { background: none; border: 0; color: inherit; font-size: 22px; cursor: pointer; }
 
-/* 3.25.0 lead (Roei): bib badge by every name; full list — finished route struck through, whole name once done; the climber now stands out */
-.bib { display: inline-block; min-width: 2.1em; padding: 0 5px; margin-inline-end: 6px; border-radius: var(--r-sm); border: 1px solid var(--border);
+/* 3.25.0 lead (Roei): bib badge by every name (3.32.2: never on table cells — td/th.bib in the boulder table lost the row colour); full list — finished route struck through, whole name once done; the climber now stands out */
+.bib:not(td):not(th) { display: inline-block; min-width: 2.1em; padding: 0 5px; margin-inline-end: 6px; border-radius: var(--r-sm); border: 1px solid var(--border);
   background: var(--chalk); color: var(--navy); font-size: .78em; font-weight: 700; line-height: 1.5; text-align: center; font-variant-numeric: tabular-nums; vertical-align: .08em; }
 .full.lall td.done { text-decoration: line-through; color: var(--muted); }
 .full.lall tr.over .nm-t { text-decoration: line-through; color: var(--muted); }
