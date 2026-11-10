@@ -16,13 +16,15 @@ import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, is
 import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openTarget, appTheme, backToApp } from './entry.js';
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
+import { athleteHistory, whoFromRow, keysOf, personKey } from './athlete.js';
+import { athleteCardHtml } from './athleteCard.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
 import { hubOnly, alertable } from './blue.js';
 import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ownCtl, legOrder, routeState, dropEarly } from './lead.js';
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
 
-export const APP_VERSION = '3.32.2';
+export const APP_VERSION = '3.33.0';
 
 const $ = s => document.querySelector(s);
 
@@ -854,7 +856,7 @@ function renderResults(r, part = null, isrKey = r.id) {
     if (!res.final && !cutDone && x.rank != null && overallOf[x.bib] > q) { cutDone = true; const ct = `קו העלייה לראונד הבא · ${q} עולים${ranked === full ? ` (${ok.length} התחילו)` : ' לפי הדירוג הכללי'}${near.length ? ` · <span class="ap-near">⚖️ ייתכן שינוי (ערעור של ${near.map(x => esc(lastName(x.name))).join(', ')})</span>` : ''}`;
       // 3.9.0: phone hides 2 columns → a cell spanning them would add a phantom column; one row per layout
       pre = `<tr class="cut cut-wide"><td colspan="${nB + 5}">${ct}</td></tr><tr class="cut cut-narrow"><td colspan="${nB + 3}">${ct}</td></tr>`; }
-    return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${isr ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : ''}${intl ? intlName(x.name) : esc(x.name)}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b>${wallTag(x.bib)}<small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
+    return pre + `<tr class="${cls}"><td class="rk">${x.rank ?? '–'}${ranked !== full && x.rank != null ? `<small class="rk-all">כללי ${overallOf[x.bib]}</small>` : ''}</td><td class="n"><b>${athBtn(r.id, x.bib, (isr ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : '') + (intl ? intlName(x.name) : esc(x.name)))}${w ? ` <span class="tag">${esc(w.short)}</span>` : ''}</b>${wallTag(x.bib)}<small>${esc(x.club)}${x.cat && x.cat !== 'S' && (!opt?.cats || opt.cats.length > 1) ? ` · ${catLabel(x.cat, g)}` : ''}</small></td><td class="bib">${x.bib}</td>
       ${x.rank == null ? `<td colspan="${nB}" class="muted small">${res.live && !res.complete ? 'עדיין בלי תוצאה' : resFem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td><td class="tz"></td><td class="tt">–</td>` : x.bs.map((b, j) => `<td>${cell(b, j, x.bib)}</td>`).join('') + `<td class="tz">${tzText(x.bs)}</td><td class="tt">${x.score.toFixed(1)}</td>`}</tr>`;
   }).join('');
   return `<div class="res${res.live ? ' is-live' : ''}">
@@ -879,7 +881,7 @@ function renderLead(r, part, isrKey) {
   const res = resultsOf(r.id), fem = resFem, nIsr = res.rows.filter(isIsr).length, onlyIsr = !!(nIsr && resIsr[isrKey]);
   const chips = !part && nIsr ? isrSeg(onlyIsr, fem) : '';
   const last = /-f$/.test(r.id), mineBy = intlMineByBib(res.rows, DATA.intlMine), bibOf = Object.fromEntries(res.rows.filter(isIsr).map(x => [x.name, x.bib]));
-  const nameHtml = n => intlName(n) + (mineBy[bibOf[n]] ? ` <span class="tag">${esc(mineBy[bibOf[n]].short)}</span>` : ''); // 3.18.0: my athletes tagged
+  const nameHtml = (n, x, flag = '') => (x ? athBtn(r.id, x.bib, flag + intlName(n)) : flag + intlName(n)) + (mineBy[bibOf[n]] ? ` <span class="tag">${esc(mineBy[bibOf[n]].short)}</span>` : ''); // 3.18.0: my athletes tagged
   const mine = Object.keys(mineBy).length ? new Set(Object.keys(mineBy).map(Number)) : null;
   return `<div class="res lead-res">
     <div class="res-head"><span class="muted small">מקור: ${esc(srcOf(res))}</span></div>
@@ -906,7 +908,7 @@ function renderNatLead(r, part) {
   // 3.29.0 (Roei): who climbs now (the board's state) next to the name, a new result blinks 10 s
   const wall = res.live ? leadWallOf(r) : new Map(), fresh = freshOf(r.id);
   const wallTag = bib => (wall.has(bib) ? `<span class="onwall"><i></i>על הקיר · מסלול ${wall.get(bib)}</span>` : '');
-  const nameHtml = n => { const x = res.rows.find(y => y.name === n), m = x && mineBy[x.bib]; return esc(n) + (m ? ` <span class="tag">${esc(m.short)}</span>` : '') + (x ? wallTag(x.bib) : ''); };
+  const nameHtml = (n, row, flag = '') => { const x = row || res.rows.find(y => y.name === n), m = x && mineBy[x.bib]; return (x ? athBtn(r.id, x.bib, flag + esc(n)) : flag + esc(n)) + (m ? ` <span class="tag">${esc(m.short)}</span>` : '') + (x ? wallTag(x.bib) : ''); };
   const last = res.final || lastRound(r.id), q = last ? 0 : r.info?.quota || 0;
   const running = res.live && !res.complete;
   const file = res.file || [], fileIn = opt?.cats ? file.filter(x => opt.cats.includes(x.cat)) : file;
@@ -1062,6 +1064,116 @@ function renderLog() {
   if (keep) { const el = document.getElementById(keep.id); if (el && el !== document.activeElement) { el.value = keep.v; el.focus(); try { el.setSelectionRange(keep.a, keep.b); } catch { /* ignore */ } } }
 }
 
+// ---- 3.33.0 athlete card: a tap on any name in a results table (national / World Climbing, boulder / lead, live or
+// official, final standings) → bottom sheet #ath-dlg (web/athleteCard.js renders it). The sheet sits outside #app (top
+// layer), so the 250 ms re-renders never touch it; its own taps re-render only the sheet. Coach and viewers alike — the
+// notes line is coach only. History = web/athlete.js (identity rules there); World Climbing data via the Worker only.
+const sameBib = (a, b) => String(a) === String(b);
+// the name inside a table cell → a button that looks exactly like the text (CSS .ath-nm). opt.fin = final standings
+// row (its place = the final place, no "next round")
+const athBtn = (rid, bib, html, opt = null) => `<button type="button" class="ath-nm" data-ath="${esc(rid)}|${esc(bib)}"${opt?.fin ? ` data-ath-fin="${opt.place ?? ''}"` : ''}>${html}</button>`;
+let ATH = null; // the open card: { rid, bib, fin, disc, catMode, aid, wc, wcAt, wcState }
+let athMemo = null; // like meMemo: per day + LOCKED identity, one history per person
+function athHist(who) {
+  const day = todayStr();
+  if (!athMemo || athMemo.locked !== LOCKED || athMemo.day !== day) athMemo = { locked: LOCKED, day, m: new Map() };
+  const k = JSON.stringify([who.key, who.aid, who.wcName, who.country, who.gender]);
+  if (!athMemo.m.has(k)) athMemo.m.set(k, athleteHistory(DATA, who, day, { locked: LOCKED, merges: DATA.nameMerges || [] }));
+  return athMemo.m.get(k);
+}
+// "בתחרות הזו": the place in the same ranking the table shows, the category place (rankInCats / per-category lead
+// ranking, as the category chips), next round = the table's own qualifying number (national boulder quota, World
+// Climbing r.adv, national lead info.quota; none in a last round or while the round still runs)
+function athNow(r, res, bib) {
+  const full = rankedOf(r.id) || [], row = full.find(x => sameBib(x.bib, bib)); if (!row) return null;
+  const g = genderOf(r.id), running = !!(res.live && !res.complete);
+  let catPlace = null, catText = '';
+  if (!res.intl && row.cat && row.cat !== 'S' && row.rank != null && catOptions(res.rows, g).some(o => o.cats?.length === 1 && o.cats[0] === row.cat)) {
+    const sub = res.lead ? (res.file ? leadRanked(toLeadResults({ rows: res.file.filter(x => x.cat === row.cat) }, r.id, leadPrevRank(r.id)).rows) : null)
+      : rankInCats(res.rows, [row.cat], prevRankOf(r.id));
+    const me = sub && sub.length !== full.length ? sub.find(x => sameBib(x.bib, bib)) : null;
+    if (me?.rank != null) { catPlace = me.rank; catText = row.cat; }
+  }
+  const q = res.intl ? (/-f(-[a-z])?$/.test(r.id) ? 0 : r.adv || 0)
+    : res.lead ? (res.final || lastRound(r.id) ? 0 : r.info?.quota || 0)
+    : res.final ? 0 : res.live ? quota(res.rows.length) : analyze(full, full[0]).quota;
+  const adv = q && !running && row.rank != null ? row.rank <= q : null;
+  return { place: row.rank ?? null, overall: row.rank ?? null, catPlace, catText, adv, live: !!res.live };
+}
+// coach notes on this person: notes on a start-list slot whose name is this person (same gender + tokens, name merges)
+function athNotes(who) {
+  if (VIEWER || !who.key) return [];
+  const keys = keysOf(who.key, DATA.nameMerges || []);
+  return store.notes(n => { const r = n.k != null && round(n.round), s = r && r.slots?.[n.k]; return !!s && keys.has(personKey(s.name, genderOf(r.id))); });
+}
+const WC_ATH_KEY = aid => 'comps.wcAth.' + aid, WC_ATH_TTL = 24 * 3600e3;
+const wcAthBusy = new Set();
+// World Climbing part: the device's copy right away (fresh < 24 h → no call), else "loading" + one Worker call; the
+// answer re-renders the sheet only while it still shows this athlete; failure → 'error'. An older copy stays on the card
+// while refetching and after a failure (the card adds the loading line / "נתוני World Climbing מ-dd/mm · אין חיבור כרגע")
+function athWc() {
+  const aid = ATH.aid;
+  if (aid == null) { ATH.wcState = 'none'; return; }
+  let c = null; try { c = JSON.parse(localStorage.getItem(WC_ATH_KEY(aid)) || 'null'); } catch { /* no storage */ }
+  ATH.wc = c?.d || null; ATH.wcAt = c?.d ? c.at : null;
+  ATH.wcState = c?.d && Date.now() - c.at < WC_ATH_TTL ? 'ok' : 'loading';
+  if (ATH.wcState === 'ok' || wcAthBusy.has(aid)) return;
+  wcAthBusy.add(aid);
+  const here = () => ATH?.aid === aid && $('#ath-dlg').open;
+  fbCall('/ifsc/athlete?id=' + aid, undefined, 10000).then(d => {
+    if (!d || typeof d !== 'object' || d.error) throw new Error('bad');
+    try { localStorage.setItem(WC_ATH_KEY(aid), JSON.stringify({ at: Date.now(), d })); } catch { /* private mode */ }
+    if (here()) { ATH.wc = d; ATH.wcAt = Date.now(); ATH.wcState = 'ok'; renderAth(); }
+  }).catch(() => { if (here()) { ATH.wcState = 'error'; renderAth(); } }).finally(() => wcAthBusy.delete(aid));
+}
+function athRow(a) {
+  const r = round(a.rid), res = r && resultsOf(a.rid), row = res?.rows?.find(x => sameBib(x.bib, a.bib));
+  return row ? { r, res, row } : null;
+}
+function renderAth() {
+  const dlg = $('#ath-dlg'), x = ATH && athRow(ATH);
+  if (!x) { if (dlg.open) dlg.close(); return; }
+  const { r, res, row } = x, g = genderOf(r.id), who = whoFromRow(row, r, DATA);
+  const mine = res.intl ? !!intlMineByBib(res.rows, DATA.intlMine)[row.bib] : mineOf(r.id).some(m => sameBib(r.slots?.[m.k]?.bib, row.bib));
+  const now = ATH.fin != null ? (ATH.fin === '' ? null : { place: Number(ATH.fin), overall: Number(ATH.fin), catPlace: null, catText: '', adv: null, live: false }) : athNow(r, res, row.bib);
+  const body = $('#ath-body'), top = body.scrollTop;
+  body.innerHTML = athleteCardHtml({ name: row.name, club: res.intl ? '' : row.club, country: row.country || (res.intl ? row.club : ''),
+    catLabel: row.cat && row.cat !== 'S' ? catLabel(row.cat, g) : roundTitle(r.title).split(' · ')[0], gender: g, mine, now,
+    hist: athHist(who), wc: ATH.wc, wcState: ATH.wcState, wcAt: ATH.wcAt, disc: ATH.disc, viewer: VIEWER, notes: athNotes(who).length, roundId: r.id, catMode: ATH.catMode });
+  body.scrollTop = top;
+}
+function openAthlete(rid, bib, fin = null) {
+  const a = { rid, bib, fin, disc: round(rid)?.lead ? 'L' : 'B', catMode: 0, aid: null, wc: null, wcState: 'none' };
+  const x = athRow(a); if (!x) return;
+  const aid = whoFromRow(x.row, x.r, DATA).aid;
+  a.aid = aid != null && /^\d{1,7}$/.test(String(aid)) ? Number(aid) : null;
+  ATH = a; athWc();
+  $('#ath-body').scrollTop = 0; renderAth();
+  const dlg = $('#ath-dlg'); if (!dlg.open) dlg.showModal();
+}
+function athToRound(id) {
+  if (!round(id)) return;
+  $('#ath-dlg').close(); goRound(id); if (screen !== 'round') showScreen('round'); window.scrollTo(0, 0);
+}
+function athClick(e) {
+  const dlg = $('#ath-dlg');
+  if (e.target === dlg) { dlg.close(); return; } // the dim area around the sheet
+  const b = e.target.closest('button'); if (!b || !ATH) return;
+  const d = b.dataset;
+  if (b.id === 'ath-x') dlg.close();
+  else if (d.athDisc) { ATH.disc = d.athDisc === 'L' ? 'L' : 'B'; renderAth(); }
+  else if (d.athCat != null) { ATH.catMode = d.athCat === '1' ? 1 : 0; renderAth(); }
+  else if (d.athRound) athToRound(d.athRound);
+  else if (d.athEv) { // a World Climbing result → the portal's competition of that event, if it has one
+    const evs = homeEvents(), i = evs.findIndex(x => x.event.ifscId != null && String(x.event.ifscId) === d.athEv); if (i < 0) return;
+    dlg.close(); homeFinal = null; homeSeason = seasonOf(evs[i]); homeFrom = homeSeason; homeOpenEvent = i; showScreen('home'); window.scrollTo(0, 0);
+  } else if (d.athNotes != null && !VIEWER) { // the notes screen, all rounds, this athlete's name chip
+    const ax = athRow(ATH); if (!ax) return;
+    const ns = athNotes(whoFromRow(ax.row, round(ATH.rid), DATA)).sort((p, q) => q.at - p.at); if (!ns.length) return;
+    athToRound(ns[0].round); logAll = true; logName = ns[0].short; editId = null; setView('log');
+  }
+}
+
 // ---- home: all rounds by event / day, tap to open ----
 function roundEndMs(r) { return engineEnd(r, off(r.id)); }
 
@@ -1170,7 +1282,7 @@ function renderFinal() {
   const f = fs.find(x => x.key === homeFinal.key) || fs[0];
   if (!f) { homeFinal = null; return renderHome(); }
   const two = /-r2$/.test(f.id), fin = f.rows.filter(x => x.round === 2).length;
-  const tr = x => `<tr class="${f.mine.has(x.bib) ? 'fin-me' : ''}"><td class="fin-rk">${x.rank == null ? '—' : x.rank <= 3 ? `<span class="medal">${x.rank}</span>` : x.rank}</td><td class="fin-nm">${esc(x.name)}<small>${esc(x.club || '')}</small></td>${two ? `<td><span class="fin-rd r${x.round}">R${x.round}</span></td>` : ''}<td class="fin-pt">${x.score == null ? gw(f.id, 'לא התחיל', 'לא התחילה') : typeof x.score === 'number' ? x.score.toFixed(1) : `<bdi dir="ltr">${esc(x.score)}</bdi>`}</td></tr>`; // 3.29.0: lead = text (points "1.225" / height "38+")
+  const tr = x => `<tr class="${f.mine.has(x.bib) ? 'fin-me' : ''}"><td class="fin-rk">${x.rank == null ? '—' : x.rank <= 3 ? `<span class="medal">${x.rank}</span>` : x.rank}</td><td class="fin-nm">${athBtn(x.round === 2 || !two ? f.id : f.id.replace(/-r2$/, '-r1'), x.bib, esc(x.name), { fin: true, place: x.rank })}<small>${esc(x.club || '')}</small></td>${two ? `<td><span class="fin-rd r${x.round}">R${x.round}</span></td>` : ''}<td class="fin-pt">${x.score == null ? gw(f.id, 'לא התחיל', 'לא התחילה') : typeof x.score === 'number' ? x.score.toFixed(1) : `<bdi dir="ltr">${esc(x.score)}</bdi>`}</td></tr>`; // 3.29.0: lead = text (points "1.225" / height "38+")
   const firstOut = f.rows.findIndex(x => x.round === 1);
   const body = f.rows.map((x, i) => (two && i === firstOut ? `<tr class="fin-cut"><td colspan="4">לא עלו לראונד השני · לפי הראונד הראשון</td></tr>` : '') + tr(x)).join('');
   patch($('#home'), `<div class="h-head"><h2 class="h-event fin-h">${CUP}תוצאות סופיות <span class="muted">· ${esc(evName(cur.event))}</span></h2></div>
@@ -2281,8 +2393,8 @@ function deletePhoto(rid, b) {
 const FB_STATUS = { new: 'חדש', in_progress: 'בטיפול', done: 'טופל', wont_do: 'לא יטופל' };
 const FB_TYPE = { bug: 'תקלה', suggestion: 'הצעה' };
 let fbType = 'bug', fbFilter = 'open', fbAll = [];
-async function fbCall(path, body) {
-  const res = await fetch(SYNC_URL + path, { method: body ? 'POST' : 'GET', headers: await authHeaders(VIEWER), body: body && JSON.stringify(body) });
+async function fbCall(path, body, timeoutMs) { // timeoutMs only where a stalled network must end in the error state (athlete card)
+  const res = await fetch(SYNC_URL + path, { method: body ? 'POST' : 'GET', headers: await authHeaders(VIEWER), body: body && JSON.stringify(body), ...(timeoutMs && AbortSignal.timeout ? { signal: AbortSignal.timeout(timeoutMs) } : {}) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || String(res.status));
   return data;
@@ -2639,6 +2751,10 @@ function start() {
   $('#video-x').addEventListener('click', () => $('#video-dlg').close());
   $('#video-dlg').addEventListener('close', () => { $('#video-frame').src = 'about:blank'; }); // tap anywhere closes the big photo
   $('#tags-dlg').addEventListener('click', tagClick);
+  // 3.33.0 athlete card: a name in a results table → the sheet; the sheet's own taps; closing forgets the athlete
+  document.addEventListener('click', e => { const b = e.target.closest('[data-ath]'); if (!b) return; const [rid, bib] = b.dataset.ath.split('|'); openAthlete(rid, bib, b.dataset.athFin ?? null); });
+  $('#ath-dlg').addEventListener('click', athClick);
+  $('#ath-dlg').addEventListener('close', e => { if (!e.target.open) ATH = null; }); // (a close queued before a quick re-open must not drop the new one)
   // tag popover on the board: tap a tag → show; tap anywhere else / scroll → hide
   document.addEventListener('click', e => { const b = e.target.closest('[data-tg-pop]'); if (b) showTagPop(b); else $('#tag-pop').hidden = true; }, true);
   addEventListener('scroll', () => { $('#tag-pop').hidden = true; }, { passive: true });

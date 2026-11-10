@@ -1437,3 +1437,77 @@ body.lead-live #round-screen > section { min-width: 0; } /* grid item: let the f
 .wi td.wi-up { font-weight: 700; }
 .wi td .d { display: block; color: var(--ok); font-weight: 600; }
 .wi td .pt { display: block; color: var(--muted); font-weight: 500; }
+
+/* 3.33.0 athlete card (web/athleteCard.js) — the sheet body; the sheet itself is app.js (Task 7) */
+.ac { color: var(--navy); font-size: 14px; line-height: 1.45; }
+.ac-who { display: flex; gap: 12px; align-items: center; margin: 6px 0 10px; }
+.ac-av { width: 58px; height: 58px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 800; font-size: 20px; background: var(--copper-bg); color: var(--copper-text); object-fit: cover; }
+.ac-name { margin: 0; font-size: 19px; line-height: 1.25; overflow-wrap: anywhere; }
+.ac-who p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.ac-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.ac-bdg { font-size: 12px; font-weight: 600; border-radius: var(--r-pill); padding: 2px 9px; background: var(--chalk); color: var(--navy); }
+.ac-bdg.mine { background: var(--copper-bg); color: var(--copper-text); }
+.ac-bdg.wc { background: var(--added-bg); color: var(--added); }
+.ac-disc { display: flex; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.ac-disc button { flex: 1; font: inherit; font-size: 14px; font-weight: 700; color: var(--muted); background: none; border: 0; padding: 9px 0; cursor: pointer; }
+.ac-disc button[aria-pressed="true"] { color: var(--navy); box-shadow: inset 0 -2px var(--copper); }
+.ac-now { background: var(--copper-bg); color: var(--navy); border-radius: var(--r-sm); padding: 9px 11px; font-size: 13px; }
+.ac-now b { color: var(--copper-text); }
+.ac-now .ltag { vertical-align: 1px; }
+.ac-live { color: var(--live); font-weight: 700; }
+.ac-h { margin: 16px 0 8px; font-size: 15px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ac-h small { font-weight: 500; color: var(--muted); font-size: 12px; }
+.ac-cat { margin-bottom: 8px; }
+.ac-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.ac-tile { background: var(--chalk); border-radius: var(--r-sm); padding: 8px 4px; text-align: center; }
+.ac-tile b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+.ac-tile span { font-size: 11px; color: var(--muted); }
+.ac-trend { width: 100%; height: 74px; display: block; }
+.ac-trend .ac-grid { stroke: var(--line); }
+.ac-trend .ac-line { fill: none; stroke: var(--copper); stroke-width: 2.5; }
+.ac-trend .ac-pt { fill: var(--card); stroke: var(--copper); stroke-width: 2; }
+.ac-trend .ac-pt.last { fill: var(--copper); }
+.ac-trend text { fill: var(--muted); font-size: 10px; font-family: var(--font); }
+.ac-msg { color: var(--muted); font-size: 13px; margin: 12px 0; }
+.ac-pod { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ac-pod th { color: var(--muted); font-weight: 600; font-size: 12px; text-align: center; padding: 3px; }
+.ac-pod td { text-align: center; padding: 4px 3px; border-bottom: 1px solid var(--line); }
+.ac-pod td:first-child { text-align: start; color: var(--muted); }
+.ac-cups { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.ac-cups li { background: var(--chalk); border-radius: var(--r-sm); padding: 4px 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ac-rl { list-style: none; margin: 0; padding: 0; }
+.ac-row { width: 100%; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "ty ev yr" "ty ev pl"; column-gap: 8px; align-items: center; padding: 9px 0; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; color: var(--navy); text-align: start; }
+button.ac-row { cursor: pointer; }
+.ac-ty { grid-area: ty; font-size: 11px; font-weight: 700; border-radius: var(--r-sm); text-align: center; padding: 2px 0; }
+.ac-ty.il { color: var(--ev-il); background: var(--chalk); }
+.ac-ty.wc { color: var(--added); background: var(--added-bg); }
+.ac-ev { grid-area: ev; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.ac-ev small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+.ac-yr { grid-area: yr; color: var(--muted); font-size: 12px; text-align: end; }
+.ac-pl { grid-area: pl; font-weight: 800; font-size: 13px; text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ac-pl.pod { color: var(--copper-text); }
+.ac-link { display: block; text-align: center; margin-top: 12px; font-weight: 700; font-size: 14px; color: var(--added); border: 1.5px solid var(--added); border-radius: var(--r-sm); padding: 8px; text-decoration: none; }
+.ac-notes { display: block; width: 100%; margin-top: 14px; border: 1.5px dashed var(--border); border-radius: var(--r-sm); padding: 9px 11px; font: inherit; font-size: 13px; color: var(--muted); background: none; text-align: start; cursor: pointer; }
+@media (max-width: 600px) { .ac-tile b { font-size: 18px; } .ac-pl { white-space: normal; } }
+
+/* 3.33.0 athlete card — Task 7: the name button in results tables + the bottom sheet (#ath-dlg, app.js renderAth).
+   The name looks exactly like the old text (no layout change); a dashed underline only on hover / keyboard focus. */
+.ath-nm { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: inherit; letter-spacing: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ath-nm:is(:hover, :focus-visible) { text-decoration: underline dashed; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.ath-nm:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; border-radius: var(--r-sm); }
+.ath-sheet { border: 0; padding: 0; margin: 0 auto; position: fixed; inset: auto 0 0 0; width: 100%; max-width: 100%; height: 88dvh; max-height: 88dvh;
+  background: var(--card); color: var(--navy); border-radius: var(--r) var(--r) 0 0; box-shadow: 0 -10px 40px rgba(46, 26, 71, .25); overflow: hidden; flex-direction: column; }
+.ath-sheet[open] { display: flex; }
+.ath-sheet::backdrop { background: rgba(46, 26, 71, .35); }
+:root:is([data-theme="plum"], [data-theme="charcoal"], [data-theme="black"]) .ath-sheet::backdrop { background: rgba(0, 0, 0, .6); }
+.ath-sheet-head { flex: none; display: flex; align-items: center; justify-content: flex-end; padding: 8px 10px 0; position: relative; }
+.ath-grip { position: absolute; top: 8px; inset-inline: 0; margin: 0 auto; width: 40px; height: 4px; border-radius: var(--r-pill); background: var(--border); }
+.ath-sheet-head .icon-btn { width: 34px; height: 34px; font-size: 16px; }
+.ath-sheet-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 0 16px calc(16px + env(safe-area-inset-bottom)); }
+/* phone results table: the name is clipped with "…" (td.n b nowrap + ellipsis) — the button must clip itself */
+@media (max-width: 600px) { .res-tbl td.n .ath-nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; } }
+@media (min-width: 700px) { .ath-sheet { max-width: 520px; height: min(88dvh, 820px); } }
+@media (prefers-reduced-motion: no-preference) {
+  .ath-sheet[open] { animation: ath-up .22s ease-out; }
+  @keyframes ath-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+}

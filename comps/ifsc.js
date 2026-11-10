@@ -14,7 +14,7 @@ export function intlMineByBib(rows, list) {
 export const IFSC_POLL_MS = 15000;
 
 export function ifscResults(d) {
-  const rows = (d.rows || []).map(x => ({ bib: x.bib, name: x.name, club: x.country, country: x.country, cat: null, ifscRank: x.ifscRank ?? null, bs: x.bs, ...(x.ap?.length ? { ap: x.ap } : {}) }));
+  const rows = (d.rows || []).map(x => ({ bib: x.bib, name: x.name, club: x.country, country: x.country, cat: null, ifscRank: x.ifscRank ?? null, bs: x.bs, ...(x.ap?.length ? { ap: x.ap } : {}), ...(x.aid != null ? { aid: x.aid } : {}) }));
   const done = rows.reduce((n, r) => n + r.bs.filter(Boolean).length, 0), total = rows.length * (d.nB || 0);
   return { rows, status: d.status, live: d.status !== 'finished', done, total, started: rows.filter(r => r.bs.some(Boolean)).length,
     complete: d.status === 'finished' || (total > 0 && done === total), updated: d.updated || null, final: true, intl: true };
@@ -24,7 +24,7 @@ export function ifscResults(d) {
 // shape. No boulder cells (bs []) — places, cards and the table come from World Climbing's own rank and score text.
 export function ifscLeadResults(d) {
   const rows = (d.rows || []).map(x => ({ bib: x.bib, name: x.name, club: x.country, country: x.country, cat: null, ifscRank: x.ifscRank ?? null, score: x.score ?? null,
-    ...(x.rs ? { rs: x.rs } : {}), ...(x.time != null ? { time: x.time } : {}), bs: [] }));
+    ...(x.rs ? { rs: x.rs } : {}), ...(x.time != null ? { time: x.time } : {}), ...(x.aid != null ? { aid: x.aid } : {}), bs: [] }));
   const started = rows.filter(r => r.ifscRank != null).length;
   return { rows, status: d.status, live: d.status !== 'finished', done: started, total: rows.length, started, complete: d.status === 'finished',
     updated: d.updated || null, final: true, intl: true, lead: true, nR: d.nR || 1 };
@@ -43,9 +43,10 @@ const fmtTime = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) 
 // (· time when given). ranked = leadRanked(); adv = how many go on (qualifying line before the first one out).
 // 3.18.0: mine = Set of my athletes' bibs → they get the marked row, other Israelis a plain tint ('isr'); without it every Israeli is marked
 // 3.21.0: waiting = the round is not over yet → an unranked climber is still to climb (not DNS)
+// 3.33.0: nameHtml(name, row, flag) → the name cell's content incl. the 🇮🇱 flag (app.js wraps it in the athlete-card button)
 // 3.28.0 national: catOf(x) → category label after the club ('' = none), overall = Map bib → place in the whole round (a category
 // view shows it small under the place; the qualifying line then follows the overall place, as in boulder)
-export function leadTableHtml(ranked, { nR = 1, adv = 0, onlyIsr = false, fem = false, nameHtml = esc, mine = null, waiting = false, catOf = null, overall = null, fresh = null } = {}) {
+export function leadTableHtml(ranked, { nR = 1, adv = 0, onlyIsr = false, fem = false, nameHtml = (n, x, flag = '') => flag + esc(n), mine = null, waiting = false, catOf = null, overall = null, fresh = null } = {}) {
   const multi = nR > 1, hasTime = !multi && ranked.some(x => x.time != null);
   const span = 3 + (multi ? nR : 0) + (hasTime ? 1 : 0);
   const sc = (s, cls) => `<td class="${cls}${isTop(s) ? ' top' : ''}">${s == null ? '–' : `<bdi dir="ltr">${esc(s)}</bdi>`}`;
@@ -55,7 +56,7 @@ export function leadTableHtml(ranked, { nR = 1, adv = 0, onlyIsr = false, fem = 
     let pre = '';
     const ov = overall ? overall.get(x.bib) : x.rank, ct = catOf ? catOf(x) : '';
     if (adv && !cut && x.rank != null && ov > adv) { cut = true; pre = `<tr class="cut"><td colspan="${span}">קו העלייה לראונד הבא · ${adv} עולים${overall ? ' לפי הדירוג הכללי' : ''}</td></tr>`; }
-    const name = `<td class="n"><b>${isIsr(x) ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : ''}${nameHtml(x.name)}</b><small>${esc(x.club)}${ct ? ` · ${esc(ct)}` : ''}</small></td>`;
+    const name = `<td class="n"><b>${nameHtml(x.name, x, isIsr(x) ? '<span class="flag" aria-label="ישראל">🇮🇱</span> ' : '')}</b><small>${esc(x.club)}${ct ? ` · ${esc(ct)}` : ''}</small></td>`;
     if (x.rank == null) return pre + `<tr${rowCls(x)}><td class="rk">–</td>${name}<td colspan="${span - 2}" class="muted small">${waiting ? (fem ? 'עוד לא טיפסה' : 'עוד לא טיפס') : fem ? 'לא התחילה (DNS)' : 'לא התחיל (DNS)'}</td></tr>`;
     const fr = j => (fresh?.has(`${x.bib}:${j}`) ? ' fresh' : ''); // 3.29.0: a result that just came in blinks
     const routes = multi ? Array.from({ length: nR }, (_, j) => { const r = x.rs?.[j]; return sc(r?.[0], 'lh' + fr(j)) + (r?.[1] != null ? `<small>(${r[1]})</small>` : '') + '</td>'; }).join('') : '';

@@ -12,8 +12,12 @@ import { ifscAnyResults, ifscRanked, leadRanked, intlMineByBib, genderOf } from 
 import { seasonsOf, seasonStart, seasonEnd } from './seasons.js';
 
 const EMPTY = () => ({ current: null, seasons: [] });
-export function myHistory(data, athleteId, todayYmd, { locked } = {}) {
-  if (!athleteId || !data) return EMPTY();
+// 3.33.0 (athlete card): the history of whoever pick() selects. pick = { national(round, res), intl(round, res) } → Set of
+// string bibs in that round's results rows. Same shape as myHistory; each comp also carries overall (place in the whole
+// round), catPlace (place in his single-category chip, else null), catKey (raw national cat code, else null), disc 'B'|'L',
+// intl, final (counted in current.finals). myHistory = historyOf with today's "שלי" bibs, the extra fields stripped.
+export function historyOf(data, pick, todayYmd, { locked } = {}) {
+  if (!data || !pick) return EMPTY();
   const rounds = data.rounds || [], ids = rounds.map(r => r.id), byId = Object.fromEntries(rounds.map(r => [r.id, r]));
   // same order as app.js resultsOf: results file > (international: saved ifscData | national: locked = app.js LOCKED)
   const resultsOf = id => data.results?.[id] || (byId[id]?.ifsc ? (data.ifscData?.[id] ? ifscAnyResults(data.ifscData[id]) : null) : locked?.[id] || null);
@@ -21,16 +25,15 @@ export function myHistory(data, athleteId, todayYmd, { locked } = {}) {
   const rankedOf = id => { if (id in cache) return cache[id]; const res = resultsOf(id); if (!res) return (cache[id] = null);
     const v = res.lead ? leadRanked(res.rows) : rankRows(res.rows, prevRankOf(id)); return (cache[id] = res.intl && !res.lead ? ifscRanked(v) : v); };
   const prevRankOf = id => { const p = id.replace(/-r2$/, '-r1'), v = p !== id && resultsOf(p) ? rankedOf(p) : null; return v && Object.fromEntries(v.map(x => [x.bib, x.rank])); };
-  const mineIntl = (data.intlMine || []).filter(a => a?.id === athleteId);
-  // → { place, line, score, cat } of the athlete's ranked row in round r, or null (score = the results table's points, boulder only)
+  // → { place, overall, catPlace, catKey, line, score, cat, disc, intl } of the picked ranked row in round r, or null
   const resultIn = r => {
     const res = resultsOf(r.id); if (!res) return null;
-    const bibs = new Set(res.intl ? Object.keys(intlMineByBib(res.rows, mineIntl)).map(String)
-      : (data.mine?.[r.id] || []).filter(m => m?.id === athleteId).map(m => r.slots?.[m.k]?.bib).filter(b => b != null).map(String));
+    const bibs = (res.intl ? pick.intl : pick.national)?.(r, res) || new Set();
     const full = rankedOf(r.id), row = bibs.size ? full.find(x => bibs.has(String(x.bib)) && x.rank != null) : null; if (!row) return null;
     const g = genderOf(r.id), opt = res.intl ? null : catOptions(res.rows, g).find(o => o.cats?.length === 1 && o.cats[0] === row.cat);
     const shown = opt ? rankInCats(res.rows, opt.cats, prevRankOf(r.id)).find(x => x.bib === row.bib) : row;
-    return { place: shown.rank, line: res.lead ? '' : tzText(row.bs), score: res.lead ? null : score(row.bs), cat: catLabel(row.cat, g) };
+    return { place: shown.rank, overall: row.rank, catPlace: opt ? shown.rank : null, catKey: res.intl ? null : row.cat || null,
+      line: res.lead ? '' : tzText(row.bs), score: res.lead ? null : score(row.bs), cat: catLabel(row.cat, g), disc: res.lead ? 'L' : 'B', intl: !!res.intl };
   };
   // a final = World Climbing's '-f', or a national league's last round of 2+ ('sen-m-r2' — app.js: "seniors R2 = the final");
   // with '-f' alone no national final would ever count. A single-round competition (u17-m) is not a final.
@@ -42,7 +45,8 @@ export function myHistory(data, athleteId, todayYmd, { locked } = {}) {
     for (const r of rs) { const x = resultIn(r); if (x) last = { r, x }; }
     if (!last) continue;
     comps.push({ season: seasonsOf([e])[0].id, final: isFinal(last.r.id), c: { eventId: e.id, title: e.title, date: e.dates?.[0] || rs.map(r => r.date).sort()[0],
-      cat: last.x.cat, roundId: last.r.id, roundLabel: last.r.title, place: last.x.place, line: last.x.line, score: last.x.score } });
+      cat: last.x.cat, roundId: last.r.id, roundLabel: last.r.title, place: last.x.place, line: last.x.line, score: last.x.score,
+      overall: last.x.overall, catPlace: last.x.catPlace, catKey: last.x.catKey, disc: last.x.disc, intl: last.x.intl, final: isFinal(last.r.id) } });
   }
   const seasons = seasonsOf((data.events || []).filter(e => comps.some(c => c.c.eventId === e.id))).reverse().map(({ id, label }) => ({ id, label,
     comps: comps.filter(c => c.season === id).map(c => c.c).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)) }));
@@ -51,6 +55,19 @@ export function myHistory(data, athleteId, todayYmd, { locked } = {}) {
     .reduce((b, s) => (!b || s.comps[0].date > b.comps[0].date ? s : b), null) : null;
   return { current: cur ? { seasonId: cur.id, count: cur.comps.length, finals: comps.filter(c => c.season === cur.id && c.final).length,
     best: Math.min(...cur.comps.map(c => c.place)) } : null, seasons };
+}
+
+// "שלי" (stage A): today's athlete by the Palgi app id — national: DATA.mine[round][*].id (slot k → bib), international:
+// DATA.intlMine[*].id (World Climbing name → bib, Israelis only). Output exactly as before 3.33.0 (extra fields stripped).
+export function myHistory(data, athleteId, todayYmd, { locked } = {}) {
+  if (!athleteId || !data) return EMPTY();
+  const mineIntl = (data.intlMine || []).filter(a => a?.id === athleteId);
+  const pick = {
+    national: r => new Set((data.mine?.[r.id] || []).filter(m => m?.id === athleteId).map(m => r.slots?.[m.k]?.bib).filter(b => b != null).map(String)),
+    intl: (r, res) => new Set(Object.keys(intlMineByBib(res.rows, mineIntl)).map(String)),
+  };
+  const h = historyOf(data, pick, todayYmd, { locked });
+  return { current: h.current, seasons: h.seasons.map(s => ({ ...s, comps: s.comps.map(({ overall, catPlace, catKey, disc, intl, final, ...c }) => c) })) };
 }
 
 // one category style on every "שלי" row: [category, stage] → "נערים U19 · ראונד 2" (labels.js catHe / roundTitle).
