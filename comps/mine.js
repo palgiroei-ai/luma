@@ -9,6 +9,7 @@
 import { catHe, roundTitle } from './labels.js';
 import { rankRows, rankInCats, catOptions, catLabel, isLastRound, tzText, score, quota } from './results.js';
 import { ifscAnyResults, ifscRanked, leadRanked, intlMineByBib, genderOf } from './ifsc.js';
+import { toLeadResults } from './leadRank.js';
 import { seasonsOf, seasonStart, seasonEnd, evMeta } from './seasons.js';
 
 // 3.34.0 (athlete card seniors / youth): a competition's age group — 'Y' = a youth event (event age youth: youth
@@ -31,14 +32,21 @@ export function historyOf(data, pick, todayYmd, { locked } = {}) {
   const rankedOf = id => { if (id in cache) return cache[id]; const res = resultsOf(id); if (!res) return (cache[id] = null);
     const v = res.lead ? leadRanked(res.rows) : rankRows(res.rows, prevRankOf(id)); return (cache[id] = res.intl && !res.lead ? ifscRanked(v) : v); };
   const prevRankOf = id => { const p = id.replace(/-r2$/, '-r1'), v = p !== id && resultsOf(p) ? rankedOf(p) : null; return v && Object.fromEntries(v.map(x => [x.bib, x.rank])); };
+  const leadPrevOf = id => { const o = prevRankOf(id); return o && new Map(Object.entries(o).filter(([, v]) => v != null).map(([b, v]) => [isNaN(b) ? b : +b, v])); }; // app.js leadPrevRank (Map by bib)
   // → { place, overall, catPlace, catKey, line, score, cat, disc, intl } of the picked ranked row in round r, or null
   const resultIn = r => {
     const res = resultsOf(r.id); if (!res) return null;
     const bibs = (res.intl ? pick.intl : pick.national)?.(r, res) || new Set();
     const full = rankedOf(r.id), row = bibs.size ? full.find(x => bibs.has(String(x.bib)) && x.rank != null) : null; if (!row) return null;
     const g = genderOf(r.id), opt = res.intl ? null : catOptions(res.rows, g).find(o => o.cats?.length === 1 && o.cats[0] === row.cat);
-    const shown = opt ? rankInCats(res.rows, opt.cats, prevRankOf(r.id)).find(x => x.bib === row.bib) : row;
-    return { place: shown.rank, overall: row.rank, catPlace: opt ? shown.rank : null, catKey: res.intl ? null : row.cat || null,
+    // 3.34.2: national LEAD = the results screen's category chip (app.js renderNatLead): the category's raw rows (res.file)
+    // re-ranked by World Climbing lead rules, R2 counting back to R1. No raw rows (nothing to re-rank) → whole-round place.
+    let shown = row;
+    if (opt && res.lead && !res.intl) {
+      const sub = res.file ? leadRanked(toLeadResults({ rows: res.file.filter(x => opt.cats.includes(x.cat)) }, r.id, leadPrevOf(r.id)).rows) : null;
+      shown = sub?.find(x => x.bib === row.bib && x.rank != null) || row;
+    } else if (opt) shown = rankInCats(res.rows, opt.cats, prevRankOf(r.id)).find(x => x.bib === row.bib);
+    return { place: shown.rank, overall: row.rank, catPlace: opt && shown !== row ? shown.rank : null, catKey: res.intl ? null : row.cat || null,
       line: res.lead ? '' : tzText(row.bs), score: res.lead ? null : score(row.bs), cat: catLabel(row.cat, g), disc: res.lead ? 'L' : 'B', intl: !!res.intl };
   };
   // a final = World Climbing's '-f', or a national league's last round of 2+ ('sen-m-r2' — app.js: "seniors R2 = the final");
