@@ -9,13 +9,19 @@
 import { catHe, roundTitle } from './labels.js';
 import { rankRows, rankInCats, catOptions, catLabel, isLastRound, tzText, score } from './results.js';
 import { ifscAnyResults, ifscRanked, leadRanked, intlMineByBib, genderOf } from './ifsc.js';
-import { seasonsOf, seasonStart, seasonEnd } from './seasons.js';
+import { seasonsOf, seasonStart, seasonEnd, evMeta } from './seasons.js';
+
+// 3.34.0 (athlete card seniors / youth): a competition's age group — 'Y' = a youth event (event age youth: youth
+// championships, European Youth Cup, Youth Worlds), a national youth-league round (U17 / U15 round ids: u17-m, bl2-u17-w,
+// lead1-u17-m-r1) or a World Climbing category with an age (w1494b-m19-q); everything else 'S' (seniors — also a senior
+// league round climbed by a U19 athlete). Event without age (older payload) → seniors.
+export const compAge = (event, roundId) => (event?.age === 'youth' || /(^|-)(u1\d|[mw]1\d)(-|$)/i.test(String(roundId || '')) ? 'Y' : 'S');
 
 const EMPTY = () => ({ current: null, seasons: [] });
 // 3.33.0 (athlete card): the history of whoever pick() selects. pick = { national(round, res), intl(round, res) } → Set of
 // string bibs in that round's results rows. Same shape as myHistory; each comp also carries overall (place in the whole
 // round), catPlace (place in his single-category chip, else null), catKey (raw national cat code, else null), disc 'B'|'L',
-// intl, final (counted in current.finals). myHistory = historyOf with today's "שלי" bibs, the extra fields stripped.
+// intl, final (counted in current.finals), age 'S'|'Y' + type (event series, seasons.js TYPES keys; 3.34.0). myHistory = historyOf with today's "שלי" bibs, the extra fields stripped.
 export function historyOf(data, pick, todayYmd, { locked } = {}) {
   if (!data || !pick) return EMPTY();
   const rounds = data.rounds || [], ids = rounds.map(r => r.id), byId = Object.fromEntries(rounds.map(r => [r.id, r]));
@@ -46,7 +52,8 @@ export function historyOf(data, pick, todayYmd, { locked } = {}) {
     if (!last) continue;
     comps.push({ season: seasonsOf([e])[0].id, final: isFinal(last.r.id), c: { eventId: e.id, title: e.title, date: e.dates?.[0] || rs.map(r => r.date).sort()[0],
       cat: last.x.cat, roundId: last.r.id, roundLabel: last.r.title, place: last.x.place, line: last.x.line, score: last.x.score,
-      overall: last.x.overall, catPlace: last.x.catPlace, catKey: last.x.catKey, disc: last.x.disc, intl: last.x.intl, final: isFinal(last.r.id) } });
+      overall: last.x.overall, catPlace: last.x.catPlace, catKey: last.x.catKey, disc: last.x.disc, intl: last.x.intl, final: isFinal(last.r.id),
+      age: compAge(e, last.r.id), type: evMeta(e).type } });
   }
   const seasons = seasonsOf((data.events || []).filter(e => comps.some(c => c.c.eventId === e.id))).reverse().map(({ id, label }) => ({ id, label,
     comps: comps.filter(c => c.season === id).map(c => c.c).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)) }));
@@ -67,7 +74,7 @@ export function myHistory(data, athleteId, todayYmd, { locked } = {}) {
     intl: (r, res) => new Set(Object.keys(intlMineByBib(res.rows, mineIntl)).map(String)),
   };
   const h = historyOf(data, pick, todayYmd, { locked });
-  return { current: h.current, seasons: h.seasons.map(s => ({ ...s, comps: s.comps.map(({ overall, catPlace, catKey, disc, intl, final, ...c }) => c) })) };
+  return { current: h.current, seasons: h.seasons.map(s => ({ ...s, comps: s.comps.map(({ overall, catPlace, catKey, disc, intl, final, age, type, ...c }) => c) })) };
 }
 
 // one category style on every "שלי" row: [category, stage] → "נערים U19 · ראונד 2" (labels.js catHe / roundTitle).

@@ -2,13 +2,14 @@
 // owns the sheet, the taps and the World Climbing fetch. Sections (approved mock): header · badges · discipline tabs
 // בולדר / הובלה (no speed) · "בתחרות הזו" · season summary (+ overall / category toggle) · trend · World Climbing
 // (podiums + World Cup rank per season) · results newest first · link · coach notes. Every interpolated value → esc.
-// Data attributes for app.js: data-ath-disc="B|L", data-ath-cat="0|1", data-ath-round="<round id>", data-ath-ev="<WC event
+// 3.34.0: toggle בוגרים / נוער (data-ath-age="S|Y") + table "הישגים" per series (wcSeries) instead of the API podiums.
+// Data attributes for app.js: data-ath-disc="B|L", data-ath-age="S|Y", data-ath-cat="0|1", data-ath-round="<round id>", data-ath-ev="<WC event
 // id>", data-ath-notes. Wording rules (tests/wording.test.mjs): Palgi athlete badge = "ספורטאי הפלגיה" for viewers, "שלי" for
 // the coach — the same words as app.js MINE_NAME.
 import { esc, ISR } from './ifsc.js';
 import { catHe, roundTitle } from './labels.js';
 import { DISC } from './seasons.js';
-import { seasonSummary } from './athlete.js';
+import { seasonSummary, compAge } from './athlete.js';
 
 const sorted = (list, key) => [...list].sort((a, b) => (key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0)); // newest first
 const num = v => typeof v === 'number' && Number.isFinite(v);
@@ -19,11 +20,54 @@ const initials = name => String(name || '').split(/\s+/).filter(Boolean).slice(0
 // a category code with its own place (U19 in a seniors round, U15 in U17) — open seniors 'S' has none
 const ownCat = c => (!c.intl && c.catKey && c.catKey !== 'S' && num(c.catPlace) ? c.catKey : null);
 // national row text: "מקום 7 כללי · 2 ב-U19", or the overall place alone
+// a youth-side copy of a senior comp (yCat, below) → "מקום 1 ב-U19"
 const placeText = c => { const k = ownCat(c), o = c.overall ?? c.place;
-  return num(o) ? (k ? `מקום ${o} כללי · ${c.catPlace} ב-${k}` : `מקום ${o}`) : ''; };
+  return num(o) ? (c.yCat ? `מקום ${o} ב-${c.yCat}` : k ? `מקום ${o} כללי · ${c.catPlace} ב-${k}` : `מקום ${o}`) : ''; };
 // World Climbing result category 'w19' / 'm' → Hebrew label
 const wcCat = cat => { const m = /^([mw])(\d*)$/.exec(String(cat || '')); return m ? catHe(m[2] ? 'U' + m[2] : 'S', m[1] === 'w' ? 'W' : 'M') : ''; };
-const POD_ROWS = [['wc', 'גביע עולם'], ['wch', 'אליפות עולם'], ['cont', 'אליפות יבשתית']];
+
+// 3.34.0 (Roei): a World Climbing result's series from its event name (+ category). The API's own podium counts mix every
+// event (a European Cup win showed as "גביע עולם") → never rendered; the card counts ranks itself. "youth" in the name or
+// an age in the category (m19, w17) = youth; then World Cup / World Climbing Series → wc, World Championship(s) → wch,
+// European Cup / Europe … Continental Cup → ec, European / Europe … Continental Championship(s) → ech; anything else
+// (Games, other continents) → other.
+const SERIES = { wc: 'גביע עולם', wch: 'אליפות עולם', ec: 'גביע אירופה', ech: 'אליפות אירופה', other: 'אחר' };
+const seriesLabel = (key, age) => SERIES[key] + (age === 'Y' && ['wch', 'ec', 'ech'].includes(key) ? ' נוער' : '');
+// the results row badge per series, coloured like the portal's event tones (seasons.js evTone: World Cup blue, European Cup
+// orange, European Youth Cup green, championships gold); youth championships get a Y (EYCH / WYCH)
+const BADGE = { wc: ['WC', 'wc'], wch: ['WCH', 'ch'], ec: ['EC', 'ec'], ech: ['ECH', 'ch'], other: ['אחר', 'other'] };
+const BADGE_Y = { wch: ['WYCH', 'ch'], ec: ['EYC', 'eyc'], ech: ['EYCH', 'ch'] };
+const seriesBadge = s => { const [t, tone] = (s.age === 'Y' && BADGE_Y[s.key]) || BADGE[s.key] || BADGE.other; return `<span class="ac-ty ev-${tone}">${t}</span>`; };
+export function wcSeries(event, cat) {
+  const s = String(event || ''), n = s.replace(/\byouth\s*/gi, ''), eu = /\bEurop/i.test(n);
+  const key = /World Cup|World Climbing Series/i.test(n) ? 'wc' : /World Championship/i.test(n) ? 'wch'
+    : /European Cup/i.test(n) || (eu && /Continental Cup/i.test(n)) ? 'ec'
+    : /European Championship/i.test(n) || (eu && /Continental Championship/i.test(n)) ? 'ech' : 'other';
+  const age = /youth/i.test(s) || /\d/.test(String(cat || '')) ? 'Y' : 'S';
+  return { key, age, label: seriesLabel(key, age) };
+}
+// a portal comp's age group (historyOf sets it; a comp from an older caller → its round id) and its table row key
+const ageOf = c => c.age || compAge(null, c.roundId);
+// Roei 2026-11-10: a senior national comp climbed in a youth category (that round's own catKey + catPlace — U21 / U19 in a
+// seniors round) is on BOTH sides: seniors by the overall place, youth as a copy placed by the category place (yCat)
+const youthCopy = c => ({ ...c, overall: c.catPlace, place: c.catPlace, catPlace: null, catKey: null, yCat: c.catKey });
+const compsFor = (list, a) => list.flatMap(c => (ageOf(c) === a ? [c] : a === 'Y' && ownCat(c) ? [youthCopy(c)] : []));
+const rowKeyOf = c => { const k = c.intl ? (['wc', 'wch', 'ec', 'ech'].includes(c.type) ? c.type : 'other') : c.type === 'ich' ? 'ich' : 'nat';
+  return c.yCat && !c.intl ? `${k}cat:${c.yCat}` : k; };
+const ROW_ORDER = ['wc', 'wch', 'ec', 'ech', 'nat', 'natcat', 'ich', 'ichcat', 'other'];
+// 'natcat:U19' → "ליגת העל · U19" (a seniors league by category, youth side); 'nat' youth → "ליגת נוער" (youth-league rounds)
+const rowLabel = (key, age) => { const [k, cat] = key.split(':');
+  return k === 'natcat' ? `ליגת העל · ${cat}` : k === 'ichcat' ? `אליפות ישראל · ${cat}`
+    : k === 'nat' ? (age === 'Y' ? 'ליגת נוער' : 'ליגת העל') : k === 'ich' ? (age === 'Y' ? 'אליפות ישראל לנוער' : 'אליפות ישראל') : seriesLabel(k, age); };
+// achievements: [{ key, place }] → table rows in ROW_ORDER (then category): competitions (with a place) · best · 🥇 · 🥈 · 🥉
+function achTable(entries, age) {
+  const ord = k => ROW_ORDER.indexOf(k.split(':')[0]);
+  const keys = [...new Set(entries.map(e => e.key))].sort((a, b) => ord(a) - ord(b) || (a < b ? -1 : a > b ? 1 : 0));
+  const rows = keys.map(k => { const ps = entries.filter(e => e.key === k && num(e.place)).map(e => e.place);
+    return ps.length ? [rowLabel(k, age), ps.length, Math.min(...ps), ...[1, 2, 3].map(p => ps.filter(x => x === p).length)] : null; }).filter(Boolean);
+  return rows.length ? '<table class="ac-pod"><thead><tr><th></th><th>תחרויות</th><th>הכי טוב</th><th>🥇</th><th>🥈</th><th>🥉</th></tr></thead><tbody>'
+    + rows.map(([t, ...v]) => `<tr><td>${esc(t)}</td>${v.map(x => `<td>${esc(x)}</td>`).join('')}</tr>`).join('') + '</tbody></table>' : '';
+}
 
 function trendSvg(points) {
   if (points.length < 2) return '';
@@ -38,13 +82,22 @@ function trendSvg(points) {
     + '</svg>';
 }
 
-export function athleteCardHtml({ name, club, country, catLabel, gender, mine, now, hist, wc, wcState = 'none', wcAt = null, disc = 'B', viewer, notes, roundId, catMode = 0 } = {}) {
+export function athleteCardHtml({ name, club, country, catLabel, gender, mine, now, hist, wc, wcState = 'none', wcAt = null, disc = 'B', viewer, notes, roundId, catMode = 0, age } = {}) {
   disc = disc === 'L' ? 'L' : 'B';
   const fem = gender === 'W';
-  const seasons = (hist?.seasons || []).map(s => ({ ...s, comps: (s.comps || []).filter(c => c.disc === disc) })).filter(s => s.comps.length);
   // a device copy of the World Climbing data is always shown (graceful offline): while it is refetched ('loading') with the
   // small loading line, after a failed refetch ('error') with a dated note; the plain loading / error text only without a copy
   const hasWc = !!wc && wcState !== 'none';
+  // 3.34.0 seniors / youth: the asked group (default seniors), or the other one when the asked group has nothing in this
+  // discipline (portal comps or World Climbing results); the toggle only when both groups have something
+  const discComps = (hist?.seasons || []).flatMap(s => s.comps || []).filter(c => c.disc === disc);
+  const wcDisc = hasWc ? (wc.results || []).filter(r => r.disc === disc).map(r => ({ r, s: wcSeries(r.event, r.cat) })) : [];
+  const has = a => compsFor(discComps, a).length > 0 || wcDisc.some(x => x.s.age === a);
+  age = age === 'Y' ? 'Y' : 'S';
+  if (!has(age) && has(age === 'Y' ? 'S' : 'Y')) age = age === 'Y' ? 'S' : 'Y';
+  const both = has('S') && has('Y');
+  const seasons = (hist?.seasons || []).map(s => ({ ...s, comps: compsFor((s.comps || []).filter(c => c.disc === disc), age) })).filter(s => s.comps.length);
+  const wcRes = wcDisc.filter(x => x.s.age === age);
   const out = [];
 
   // header
@@ -58,6 +111,8 @@ export function athleteCardHtml({ name, club, country, catLabel, gender, mine, n
 
   // discipline tabs
   out.push(`<div class="ac-disc" role="group" aria-label="ענף">${['B', 'L'].map(d => `<button type="button" data-ath-disc="${d}" aria-pressed="${d === disc}">${DISC[d]}</button>`).join('')}</div>`);
+  if (both) out.push(`<div class="choices ac-age" role="group" aria-label="בוגרים או נוער">${[['S', 'בוגרים'], ['Y', 'נוער']].map(([v, t]) => `<button type="button" class="choice" data-ath-age="${v}" aria-pressed="${v === age}">${t}</button>`).join('')}</div>`);
+  const ageTag = both ? ` · ${age === 'Y' ? 'נוער' : 'בוגרים'}` : '';
 
   // this competition
   if (now) {
@@ -75,7 +130,7 @@ export function athleteCardHtml({ name, club, country, catLabel, gender, mine, n
     const sum = seasonSummary(byCat ? season.comps.filter(c => num(c.catPlace)) : season.comps, { cat: byCat });
     const tog = cat ? `<div class="choices ac-cat" role="group" aria-label="דירוג">${[['0', 'כללי'], ['1', cat]].map(([v, t]) => `<button type="button" class="choice" data-ath-cat="${v}" aria-pressed="${(v === '1') === byCat}">${esc(t)}</button>`).join('')}</div>` : '';
     const tile = (v, t) => `<div class="ac-tile"><b>${v == null ? '–' : esc(v)}</b><span>${t}</span></div>`;
-    out.push(`<h4 class="ac-h">${esc(season.label)} <small>${DISC[disc]}</small></h4>${tog}`
+    out.push(`<h4 class="ac-h">${esc(season.label)} <small>${DISC[disc]}${ageTag}</small></h4>${tog}`
       + `<div class="ac-tiles">${tile(sum.count, 'תחרויות')}${tile(sum.best, 'הכי טוב')}${tile(sum.avg, 'ממוצע')}${tile(sum.finals, 'גמרים')}</div>`);
     const svg = trendSvg(sum.trend);
     if (svg) out.push(`<h4 class="ac-h">מגמה <small>מקום, למעלה = טוב יותר</small></h4>${svg}`);
@@ -85,10 +140,12 @@ export function athleteCardHtml({ name, club, country, catLabel, gender, mine, n
   if (wcState === 'loading') out.push('<p class="ac-msg">טוען נתונים מ-World Climbing…</p>');
   else if (wcState === 'error') out.push(hasWc ? `<p class="ac-msg">${(d => (d ? `נתוני World Climbing מ-${d}` : 'נתוני World Climbing שמורים'))(ddmm(wcAt))} · אין חיבור כרגע</p>`
     : '<p class="ac-msg">לא הצלחנו לטעון מ-World Climbing כרגע</p>');
-  if (hasWc) {
-    const rows = POD_ROWS.map(([k, t]) => [t, wc.podiums?.[k]?.[disc]]).filter(([, p]) => p);
-    if (rows.length) out.push(`<h4 class="ac-h">פודיומים <small>${DISC[disc]}</small></h4><table class="ac-pod"><thead><tr><th></th><th>🥇</th><th>🥈</th><th>🥉</th><th>תחרויות</th></tr></thead><tbody>`
-      + rows.map(([t, p]) => `<tr><td>${t}</td><td>${esc(p[1])}</td><td>${esc(p[2])}</td><td>${esc(p[3])}</td><td>${esc(p.total)}</td></tr>`).join('') + '</tbody></table>');
+  // achievements (replaces 3.33.0's podium table): World Climbing results by series + the portal's comps (national league /
+  // championship rows; international ones only when World Climbing's own list is not shown) — this discipline + age group
+  const ach = achTable([...wcRes.map(x => ({ key: x.s.key, place: x.r.rank })),
+    ...seasons.flatMap(s => s.comps).filter(c => !(hasWc && c.intl)).map(c => ({ key: rowKeyOf(c), place: c.overall ?? c.place }))], age);
+  if (ach) out.push(`<h4 class="ac-h">הישגים <small>${DISC[disc]}${ageTag}</small></h4>${ach}`);
+  if (hasWc && age === 'S') { // the World Cup ranking is a seniors series
     const cups = sorted((wc.cups || []).filter(c => num(c[disc])), c => String(c.season));
     if (cups.length) out.push(`<h4 class="ac-h">דירוג גביע עולם</h4><ul class="ac-cups">${cups.map(c => `<li title="${esc(c.name)}">${esc(c.season)} · מקום ${esc(c[disc])}</li>`).join('')}</ul>`);
   }
@@ -98,12 +155,12 @@ export function athleteCardHtml({ name, club, country, catLabel, gender, mine, n
     `<li><button type="button" class="ac-row" data-ath-round="${esc(c.roundId)}"><span class="ac-ty ${c.intl ? 'wc' : 'il'}">${c.intl ? 'בינ״ל' : 'ליגה'}</span>`
     + `<span class="ac-ev">${esc(c.title)}<small>${esc(roundTitle(c.roundLabel))}</small></span><span class="ac-yr">${esc(mmyy(c.date))}</span>`
     + `<span class="ac-pl${num(c.overall ?? c.place) && (c.overall ?? c.place) <= 3 ? ' pod' : ''}">${esc(placeText(c))}</span></button></li>` }));
-  const intl = hasWc ? (wc.results || []).filter(r => r.disc === disc).map(r => { const inner = `<span class="ac-ty wc">WC</span>`
+  const intl = wcRes.map(({ r, s }) => { const inner = seriesBadge(s)
     + `<span class="ac-ev">${esc(r.event)}<small>${esc([wcCat(r.cat), r.location].filter(Boolean).join(' · '))}</small></span><span class="ac-yr">${esc(r.season)}</span>`
     + `<span class="ac-pl${num(r.rank) && r.rank <= 3 ? ' pod' : ''}">${num(r.rank) ? `מקום ${esc(r.rank)}` : ''}</span>`;
-  return { date: String(r.date || r.season || ''), html: num(r.eventId) ? `<li><button type="button" class="ac-row" data-ath-ev="${esc(r.eventId)}">${inner}</button></li>` : `<li><div class="ac-row">${inner}</div></li>` }; }) : [];
+  return { date: String(r.date || r.season || ''), html: num(r.eventId) ? `<li><button type="button" class="ac-row" data-ath-ev="${esc(r.eventId)}">${inner}</button></li>` : `<li><div class="ac-row">${inner}</div></li>` }; });
   const all = sorted([...nat, ...intl], x => x.date);
-  out.push(`<h4 class="ac-h">תוצאות <small>${DISC[disc]}</small></h4>`
+  out.push(`<h4 class="ac-h">תוצאות <small>${DISC[disc]}${ageTag}</small></h4>`
     + (all.length ? `<ul class="ac-rl">${all.map(x => x.html).join('')}</ul>` : `<p class="ac-msg">אין עדיין תוצאות ב${DISC[disc]}</p>`));
   if (hasWc && num(wc.id)) out.push(`<a class="ac-link" href="https://ifsc.results.info/athlete/${esc(wc.id)}" target="_blank" rel="noopener">לעמוד המלא ב-World Climbing ↗</a>`);
 

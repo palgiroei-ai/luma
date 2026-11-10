@@ -16,15 +16,15 @@ import { ifscAnyResults, leadRanked, leadTableHtml, esc, genderOf, fetchIfsc, is
 import { takeEntry, isEntry, ENTRY_FAIL, pushNeedsCompsScope, pushScopeOk, openTarget, appTheme, backToApp } from './entry.js';
 import { myHistory, catParts } from './mine.js';
 import { roundPickList } from './roundpick.js';
-import { athleteHistory, whoFromRow, keysOf, personKey } from './athlete.js';
+import { athleteHistory, whoFromRow, keysOf, personKey, compAge } from './athlete.js';
 import { athleteCardHtml } from './athleteCard.js';
 import { leadBoardHtml, leadHomeLine, isLeadLive, leadRoutes, leadColor, leadColor2, leadPickColor, routeColors, leadMineHtml, leadAllHtml, leadOverlapHtml, leadParHint, leadParMineHtml, topoB, routeNoteText, leadAlertEntries } from './leadView.js';
 import { hubOnly, alertable } from './blue.js';
 import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ownCtl, legOrder, routeState, dropEarly } from './lead.js';
 import { neededOn, routeStats, whatIf } from './leadStats.js';
-import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC } from './seasons.js';
+import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC, evMeta } from './seasons.js';
 
-export const APP_VERSION = '3.33.0';
+export const APP_VERSION = '3.34.0';
 
 const $ = s => document.querySelector(s);
 
@@ -415,6 +415,7 @@ function patch(el, html) { if (el._html !== html) { el.innerHTML = html; el._htm
 
 // 3.32.1: where the ‹ next to ⌂ leads — round → its competition; final standings / competition → the list; season → seasons
 function navBackKind() {
+  if (athReturn) { if (athLandKey() === athReturn.land) return 'ath'; athReturn = null; } // 3.34.0: back to the athlete card
   if (screen === 'round') return 'round';
   if (ME && homeTab === 'me') return null;
   if (homeFinal) return 'final';
@@ -423,6 +424,7 @@ function navBackKind() {
 }
 function navBack() {
   const k = navBackKind();
+  if (k === 'ath') { athBack(); return; }
   if (k === 'round') { // back to the competition of the open round (all its categories)
     const evs = homeEvents(), id = evOf(round(current))?.id, i = evs.findIndex(x => x.event.id === id);
     if (i >= 0 && homeOpenEvent !== i) { homeOpenEvent = i; homeFrom = seasonOf(evs[i]); }
@@ -1072,7 +1074,31 @@ const sameBib = (a, b) => String(a) === String(b);
 // the name inside a table cell → a button that looks exactly like the text (CSS .ath-nm). opt.fin = final standings
 // row (its place = the final place, no "next round")
 const athBtn = (rid, bib, html, opt = null) => `<button type="button" class="ath-nm" data-ath="${esc(rid)}|${esc(bib)}"${opt?.fin ? ` data-ath-fin="${opt.place ?? ''}"` : ''}>${html}</button>`;
-let ATH = null; // the open card: { rid, bib, fin, disc, catMode, aid, wc, wcAt, wcState }
+let ATH = null; // the open card: { rid, bib, fin, disc, age, catMode, aid, wc, wcAt, wcState }
+// 3.34.0 (Roei): a round / competition opened from the card → the ‹ next to ⌂ returns to the screen the card was opened on,
+// card open again in the same state. athReturn = { back: that screen's state, card: the card's state, land: athLandKey() of
+// the screen the link led to }. Any other navigation (⌂, round picker, swipe, a list tap, another card) changes the
+// landing state → navBackKind drops athReturn; ⌂ and openAthlete also clear it outright.
+let athReturn = null;
+const athLandKey = () => JSON.stringify(screen === 'round' ? ['round', current] : ['home', homeOpenEvent, homeSeason, homeFinal, homeTab]);
+const athNavState = () => ({ screen, current, view, homeOpenEvent, homeSeason, homeFrom, homeFinal, homeTab, y: window.scrollY });
+function athLeave(go) {
+  const card = ATH && { rid: ATH.rid, bib: ATH.bib, fin: ATH.fin, disc: ATH.disc, age: ATH.age, catMode: ATH.catMode, top: $('#ath-body').scrollTop }, back = athNavState();
+  go();
+  if (card) { athReturn = { back, card, land: athLandKey() }; renderTabs(); }
+}
+function athBack() {
+  const { back, card } = athReturn; athReturn = null;
+  homeOpenEvent = back.homeOpenEvent; homeSeason = back.homeSeason; homeFrom = back.homeFrom; homeFinal = back.homeFinal; homeTab = back.homeTab;
+  if (back.screen === 'round' && !round(back.current)) showScreen('home'); // the round left the data meanwhile → home
+  else if (back.screen === 'round') {
+    if (current !== back.current) goRound(back.current);
+    showScreen('round'); if (view !== back.view) setView(back.view);
+  } else showScreen('home');
+  window.scrollTo(0, back.y);
+  openAthlete(card.rid, card.bib, card.fin, card);
+  if (ATH && $('#ath-dlg').open) $('#ath-body').scrollTop = card.top || 0; // the card where the row was tapped
+}
 let athMemo = null; // like meMemo: per day + LOCKED identity, one history per person
 function athHist(who) {
   const day = todayStr();
@@ -1139,11 +1165,14 @@ function renderAth() {
   const body = $('#ath-body'), top = body.scrollTop;
   body.innerHTML = athleteCardHtml({ name: row.name, club: res.intl ? '' : row.club, country: row.country || (res.intl ? row.club : ''),
     catLabel: row.cat && row.cat !== 'S' ? catLabel(row.cat, g) : roundTitle(r.title).split(' · ')[0], gender: g, mine, now,
-    hist: athHist(who), wc: ATH.wc, wcState: ATH.wcState, wcAt: ATH.wcAt, disc: ATH.disc, viewer: VIEWER, notes: athNotes(who).length, roundId: r.id, catMode: ATH.catMode });
+    hist: athHist(who), wc: ATH.wc, wcState: ATH.wcState, wcAt: ATH.wcAt, disc: ATH.disc, age: ATH.age, viewer: VIEWER, notes: athNotes(who).length, roundId: r.id, catMode: ATH.catMode });
   body.scrollTop = top;
 }
-function openAthlete(rid, bib, fin = null) {
-  const a = { rid, bib, fin, disc: round(rid)?.lead ? 'L' : 'B', catMode: 0, aid: null, wc: null, wcState: 'none' };
+function openAthlete(rid, bib, fin = null, keep = null) {
+  athReturn = null; renderTabs(); // another card ends a "back to the card" (the restore path cleared it already)
+  const r0 = round(rid);
+  const a = { rid, bib, fin, disc: r0?.lead ? 'L' : 'B', age: r0 ? compAge(evOf(r0), rid) : 'S', catMode: 0, aid: null, wc: null, wcState: 'none' };
+  if (keep) { a.disc = keep.disc; a.age = keep.age; a.catMode = keep.catMode; } // athBack: the card as it was
   const x = athRow(a); if (!x) return;
   const aid = whoFromRow(x.row, x.r, DATA).aid;
   a.aid = aid != null && /^\d{1,7}$/.test(String(aid)) ? Number(aid) : null;
@@ -1162,11 +1191,14 @@ function athClick(e) {
   const d = b.dataset;
   if (b.id === 'ath-x') dlg.close();
   else if (d.athDisc) { ATH.disc = d.athDisc === 'L' ? 'L' : 'B'; renderAth(); }
+  else if (d.athAge) { ATH.age = d.athAge === 'Y' ? 'Y' : 'S'; renderAth(); }
   else if (d.athCat != null) { ATH.catMode = d.athCat === '1' ? 1 : 0; renderAth(); }
-  else if (d.athRound) athToRound(d.athRound);
+  else if (d.athRound) { if (round(d.athRound)) athLeave(() => athToRound(d.athRound)); }
   else if (d.athEv) { // a World Climbing result → the portal's competition of that event, if it has one
-    const evs = homeEvents(), i = evs.findIndex(x => x.event.ifscId != null && String(x.event.ifscId) === d.athEv); if (i < 0) return;
-    dlg.close(); homeFinal = null; homeSeason = seasonOf(evs[i]); homeFrom = homeSeason; homeOpenEvent = i; showScreen('home'); window.scrollTo(0, 0);
+    // one World Climbing event id can be two portal competitions (boulder + lead) → the card's discipline first (3.34.0)
+    const evs = homeEvents(), hit = x => x.event.ifscId != null && String(x.event.ifscId) === d.athEv;
+    const j = evs.findIndex(x => hit(x) && evMeta(x.event).disc.includes(ATH.disc)), i = j >= 0 ? j : evs.findIndex(hit); if (i < 0) return;
+    athLeave(() => { dlg.close(); homeFinal = null; homeSeason = seasonOf(evs[i]); homeFrom = homeSeason; homeOpenEvent = i; homeTab = 'all'; showScreen('home'); window.scrollTo(0, 0); });
   } else if (d.athNotes != null && !VIEWER) { // the notes screen, all rounds, this athlete's name chip
     const ax = athRow(ATH); if (!ax) return;
     const ns = athNotes(whoFromRow(ax.row, round(ATH.rid), DATA)).sort((p, q) => q.at - p.at); if (!ns.length) return;
@@ -1690,6 +1722,7 @@ function swipeSeq() {
     .sort((a, b) => roundStart(a) - roundStart(b));
 }
 function goRound(id) {
+  athReturn = null; // 3.34.0: a swipe / jump ends "back to the card" (athLeave sets it again after its own jump)
   lastTabTap = Date.now(); current = id;
   for (const x of ['mine', 'all', 'results', 'log']) $('#view-' + x)._html = null;
   $('#par').innerHTML = ''; $('#par').dataset.lp = ''; editId = null;
@@ -2646,6 +2679,7 @@ function start() {
     if (b.id === 'round-pick-btn') { openRoundPick(); return; }
     if (b.id === 'rp-close') { rp.close(); return; }
     if (d.round && rp.open) rp.close(); // falls through to the normal open-round branch
+    if (d.round || d.open || d.ev != null || d.final || d.season || d.homeTab) athReturn = null; // 3.34.0: any other navigation
     if (d.page) { setPage(d.page); return; }
     if (d.leadAlert) { if (!VIEWER) { store.setSetting('leadAlert', d.leadAlert); syncLeadAlertSeg(); } return; } // 3.22.0 Task 8 (the push plan follows on the 5 s syncPush tick)
     if (d.final) { const [ev, key, from] = d.final.split(':'); homeFinal = { ev: Number(ev), key, from }; render(); window.scrollTo(0, 0); return; }
@@ -2662,7 +2696,7 @@ function start() {
     if (d.meOpen) { openMine(d.meOpen); return; }
     if (d.ev != null) { homeFrom = homeSeason; homeOpenEvent = Number(d.ev); render(); window.scrollTo(0, 0); return; }
     if (d.open) { lastTabTap = Date.now(); current = d.open; for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); showScreen('round'); }
-    else if (b.id === 'home-btn') { homeOpenEvent = null; homeFinal = null; homeSeason = null; homeFrom = null; showScreen('home'); }
+    else if (b.id === 'home-btn') { athReturn = null; homeOpenEvent = null; homeFinal = null; homeSeason = null; homeFrom = null; showScreen('home'); }
     else if (d.round) { lastTabTap = Date.now(); current = d.round; if (screen !== 'round') { screen = 'round'; $('#home').hidden = true; $('#round-screen').hidden = false; $('#home-btn').setAttribute('aria-pressed', 'false'); } for (const x of ['mine', 'all', 'results']) $('#view-' + x)._html = null; openRoundView(); render(); }
     else if (d.leadManual) leadCtlSet(d.leadManual, (r, x, c) => (c?.manual ? c : toManual(r, x, now())));
     else if (d.leadNext) leadCtlSet(d.leadNext, (r, x, c) => markNext(r, x, c, now()));

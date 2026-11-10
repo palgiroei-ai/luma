@@ -1458,6 +1458,7 @@ body.lead-live #round-screen > section { min-width: 0; } /* grid item: let the f
 .ac-h { margin: 16px 0 8px; font-size: 15px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .ac-h small { font-weight: 500; color: var(--muted); font-size: 12px; }
 .ac-cat { margin-bottom: 8px; }
+.ac-age { margin-bottom: 10px; }
 .ac-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .ac-tile { background: var(--chalk); border-radius: var(--r-sm); padding: 8px 4px; text-align: center; }
 .ac-tile b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
@@ -1481,6 +1482,9 @@ button.ac-row { cursor: pointer; }
 .ac-ty { grid-area: ty; font-size: 11px; font-weight: 700; border-radius: var(--r-sm); text-align: center; padding: 2px 0; }
 .ac-ty.il { color: var(--ev-il); background: var(--chalk); }
 .ac-ty.wc { color: var(--added); background: var(--added-bg); }
+/* 3.34.0 review: World Climbing rows badged by series in the portal's event tones (seasons.js evTone) */
+.ac-ty:is(.ev-wc, .ev-ec, .ev-eyc, .ev-ch, .ev-other) { background: var(--chalk); }
+.ac-ty.ev-wc { color: var(--ev-wc); } .ac-ty.ev-ec { color: var(--ev-ec); } .ac-ty.ev-eyc { color: var(--ev-eyc); } .ac-ty.ev-ch { color: var(--ev-ch); } .ac-ty.ev-other { color: var(--muted); }
 .ac-ev { grid-area: ev; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .ac-ev small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
 .ac-yr { grid-area: yr; color: var(--muted); font-size: 12px; text-align: end; }

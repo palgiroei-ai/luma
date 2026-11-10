@@ -3,7 +3,8 @@
 // World Climbing athlete id (row.aid), or — only for a row saved without an aid — the World Climbing name + country.
 // data.wcAlias { personKey → aid } joins an Israeli's national and international results; data.nameMerges / opts.merges
 // [[keyA, keyB], ...] join two national spellings of one person. Places / comps come from mine.js historyOf.
-import { historyOf } from './mine.js';
+import { historyOf, compAge } from './mine.js';
+export { compAge };
 import { genderOf, wcKey } from './ifsc.js';
 
 // Name → whole tokens (parentheses dropped, geresh/quote variants unified, hyphens split). Shared with src/match.mjs
