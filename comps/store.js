@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS = {
   swipeMine: true,   // swipe between rounds: only rounds with my athletes (3.2.0, Roei); off = every round of the competition
   autoArm: true,     // 3.6.0: sound + screen-on start on the first touch (no start button; bell in the header)
   leadAlert: 'n2',  // 3.22.0: lead alert — n2 / n3 = that many climbers before her on the route, m10 = 10 min before her estimate
+  glass: true,      // 3.38.0: the new look for everyone (Roei 2026-11-11); off = the classic look, per device
   homeView: 'list',  // home screen: list (one row per competition, default — Roei 2026-10-12) | detail
 };
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));

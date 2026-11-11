@@ -1,5 +1,5 @@
 // Offline support: page files cache-first; data.enc.json network-first (new start lists win when online).
-const CACHE = 'comps-v65';
+const CACHE = 'comps-v66';
 const TIMEOUT_MS = 3000; // weak hall Wi-Fi: don't hang on a stalled network, use the cache
 const FILES = ['./', 'index.html', 'app.js', 'engine.js', 'lead.js', 'leadView.js', 'leadRank.js', 'leadStats.js', 'store.js', 'sync.js', 'install.js', 'changelog.js', 'results.js', 'live.js', 'tags.js', 'ifsc.js', 'seasons.js', 'mine.js', 'blue.js', 'roundpick.js', 'bar.js', 'labels.js', 'ifscPlan.js', 'athlete.js', 'athleteCard.js', 'entry.js', 'decrypt.js', 'comps.css', 'glass.css', 'logo-figure.svg', 'logo-figure-dark.svg', 'logo-palgitraining.svg', 'logo-palgitraining-compact.svg', 'mark.svg', 'icon-180.png', 'fonts/heebo-hebrew.woff2', 'fonts/heebo-latin.woff2', 'fonts/heebo-latin-ext.woff2', 'manifest.webmanifest', 'data.enc.json', 'data.view.enc.json'];
 

@@ -25,7 +25,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ow
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC, evMeta } from './seasons.js';
 
-export const APP_VERSION = '3.37.2';
+export const APP_VERSION = '3.38.0';
 
 const $ = s => document.querySelector(s);
 
@@ -1331,7 +1331,7 @@ function renderResList() {
     const rows = g.rounds.map(x => { const r = round(x.id);
       return `<button type="button" class="res-row" data-res-open="${x.id}"><span class="res-row-t"><b>${esc(roundTitle(r.title))}</b><span class="muted small">${dayLabel(r.date)}</span></span>${x.live ? '<span class="hb live">חי עכשיו</span>' : ''}<span class="chev" aria-hidden="true"></span></button>`; }).join('');
     const open = resOpen.has(g.eventId) ? resOpen.get(g.eventId) : i < 2;
-    return `<details class="card ev-item res-g ev-t-${evTone(item.event)}${live ? ' ph-live' : ''}" data-res-ev="${esc(g.eventId)}"${open ? ' open' : ''}>
+    return `<details class="card ev-item res-g ev-t-${evTone(item.event)}${live ? ' ph-live' : ''}" data-res-ev="${esc(g.eventId)}"${i < 2 ? ' data-def="1"' : ''}${open ? ' open' : ''}>
       <summary><span class="res-g-main"><b>${bidiParts(g.title)}</b><span class="muted small">${rangeLabel(item.dates)} · ${n === 1 ? 'ראונד אחד' : `${n} ראונדים`}</span></span>${live ? '<span class="hb live">חי עכשיו</span>' : ''}<span class="chev" aria-hidden="true"></span></summary>
       <div class="res-rows">${rows}</div>${g.finals ? `<button type="button" class="fin-btn" data-final="${g.ei}:${finOf(item)[0].key}:list">${CUP}תוצאות סופיות<span class="go" aria-hidden="true">‹</span></button>` : ''}
     </details>`;
@@ -1353,6 +1353,15 @@ function compNowIdx(evs, t) {
 const CM_ON = new Set(['boulder', 'rest', 'trailing', 'climbing']); // on the wall / resting → the live status line
 const cmScore = x => (typeof x.score === 'number' ? x.score.toFixed(1) : `<bdi dir="ltr">${esc(String(x.score ?? ''))}</bdi>`);
 // per round, computed once per render: who is mine + status / start / result per athlete
+// 3.38.0: competition "שלי" lead place = same rule as boulder placeByBib — U17 rounds (first chip = one category) → the
+// athlete's own category, re-ranked by World Climbing lead rules from the raw rows (renderNatLead); seniors / no raw rows → overall
+function leadPlaceByBib(r, res) {
+  const out = new Map(rankedOf(r.id).map(x => [String(x.bib), x]));
+  if (res.intl || !res.file || !catOptions(res.rows, genderOf(r.id))[0]?.cats) return out;
+  for (const c of new Set(res.file.map(x => x.cat).filter(Boolean)))
+    for (const x of leadRanked(toLeadResults({ rows: res.file.filter(y => y.cat === c) }, r.id, leadPrevRank(r.id)).rows)) out.set(String(x.bib), x);
+  return out;
+}
 function compMineCtx(r, t) {
   const res = resultsOf(r.id);
   if (r.ifsc) {
@@ -1366,7 +1375,7 @@ function compMineCtx(r, t) {
   const live = r.slots.length > 0 && stateAt(r, t, o).phase === 'live';
   const st = new Map(list.map(m => [m.k, athleteStatus(r, m.k, t, o)])), byK = new Map(list.map(m => [m.k, m]));
   // the place = the athlete's own category (U17 rounds) / overall (seniors), never the round's category chip (resCat)
-  const R = res && !res.lead ? resByBib(r) : null, own = R ? placeByBib(res.rows, genderOf(r.id), prevRankOf(r.id)) : null, lead = res?.lead ? new Map(rankedOf(r.id).map(x => [String(x.bib), x])) : null;
+  const R = res && !res.lead ? resByBib(r) : null, own = R ? placeByBib(res.rows, genderOf(r.id), prevRankOf(r.id)) : null, lead = res?.lead ? leadPlaceByBib(r, res) : null;
   return { mine: list, name: k => r.slots[k].name, live: !!res?.live, added: k => !!byK.get(k)?.added,
     cat: k => { const c = byK.get(k)?.cat || ''; return /^(Senior|S|U\d+)$/.test(c) ? catHe(c, genderOf(r.id)) : c; },
     status: k => (live && CM_ON.has(st.get(k).kind) ? statusText(r, st.get(k)) : null),
@@ -2890,9 +2899,8 @@ async function sendFeedback() {
 // ---- settings ----
 const THEME_BG = { light: '#F5F1EA', plum: '#1A1024', charcoal: '#141216', black: '#000000' };
 const DARK_NAMES = { plum: 'שזיף', charcoal: 'פחם', black: 'שחור' };
-// 3.36.0 glass look (Roei-only phase): settings.glass, coach only — never a viewer, an athlete entry (ME) or any
-// non-coach app entry, so a device that once had it on shows today's UI after such a login (start() → applySettings)
-const coachEntry = () => !store.appEntry || store.appEntry.role === 'coach'; // no app entry (typed code) or a coach one
+// 3.36.0 glass look; 3.38.0 general rollout (Roei 2026-11-11): on by default for every role (coach, viewer, athlete / app
+// entry), settings.glass === false (the ⚙︎ switch, per device) = the classic look
 const GLASS = () => document.documentElement.dataset.look === 'glass';
 // glass bar feel Task 2 (the Palgi app 8.2.1 model): with glass the document never scrolls — #app-scroll is the one scroller
 // (the bar sits outside it); without glass the document scrolls as before. Every scroll read / write goes through these.
@@ -2920,7 +2928,7 @@ function settleDocument() {
   if (document.body.scrollTop > 0) document.body.scrollTop = 0;
 }
 function applyLook() {
-  const on = !!(store.settings.glass && !VIEWER && !ME) && coachEntry();
+  const on = store.settings.glass !== false;
   const was = GLASS(), y = scrollTopNow(); // glass bar feel Task 2: the reading position, on the scroller of the look now on
   if (!on && GLASS()) athReturn = null; // the look goes off: a "back to the card" saved on a bar screen ends here
   if (on) document.documentElement.dataset.look = 'glass'; else delete document.documentElement.dataset.look;
@@ -2929,7 +2937,6 @@ function applyLook() {
     scrollToY(y); BAR_M.lastY = y;
   }
   if (!on && (homeTab === 'res' || homeTab === 'comp')) homeTab = 'all'; // Review Focus 5: switch off on a bar screen → today's home
-  const row = document.querySelector('.glass-row'); if (row) row.hidden = VIEWER || !!ME || !coachEntry();
 }
 function applySettings() {
   applyLook();
@@ -3144,7 +3151,7 @@ function start() {
   $('#home-btn').setAttribute('aria-pressed', String(screen === 'home'));
   if (screen === 'round') openRoundView(); // a link to a finished round with results opens on them
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && ddOpen) { ddOpen = null; render(); } });
-  document.addEventListener('toggle', e => { const id = e.target?.dataset?.resEv; if (id) resOpen.set(id, e.target.open); }, true); // "תוצאות" cards keep open / closed
+  document.addEventListener('toggle', e => { const id = e.target?.dataset?.resEv; if (id && (resOpen.has(id) || e.target.open !== (e.target.dataset.def === '1'))) resOpen.set(id, e.target.open); }, true); // 3.38.0: a card that opens by default is not recorded as the user's choice // "תוצאות" cards keep open / closed
   document.addEventListener('click', e => {
     if (ddOpen && !e.target.closest('.ev-filters')) { ddOpen = null; render(); }
     const rp = $('#round-pick');

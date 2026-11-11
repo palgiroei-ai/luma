@@ -23,12 +23,9 @@
     try {
       var key = /[?&]at=/.test(location.search) ? 'comps.sim.v1' : 'comps.v1';
       var st = (JSON.parse(localStorage.getItem(key) || '{}').settings) || {};
-      // 3.36.0 glass look: the portal's own switch (coach only; app.js start() removes it for a viewer / athlete entry).
+      // 3.38.0 glass look for everyone (any role, app entry too) unless this device switched it off (settings.glass === false).
       // Read before the app-entry branch below replaces st with the app's theme.
-      // Same rule as applyLook(): no app entry, or a stored coach entry; a new #entry= pass = role not known yet → start() decides.
-      var ent = null; try { ent = JSON.parse(localStorage.getItem('comps.appEntry') || 'null'); } catch (e) { /* bad entry: treat as none */ }
-      var coach = !/^#entry=/.test(location.hash) && (!ent || typeof ent !== 'object' || !ent.role || ent.role === 'coach');
-      if (st.glass === true && coach) document.documentElement.setAttribute('data-look', 'glass');
+      if (st.glass !== false) document.documentElement.setAttribute('data-look', 'glass');
       // opened from the Palgi app (same origin): its theme wins (ThemeBoot.html keys; entry.js appTheme() = same mapping)
       if (/^#entry=/.test(location.hash) || localStorage.getItem('comps.appEntry')) {
         var am = localStorage.getItem('wa-theme-mode'), ad = localStorage.getItem('wa-theme-dark');
@@ -283,7 +280,7 @@
       </div></div>
       <div class="ios-group"><p class="ios-gtitle">כללי</p><div class="ios-box">
         <button type="button" class="ios-row nav not-in-app" data-page="look"><span class="ico">🌓</span><span class="lbl">מראה</span><span class="val" id="v-look"></span><span class="chev"></span></button>
-        <label class="ios-row coach-only glass-row"><span class="ico">✨</span><span class="lbl">עיצוב חדש (ניסיון)</span><input type="checkbox" class="ios-sw" data-set="glass"></label>
+        <label class="ios-row glass-row"><span class="ico">✨</span><span class="lbl">עיצוב חדש</span><input type="checkbox" class="ios-sw" data-set="glass"></label>
         <button type="button" class="ios-row nav" data-page="sync"><span class="ico">☁️</span><span class="lbl">סנכרון בין מכשירים</span><span class="val" id="v-sync"></span><span class="chev"></span></button>
         <button type="button" class="ios-row nav not-in-app" data-page="data"><span class="ico">📝</span><span class="lbl">הערות וערעורים</span><span class="val" id="v-data"></span><span class="chev"></span></button>
         <button type="button" class="ios-row nav not-in-app" data-page="feedback"><span class="ico">📮</span><span class="lbl">דיווח תקלה או הצעה לשיפור</span><span class="val" id="v-feedback"></span><span class="chev"></span></button>
