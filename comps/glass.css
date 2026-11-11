@@ -182,6 +182,8 @@
   border: 1px solid var(--gbar-line); box-shadow: 0 2px 6px rgba(0, 0, 0, .14);
   font-size: 10px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* the pill straddles the bar's top edge: its tab goes above the rim / glow (z 2), or the rim line strikes through it */
+[data-look="glass"] .gbar button:has(> .gbar-hint:not([hidden])) { z-index: 3; }
 [data-look="glass"] .gbar .gbar-dot[hidden],
 [data-look="glass"] .gbar .gbar-hint[hidden] { display: none; }
 /* Motion (the app bar 13.5.1 "shell-glass", values verbatim): one spring (--gbar-spring, .38s) for every settle, --gbar-press
