@@ -48,9 +48,9 @@ check('isBot true when honeypot filled', FormLogic.isBot({ website: 'http://spam
 var p = FormLogic.buildPayload({ name: ' דנה ', org: 'קבוצה', phone: '+972 50-123-4567', teamSize: '20–50' });
 check('buildPayload trims and normalizes', p.name === 'דנה' && p.phone === '0501234567' && p.teamSize === '20–50', JSON.stringify(p));
 check('buildPayload defaults missing fields to empty strings',
-  p.sport === '' && p.role === '' && p.email === '' && p.notes === '' && p.website === '', JSON.stringify(p));
+  p.sport === '' && p.role === '' && p.email === '' && p.notes === '' && p.marketing === '' && p.website === '', JSON.stringify(p));
 check('buildPayload has exactly the expected keys',
-  JSON.stringify(Object.keys(p).sort()) === JSON.stringify(['email', 'name', 'notes', 'org', 'phone', 'role', 'sport', 'teamSize', 'website']));
+  JSON.stringify(Object.keys(p).sort()) === JSON.stringify(['email', 'marketing', 'name', 'notes', 'org', 'phone', 'role', 'sport', 'teamSize', 'website']));
 
 check('TEAM_SIZES matches spec', JSON.stringify(FormLogic.TEAM_SIZES) === JSON.stringify(['עד 20', '20–50', '50–150', '150+']));
 

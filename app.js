@@ -98,6 +98,8 @@
     });
     var size = form.querySelector('input[name="teamSize"]:checked');
     data.teamSize = size ? size.value : '';
+    // optional, unticked by default: consent to marketing updates (anti-spam law s.30A)
+    data.marketing = form.elements.marketing && form.elements.marketing.checked ? 'כן' : '';
     return data;
   }
 

@@ -5,15 +5,20 @@ function loadGas(file) {
   var appendedRows = [];
   var sentEmails = [];
   var headerRow = null;
+  var deleted = [];
   var fakeSheet = {
     appendRow: function (row) { appendedRows.push(row); },
-    getRange: function () {
+    getRange: function (r, c, nr) {
       return {
         getValue: function () { return headerRow ? headerRow[0] : ''; },
+        getValues: function () { return appendedRows.slice(r - 2, r - 2 + nr).map(function (row) { return [row[0]]; }); },
+        setValue: function () { return this; },
         setValues: function (v) { headerRow = v[0]; return this; },
         setFontWeight: function () { return this; }
       };
     },
+    getLastRow: function () { return appendedRows.length + 1; },
+    deleteRows: function (start, n) { deleted.push([start, n]); appendedRows.splice(start - 2, n); },
     setFrozenRows: function () {}
   };
   var fakeSpreadsheet = {
@@ -31,7 +36,7 @@ function loadGas(file) {
   };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(file, 'utf8'), sandbox);
-  return { sb: sandbox, rows: appendedRows, mails: sentEmails, header: function () { return headerRow; } };
+  return { sb: sandbox, rows: appendedRows, mails: sentEmails, deleted: deleted, sheet: fakeSheet, header: function () { return headerRow; } };
 }
 
 var file = process.argv[2] || 'gas/Code.gs';
@@ -58,7 +63,7 @@ check('valid lead appends one row', ctx.rows.length === 1, 'rows=' + ctx.rows.le
 var row = ctx.rows[0] || [];
 check('row[0] is a Date', row[0] instanceof Date);
 check('row columns in spec order, forced to text with leading apostrophe',
-  JSON.stringify(row.slice(1)) === JSON.stringify([lead.name, lead.org, lead.sport, lead.role, lead.teamSize, lead.phone, lead.email, lead.notes].map(function (v) { return "'" + v; })),
+  JSON.stringify(row.slice(1)) === JSON.stringify([lead.name, lead.org, lead.sport, lead.role, lead.teamSize, lead.phone, lead.email, lead.notes].map(function (v) { return "'" + v; }).concat(['לא'])),
   JSON.stringify(row.slice(1)));
 check('phone keeps leading zero as text', row[6] === "'0501234567", row[6]);
 check('valid lead sends one email', ctx.mails.length === 1);
@@ -126,8 +131,56 @@ check('sheet failure returns ok:false server_error', !threw && out.ok === false 
 ctx = loadGas(file);
 ctx.sb.setupSheet();
 check('setupSheet writes the header row',
-  JSON.stringify(ctx.header()) === JSON.stringify(['תאריך', 'שם', 'ארגון', 'ענף', 'תפקיד', 'גודל קבוצה', 'טלפון', 'מייל', 'הערות']),
+  JSON.stringify(ctx.header()) === JSON.stringify(['תאריך', 'שם', 'ארגון', 'ענף', 'תפקיד', 'גודל קבוצה', 'טלפון', 'מייל', 'הערות', 'אישור עדכונים']),
   JSON.stringify(ctx.header()));
+
+// Marketing consent (anti-spam law): stored as its own column, and in the email
+ctx = loadGas(file);
+var yes = JSON.parse(JSON.stringify(lead)); yes.marketing = 'כן';
+post(ctx, JSON.stringify(yes));
+check('marketing consent stored as כן', ctx.rows[0][9] === 'כן', JSON.stringify(ctx.rows[0]));
+check('marketing consent in the email', (ctx.mails[0].body || '').indexOf('אישור לקבלת עדכונים: כן') !== -1);
+ctx = loadGas(file);
+var odd = JSON.parse(JSON.stringify(lead)); odd.marketing = 'true';
+post(ctx, JSON.stringify(odd));
+check('anything other than כן is stored as לא', ctx.rows[0][9] === 'לא');
+
+// Server-side validation
+ctx = loadGas(file);
+var bad = JSON.parse(JSON.stringify(lead)); bad.phone = 'abc';
+out = post(ctx, JSON.stringify(bad));
+check('invalid phone rejected', out.ok === false && out.error === 'invalid_fields' && ctx.rows.length === 0, JSON.stringify(out));
+bad = JSON.parse(JSON.stringify(lead)); bad.email = 'not-an-email';
+out = post(ctx, JSON.stringify(bad));
+check('invalid email rejected', out.ok === false && out.error === 'invalid_fields', JSON.stringify(out));
+var intl = JSON.parse(JSON.stringify(lead)); intl.phone = '+44 20 7946 0958';
+out = post(ctx, JSON.stringify(intl));
+check('international phone accepted by the server', out.ok === true, JSON.stringify(out));
+
+// Rate limit
+ctx = loadGas(file);
+var store = {};
+ctx.sb.CacheService = { getScriptCache: function () { return { get: function (k) { return store[k] || null; }, put: function (k, v) { store[k] = v; } }; } };
+var oks = 0, limited = 0;
+for (var i = 0; i < 12; i++) { out = post(ctx, JSON.stringify(lead)); if (out.ok) oks++; else if (out.error === 'rate_limited') limited++; }
+check('rate limit: 10 accepted, the rest rate_limited', oks === 10 && limited === 2, oks + '/' + limited);
+ctx.sb.CacheService = { getScriptCache: function () { throw new Error('cache down'); } };
+out = post(ctx, JSON.stringify(lead));
+check('cache failure does not block a lead', out.ok === true, JSON.stringify(out));
+
+// Retention: rows older than 24 months are deleted, newer kept
+ctx = loadGas(file);
+var now = new Date(2026, 10, 12);
+ctx.rows.push([new Date(2024, 0, 1)], [new Date(2024, 10, 1)], [new Date(2025, 0, 1)], [new Date(2026, 5, 1)]);
+var purged = ctx.sb.purgeOldLeads_(ctx.sheet, now);
+check('purge deletes the two rows older than 24 months', purged === 2 && ctx.rows.length === 2 && ctx.rows[0][0].getFullYear() === 2025, purged + ' ' + ctx.rows.length);
+check('purge on empty sheet is a no-op', loadGas(file).sb.purgeOldLeads_(loadGas(file).sheet, now) === 0);
+ctx = loadGas(file);
+ctx.sheet.deleteRows = function () { throw new Error('boom'); };
+ctx.rows.push([new Date(2020, 0, 1)]);
+threw = false;
+try { out = post(ctx, JSON.stringify(lead)); } catch (e) { threw = true; }
+check('purge failure never fails a lead', !threw && out.ok === true);
 
 console.log(fails === 0 ? '\nALL PASS' : '\n' + fails + ' FAILED');
 process.exit(fails === 0 ? 0 : 1);

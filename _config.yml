@@ -1,0 +1,9 @@
+# GitHub Pages (Jekyll): internal files stay in the repo but are not published on the site.
+exclude:
+  - CLAUDE.md
+  - README.md
+  - docs
+  - gas
+  - tests
+  - tools
+  - assets/og.html

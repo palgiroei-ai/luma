@@ -2,7 +2,7 @@
   'use strict';
 
   var TEAM_SIZES = ['עד 20', '20–50', '50–150', '150+'];
-  var FIELDS = ['name', 'org', 'sport', 'role', 'teamSize', 'phone', 'email', 'notes', 'website'];
+  var FIELDS = ['name', 'org', 'sport', 'role', 'teamSize', 'phone', 'email', 'notes', 'marketing', 'website'];
 
   function str(v) {
     return typeof v === 'string' ? v.trim() : '';

@@ -14,12 +14,12 @@
   <meta property="og:locale" content="he_IL">
   <link rel="icon" type="image/svg+xml" href="assets/mark.svg">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&family=Jost:wght@500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="preload" href="assets/fonts/heebo-hebrew.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="fonts.css?v=1">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
+<a class="skip" href="#top">דלגו לתוכן הראשי</a>
 
 <header class="topbar">
   <div class="wrap topbar-inner">
@@ -65,8 +65,20 @@
       <p class="eyebrow promo-eyebrow">LUMA ב־50 שניות</p>
       <div class="promo-frame reveal">
         <video id="promo-video" src="assets/video/luma-promo.mp4" poster="assets/video/luma-promo-poster.jpg" muted playsinline loop preload="metadata" controls
-          aria-label="סרטון: LUMA בפעולה — עונה, לו״ז שבועי, סנכרון צוות, תוכנית כוח ועומס אימון"></video>
+          aria-label="סרטון ללא קול: LUMA בפעולה. תיאור מלא מופיע מתחת לסרטון" aria-describedby="video-note"></video>
       </div>
+      <p class="promo-note" id="video-note">מסכים אמיתיים מהמערכת. כל השמות והנתונים בסרטון בדויים.</p>
+      <details class="promo-desc">
+        <summary>תיאור הסרטון בטקסט</summary>
+        <ol>
+          <li><strong>כל הספורטאים. כל העונה.</strong> תחרויות, מחנות וחופשות, שבוע אחרי שבוע, וכל ספורטאי רואה את העונה שלו בטלפון.</li>
+          <li><strong>לו״ז שבועי. בדקות.</strong> גוררים, בוחרים ספורטאים ומפרסמים. כל ספורטאי מקבל התראה רק על מה שהשתנה אצלו.</li>
+          <li><strong>כל הצוות. בזמן אמת.</strong> הספורטאית מדווחת על כאב מהטלפון, והצוות רואה את זה מיד תחת ״דורש תשומת לב״.</li>
+          <li><strong>בונים במחשב. מבצעים בטלפון.</strong> תוכנית הכוח המלאה אצל הספורטאית, וכל סט שמסומן מתעדכן מיד אצל המאמן.</li>
+          <li><strong>רואים עומס. לפני הפציעה.</strong> עומס שבועי, קושי ודקות לכל ספורטאי. בקפיצה חדה הצוות מקבל התראה.</li>
+          <li><strong>מותאמת אישית לכל קבוצה.</strong> בוחרים את היכולות, וחסרה יכולת? מפתחים אותה בשבילכם.</li>
+        </ol>
+      </details>
     </div>
   </section>
 
@@ -80,22 +92,22 @@
       </div>
       <div class="pillars">
         <article class="pillar reveal">
-          <span class="pillar-letter" lang="en">L</span>
+          <span class="pillar-letter" lang="en" aria-hidden="true">L</span>
           <h3 lang="en">Live</h3>
           <p>עדכונים והתראות בזמן אמת.</p>
         </article>
         <article class="pillar reveal">
-          <span class="pillar-letter" lang="en">U</span>
+          <span class="pillar-letter" lang="en" aria-hidden="true">U</span>
           <h3 lang="en">Unified</h3>
           <p>הצוות המקצועי עובד במערכת אחת, עם גישה מותאמת לכל תפקיד.</p>
         </article>
         <article class="pillar reveal">
-          <span class="pillar-letter" lang="en">M</span>
+          <span class="pillar-letter" lang="en" aria-hidden="true">M</span>
           <h3 lang="en">Management</h3>
           <p>סגל, אימונים ואירועים מנוהלים במקום אחד.</p>
         </article>
         <article class="pillar reveal">
-          <span class="pillar-letter" lang="en">A</span>
+          <span class="pillar-letter" lang="en" aria-hidden="true">A</span>
           <h3 lang="en">Athletes</h3>
           <p>תוכניות, סיכומים ומעקב אישי לכל ספורטאי.</p>
         </article>
@@ -210,8 +222,8 @@
           <h3>PalgiTraining — אימון אישי</h3>
           <p>LUMA צמחה מתוך העבודה היומיומית של PalgiTraining, ומנהלת בה את כל המתאמנים: ספורטאי הישג באימון אישי ומתאמנים בליווי מרחוק — תוכניות, מעקב והתקדמות, במקום אחד.</p>
           <dl class="stats">
-            <div class="stat"><dt class="stat-n" data-count="20">20</dt><dd>ספורטאי הישג באימון אישי</dd></div>
-            <div class="stat"><dt class="stat-n" data-count="16">16</dt><dd>מתאמנים בליווי מרחוק</dd></div>
+            <div class="stat"><dt class="stat-n"><span class="sr-only">20</span><span aria-hidden="true" data-count="20">20</span></dt><dd>ספורטאי הישג באימון אישי</dd></div>
+            <div class="stat"><dt class="stat-n"><span class="sr-only">16</span><span aria-hidden="true" data-count="16">16</span></dt><dd>מתאמנים בליווי מרחוק</dd></div>
             <div class="stat"><dt class="stat-n stat-word"><span class="stat-year">2025</span></dt><dd>שנת הקמת הבסיס</dd></div>
           </dl>
         </article>
@@ -221,8 +233,8 @@
           <h3>ענף הטיפוס באקדמיה של וינגייט</h3>
           <p>LUMA משמשת לניהול הפעילות המקצועית באקדמיית הטיפוס בוינגייט, שבה מתאמנים ספורטאי וספורטאיות נבחרות ישראל. המערכת מחברת בין צוות הליבה של האקדמיה, המאמנים, מאמן הכושר ואנשי המעטפת המלווים את הספורטאים.</p>
           <dl class="stats">
-            <div class="stat"><dt class="stat-n" dir="ltr"><span data-count="30">30</span>+</dt><dd>משתמשים</dd></div>
-            <div class="stat"><dt class="stat-n" data-count="11">11</dt><dd>אנשי צוות</dd></div>
+            <div class="stat"><dt class="stat-n" dir="ltr"><span class="sr-only">30+</span><span aria-hidden="true"><span data-count="30">30</span>+</span></dt><dd>משתמשים</dd></div>
+            <div class="stat"><dt class="stat-n"><span class="sr-only">11</span><span aria-hidden="true" data-count="11">11</span></dt><dd>אנשי צוות</dd></div>
             <div class="stat"><dt class="stat-n stat-word">מעטפת מלאה</dt><dd>מאמנים, כושר, רפואה, פיזיו ותזונה</dd></div>
           </dl>
           <a class="case-link" href="#try">ראו את המערכת שלהם ←</a>
@@ -242,14 +254,15 @@
           <p>מעדיפים לדבר עכשיו?</p>
           <div class="direct-btns">
             <a class="btn btn-ghost btn-sm" href="tel:+972507721477"><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h3.5l1.8 4.4-2.2 1.4a11 11 0 0 0 6.1 6.1l1.4-2.2L20 15.5V19a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 3.5 5.6 1.5 1.5 0 0 1 5 4z"/></svg><span class="only-phone">התקשרו</span><span class="only-desktop" dir="ltr">050-7721477</span></a>
-            <a class="btn btn-ghost btn-sm" href="https://wa.me/972507721477" target="_blank" rel="noopener"><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 0 0-7.4 12.7L3.5 20.5l4.4-1.1A8.5 8.5 0 1 0 12 3.5z"/><path d="M9 8.5c.2-.4.5-.5.8-.5h.4l1 2.3-.6.8a5.5 5.5 0 0 0 2.6 2.4l.7-.7 2.3 1v.5c0 .7-.8 1.4-1.6 1.4A6.5 6.5 0 0 1 8.4 9.6c0-.4.2-.8.6-1.1z"/></svg>וואטסאפ</a>
-            <a class="btn btn-ghost btn-sm" href="mailto:palgiroei@gmail.com?subject=LUMA"><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/></svg>מייל</a>
+            <a class="btn btn-ghost btn-sm" href="https://wa.me/972507721477" target="_blank" rel="noopener"><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 0 0-7.4 12.7L3.5 20.5l4.4-1.1A8.5 8.5 0 1 0 12 3.5z"/><path d="M9 8.5c.2-.4.5-.5.8-.5h.4l1 2.3-.6.8a5.5 5.5 0 0 0 2.6 2.4l.7-.7 2.3 1v.5c0 .7-.8 1.4-1.6 1.4A6.5 6.5 0 0 1 8.4 9.6c0-.4.2-.8.6-1.1z"/></svg>וואטסאפ<span class="sr-only"> (נפתח בחלון חדש)</span></a>
+            <a class="btn btn-ghost btn-sm" href="mailto:palgitraining@gmail.com?subject=LUMA"><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/></svg>מייל</a>
           </div>
         </div>
       </div>
 
       <div class="form-card reveal">
         <form id="lead-form" novalidate>
+          <p class="req-note">שדות המסומנים ב־* הם שדות חובה.</p>
           <div class="field">
             <label for="f-name">שם מלא *</label>
             <input id="f-name" name="name" type="text" autocomplete="name" required aria-describedby="err-name">
@@ -299,7 +312,9 @@
             <label for="f-website">אתר</label>
             <input id="f-website" name="website" type="text" tabindex="-1" autocomplete="off">
           </div>
+          <label class="consent"><input type="checkbox" name="marketing" value="כן"><span>אשמח לקבל מדי פעם עדכונים על LUMA במייל או בוואטסאפ (לא חובה, אפשר להסיר בכל עת).</span></label>
           <button id="lead-submit" type="submit" class="btn btn-primary btn-block">שליחה</button>
+          <p class="privacy-note">הפרטים נשלחים לרועי פלגי (PalgiTraining) ומשמשים רק כדי לחזור אליכם בנוגע ל-LUMA. אין חובה חוקית למסור אותם, אבל בלי שם, ארגון וטלפון לא אוכל לחזור אליכם. הם נשמרים ב-Google Sheets וב-Gmail (שרתים מחוץ לישראל), לא מועברים לאף אחד אחר, ונמחקים לכל המאוחר אחרי שנתיים. אפשר לבקש לעיין בהם, לתקן או למחוק. פרטים ב<a href="privacy.html">מדיניות הפרטיות</a>.</p>
           <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
         </form>
 
@@ -309,7 +324,7 @@
         </div>
         <div id="form-error" class="form-msg form-msg-error" tabindex="-1" role="alert" hidden>
           <p>משהו השתבש בשליחה. אפשר לנסות שוב, או לכתוב לי ישירות:</p>
-          <a class="btn btn-ghost" href="https://wa.me/972507721477" target="_blank" rel="noopener">וואטסאפ</a>
+          <a class="btn btn-ghost" href="https://wa.me/972507721477" target="_blank" rel="noopener">וואטסאפ<span class="sr-only"> (נפתח בחלון חדש)</span></a>
         </div>
       </div>
     </div>
@@ -321,18 +336,23 @@
   <div class="wrap footer-inner">
     <div class="footer-brand">
       <span class="brand"><svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><path d="M6 22h7l3-8 5 14 3-6h10"/></svg><span class="wordmark">LUMA</span></span>
-      <p>מבית <a href="https://palgitraining.com" target="_blank" rel="noopener">PalgiTraining</a></p>
+      <p>מבית <a href="https://palgitraining.com" target="_blank" rel="noopener">PalgiTraining<span class="sr-only"> (נפתח בחלון חדש)</span></a></p>
     </div>
     <ul class="footer-links">
-      <li><a href="tel:+972507721477">050-7721477</a></li>
-      <li><a href="mailto:palgiroei@gmail.com">palgiroei@gmail.com</a></li>
-      <li><a href="https://wa.me/972507721477" target="_blank" rel="noopener">וואטסאפ</a></li>
+      <li><a href="tel:+972507721477" dir="ltr">050-7721477</a></li>
+      <li><a href="mailto:palgitraining@gmail.com">palgitraining@gmail.com</a></li>
+      <li><a href="https://wa.me/972507721477" target="_blank" rel="noopener">וואטסאפ<span class="sr-only"> (נפתח בחלון חדש)</span></a></li>
     </ul>
-    <p class="copyright">© 2026 PalgiTraining. כל הזכויות שמורות.</p>
+    <nav class="footer-legal" aria-label="מידע ומסמכים">
+      <a href="accessibility.html">הצהרת נגישות</a>
+      <a href="privacy.html">מדיניות פרטיות</a>
+      <a href="terms.html">תנאי שימוש</a>
+    </nav>
+    <p class="copyright">© 2026 רועי פלגי – PalgiTraining · עוסק מורשה 204483234 · תל אביב. כל הזכויות שמורות.</p>
   </div>
 </footer>
 
-<a class="wa-float" href="https://wa.me/972507721477" target="_blank" rel="noopener" aria-label="שלחו הודעה בוואטסאפ">
+<a class="wa-float" href="https://wa.me/972507721477" target="_blank" rel="noopener" aria-label="שלחו הודעה בוואטסאפ (נפתח בחלון חדש)">
   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5a9.5 9.5 0 0 0-8.2 14.3L2.5 21.5l4.8-1.3A9.5 9.5 0 1 0 12 2.5zm5.5 13.4c-.2.6-1.3 1.2-1.8 1.3-.5.1-1 .1-1.7-.1a15 15 0 0 1-1.6-.6c-2.7-1.2-4.5-3.9-4.7-4.1-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.1.1.3 0 .5l-.3.5-.4.4c-.1.1-.3.3-.1.6.2.3.7 1.2 1.6 1.9 1.1 1 2 1.3 2.3 1.4.3.1.5.1.6-.1l.9-1c.2-.3.4-.2.6-.1l1.9.9c.3.1.5.2.5.3.1.1.1.7-.2 1.3z"/></svg>
 </a>
 
