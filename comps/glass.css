@@ -219,6 +219,10 @@
     transition: transform .22s var(--gbar-press), left .22s var(--gbar-press), width .22s var(--gbar-press), scale .16s var(--gbar-press), filter .16s, opacity .16s;
   }
   [data-look="glass"] .gbar.press.no-act .gbar-lens { opacity: 1; }
+  /* 3.37.2 snap (app.js barSnap): a tap on another tab ends the press at once, like the app's re-rendered bar; the lens keeps
+     only its slide (left / width on the spring), its reach scale / brightness end at once */
+  [data-look="glass"] .gbar.snap, [data-look="glass"] .gbar.snap::before, [data-look="glass"] .gbar.snap::after, [data-look="glass"] .gbar.snap .gbar-ico { transition: none !important; }
+  [data-look="glass"] .gbar.snap .gbar-lens { transition: left .38s var(--gbar-spring), width .38s var(--gbar-spring) !important; }
   /* small bar (scrolled down, PHONE ONLY) = the grow played backwards: labels fade first (.1s ease-in), then the bar narrows to
      the app's 84px insets on the spring after .06s, icons .94 (≈47px bar). Growing: the bar widens, labels fade in after .12s
      (the defaults above). The page keeps the FULL bar's --gbar-h (app.js measures only the full bar). */

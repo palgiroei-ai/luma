@@ -25,7 +25,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ow
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC, evMeta } from './seasons.js';
 
-export const APP_VERSION = '3.37.1';
+export const APP_VERSION = '3.37.2';
 
 const $ = s => document.querySelector(s);
 
@@ -1886,13 +1886,27 @@ function wireBarMotion() {
   for (const m of [MQ_REDUCE, MQ_PHONE]) m?.addEventListener?.('change', regrow);
 }
 
-// glass bar feel Task 1: the press visuals (grow, lens from pointerdown) go first; the navigation + its render run two
-// frames later, so the bubble is already moving before any heavy render. Same state changes, scrollTo and toasts as before.
+// 3.37.2 (Roei's screen recordings): in the Palgi app the bar is re-rendered on every navigation, so on a tab change the new
+// screen and a bar already at rest show in the frame after the finger lifts — the press never springs back. Same here: a tap on
+// another tab navigates at once and barSnap ends the swell, icon dip, glow and the lens's reach without transitions (the lens
+// still slides to its tab on the spring, as the app's lens does). A tap on the current tab keeps the soft spring-back.
 function barTap(kind) {
   athReturn = null;
-  const gb = $('#gbar'); if (gb) { BAR_M.lastY = 0; barSetMini(gb, false); } // a tab tap on the small bar grows it
-  const nav = () => barNav(kind);
-  requestAnimationFrame(() => requestAnimationFrame(nav));
+  const gb = $('#gbar');
+  if (gb) {
+    const mini = gb.classList.contains('mini'); // the small bar had no press: it grows on the spring, as in the app
+    BAR_M.lastY = 0; barSetMini(gb, false); // a tab tap on the small bar grows it
+    if (kind !== BAR_M.act && !mini) barSnap(gb);
+  }
+  barNav(kind);
+}
+function barSnap(bar) {
+  bar.classList.add('snap');
+  bar.classList.remove('press');
+  bar.querySelectorAll('.down').forEach(b => b.classList.remove('down'));
+  barLens(bar)?.classList.remove('reach');
+  void bar.offsetWidth; // commit the rest values with no transition
+  requestAnimationFrame(() => requestAnimationFrame(() => bar.classList.remove('snap')));
 }
 function barNav(kind) {
   if (kind === 'live') {
