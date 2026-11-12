@@ -35,10 +35,17 @@ export function liveRows(round, cfg, results, nowMs) {
   if (isLeadCfg(cfg) || (cfg.roundNumber != null && Number(cfg.roundNumber) !== roundNumberOf(round.id))) return null;
   const cats = groupCats(cfg, lg), nB = round.boulders;
   const bySlot = new Map(round.slots.filter(Boolean).map(s => [s.bib, { bib: s.bib, name: s.name, club: '', cat: null, bs: Array(nB).fill(null) }]));
+  // 3.38.1 (real data 12/11, bl2 men R2): the federation roster can carry another bib than our list (תומר יעקובוביץ 180 vs 1)
+  // → as lead 3.31.2: a bib not on the list counts for the climber of the same name, only when his own bib has no record
+  const keys = Object.keys(results).map(key => { try { return decodeURIComponent(key).split('|'); } catch { return []; } });
+  const own = new Set(keys.filter(p => p[2] === lg.gender).map(p => Number(p[0])));
+  const nm = s => String(s ?? '').replace(/\s+/g, ' ').trim();
+  const byName = new Map([...bySlot.values()].filter(r => !own.has(r.bib)).map(r => [nm(r.name), r]));
   let updated = 0, done = 0; const seen = new Set();
   for (const [key, v] of Object.entries(results)) {
     let k; try { k = decodeURIComponent(key); } catch { continue; }
-    const [bib, cat, gender, route] = k.split('|'), j = Number(route) - 1, row = bySlot.get(Number(bib));
+    const [bib, cat, gender, route] = k.split('|'), j = Number(route) - 1;
+    const row = bySlot.get(Number(bib)) || (v && gender === lg.gender && byName.get(nm(v.name)));
     if (!row || gender !== lg.gender || !cats.includes(cat) || !(j >= 0 && j < nB) || !v) continue;
     const at = Date.parse(v.updatedAt); if (!at || at > nowMs || dayOf(at) !== round.date) continue;
     if (!seen.has(row.bib + '|' + j)) { seen.add(row.bib + '|' + j); done++; }

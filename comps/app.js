@@ -25,7 +25,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ow
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC, evMeta } from './seasons.js';
 
-export const APP_VERSION = '3.38.0';
+export const APP_VERSION = '3.38.1';
 
 const $ = s => document.querySelector(s);
 
