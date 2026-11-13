@@ -7,7 +7,7 @@ import { rankRows, analyze, boulderStats, pts, kind, r1, catOptions, catLabel, r
 import { setupInstall } from './install.js';
 import { catHe, roundTitle, hm, hms, range, placeOnce, fileSource } from './labels.js';
 const srcOf = res => (res.live || res.locked || res.intl ? res.source : fileSource(res.source));
-import { liveRows, liveGroup, fetchLive, liveEvents, liveLeadRows, liveLeadEvents } from './live.js';
+import { liveRows, liveGroup, fetchLive, liveEvents, liveLeadRows, liveLeadEvents, mergeLiveSnap, snapRows } from './live.js';
 import { toLeadResults } from './leadRank.js';
 import { quota } from './results.js';
 import { WALLS, STYLES, FEET, styleOf, wallOf } from './tags.js';
@@ -25,7 +25,7 @@ import { markNext, undoMark, toManual, toAuto, legStatus, withLive, withPair, ow
 import { neededOn, routeStats, whatIf } from './leadStats.js';
 import { bySeason, seasonLabel, seasonsOf, CANCEL_TAG, tbdMark, evTone, filterOptions, filterLabel, filterEvents, effectiveFilter, seasonSummary, pickNow, TYPES, AGES, DISC, evMeta } from './seasons.js';
 
-export const APP_VERSION = '3.38.1';
+export const APP_VERSION = '3.39.0';
 
 const $ = s => document.querySelector(s);
 
@@ -162,9 +162,13 @@ const resultsOf = id => (LIVE_FORCE && liveOf(id)) || DATA.results?.[id] || (rou
 // saved on our server and becomes the round's official results for everyone (green), even after the federation's
 // database moves on to the next round. A results file from src/results.mjs still wins over it.
 let LOCKED = {};
+// 3.39.0 saved live results (web/live.js mergeLiveSnap): round id → { rows, prot, done, total, at } from the server
+let SNAPS = {}, SNAPS_V = 0;
+const snapSent = {}; // round id → the last saved state's text (this device), so an unchanged state is not sent again
 async function loadLocked() {
   try {
-    const { items } = await fbCall('/locked');
+    const { items, snaps } = await fbCall('/locked');
+    if (snaps) { for (const [id, v] of Object.entries(snaps)) if (SNAPS[id]?.at !== v.at) { SNAPS = { ...SNAPS, [id]: v }; SNAPS_V++; } }
     const next = {};
     for (const [id, v] of Object.entries(items || {})) {
       const old = LOCKED[id];
@@ -204,6 +208,8 @@ function rankedOf(id) {
 }
 
 const LTAG = '<i class="ltag" aria-hidden="true"><i></i>LIVE</i>';
+// 3.39.0: the federation's live data no longer holds the round → its last state, saved on our server (no LIVE tag, no polling line)
+const savedBar = (res, u) => `<div class="live-bar saved"><b>תוצאות חיות אחרונות</b><span>${res.done}/${res.total} ${u} הוזנו · נשמרו ${fmtClock(res.updated)}</span><span class="muted">הראונד כבר לא מופיע בלייב של ההתאחדות · לא רשמי</span></div>`;
 // ---- live results (3.4.0, trial): polled every 15 s while a round with a start list and no official results runs ----
 const LIVE_FORCE = SIM_AT != null && params.get('live') === 'force'; // testing only: replay the live data over a finished round
 const live = { data: null, at: 0, err: false, busy: false };
@@ -212,12 +218,16 @@ const liveSeen = {}, liveFresh = {}; // 3.8.0: last rows per round (to spot new 
 // 3.8.2 (Roei): a new zone/top blinks for 10 s, counted from when we saw it (not cut short by the next update)
 const FRESH_MS = 10000;
 const freshOf = id => { const m = liveFresh[id], out = new Set(); if (m) for (const [k, at] of m) { if (Date.now() - at < FRESH_MS) out.add(k); else m.delete(k); } return out; };
+// 3.39.0: the round's scheduled end protects its results from deletions (mergeLiveSnap); a broken schedule never throws here
+const roundEnded = r => { try { return now() > roundEndMs(r); } catch { return false; } };
 function liveOf(id) {
-  const r = round(id); if (!live.data || !r) return null;
-  const key = `${live.at}:${Math.floor(now() / 15000)}`;
+  const r = round(id); if (!r || r.ifsc || (!live.data && !SNAPS[id])) return null;
+  const key = `${live.at}:${SNAPS_V}:${Math.floor(now() / 15000)}`;
   if (liveCache[id]?.key === key) return liveCache[id].v;
   if (r.lead) return (liveCache[id] = { key, v: liveLeadOf(r) }).v;
-  const lr = liveRows(r, live.data.cfg, live.data.results, now());
+  const lr0 = live.data ? liveRows(r, live.data.cfg, live.data.results, now()) : null;
+  const lr = mergeLiveSnap(lr0, LIVE_FORCE ? null : SNAPS[id], { ended: roundEnded(r) });
+  if (lr0 && lr) saveSnap(id, lr, null);
   let v = null;
   if (lr) {
     // an athlete who has not climbed yet: category from round 1 (for the category chips)
@@ -229,7 +239,7 @@ function liveOf(id) {
     if (liveSeen[id]) { const m = liveFresh[id] || (liveFresh[id] = new Map()); for (const e of evs) m.set(`${e.bib}:${e.b - 1}`, Date.now()); }
     liveSeen[id] = lr.rows.map(x => ({ bib: x.bib, bs: x.bs.map(c => c && [...c]) }));
     if (id === current && screen === 'round') evs.forEach(liveToast);
-    v = { ...lr, live: true, final: lastRound(id), source: `ההתאחדות · תוצאות חיות · לא רשמי · עודכן ${fmtClock(lr.updated)}` };
+    v = { ...lr, live: true, final: lastRound(id), source: liveSource(lr) };
   }
   liveCache[id] = { key, v };
   return v;
@@ -241,14 +251,33 @@ function leadPrevRank(id) {
   return prevId !== id && resultsOf(prevId) ? new Map(rankedOf(prevId).filter(x => x.rank != null).map(x => [x.bib, x.rank])) : null;
 }
 function liveLeadOf(r) {
-  const lr = liveLeadRows(r, live.data.cfg, live.data.results, now()); if (!lr || lr.climbingOnly) return null; // 3.27.1: someone on the wall, no result yet
+  const routes = r.routes || (r.boulders > 1 ? ['A', 'B'] : ['A']);
+  const lr0 = live.data ? liveLeadRows(r, live.data.cfg, live.data.results, now()) : null;
+  const lr = mergeLiveSnap(lr0, LIVE_FORCE ? null : SNAPS[r.id], { routes, ended: roundEnded(r) });
+  if (lr0 && lr && !lr.climbingOnly) saveSnap(r.id, lr, routes);
+  if (!lr || lr.climbingOnly) return null; // 3.27.1: someone on the wall, no result yet
   const evs = liveLeadEvents(liveSeen[r.id], lr.rows, lr.routes);
   liveSeen[r.id] = lr.rows.map(x => ({ ...x }));
   if (r.id === current && screen === 'round') evs.forEach(e => liveToast({ ...e, kind: 'lead' }));
   if (evs.length) { const m = liveFresh[r.id] || (liveFresh[r.id] = new Map()); for (const e of evs) m.set(`${e.bib}:${e.route - 1}`, Date.now()); } // 3.29.0: blink
   const res = toLeadResults({ rows: lr.rows }, r.id, leadPrevRank(r.id));
-  return { ...res, file: lr.rows, live: true, complete: lr.complete, done: lr.done, total: lr.total, started: lr.started, updated: lr.updated,
-    source: `ההתאחדות · תוצאות חיות · לא רשמי · עודכן ${fmtClock(lr.updated)}` };
+  return { ...res, file: lr.rows, live: true, saved: !!lr.saved, complete: lr.complete, done: lr.done, total: lr.total, started: lr.started, updated: lr.updated,
+    source: liveSource(lr) };
+}
+// 3.39.0: live no longer holds the round → the saved copy ("אחרונות", the time it was saved); still red + unofficial
+const liveSource = lr => (lr.saved ? `ההתאחדות · תוצאות חיות אחרונות · לא רשמי · נשמרו ${fmtClock(lr.updated)}`
+  : `ההתאחדות · תוצאות חיות · לא רשמי · עודכן ${fmtClock(lr.updated)}`);
+// 3.39.0: the coach device keeps the server copy of a round's live results up to date (only real live data — never a
+// simulation, a replay or a viewer); one request at a time per round, only when the state changed
+function saveSnap(id, lr, routes) {
+  // (?snapsave: local browser tests only — a simulation on localhost may save, to the mocked server)
+  if (VIEWER || (SIM_AT != null && !(params.has('snapsave') && location.hostname === 'localhost')) || LIVE_FORCE || !lr.rows?.length || !lr.done) return;
+  const body = { round: id, rows: snapRows(lr.rows, routes), prot: !!lr.prot, done: lr.done, total: lr.total };
+  const txt = JSON.stringify(body);
+  if (snapSent[id] === txt || snapSent[id] === 'busy') return;
+  const prev = snapSent[id]; snapSent[id] = 'busy';
+  fbCall('/livesnap', body).then(({ at }) => { snapSent[id] = txt; SNAPS = { ...SNAPS, [id]: { rows: body.rows, prot: body.prot, done: body.done, total: body.total, at } }; SNAPS_V++; })
+    .catch(() => { snapSent[id] = prev; }); // offline: the next poll tries again
 }
 function liveWanted() {
   if (screen !== 'round') return false;
@@ -869,7 +898,7 @@ function renderResults(r, part = null, isrKey = r.id) {
   }).join('');
   return `<div class="res${res.live ? ' is-live' : ''}">
     ${part ? '' : chips}
-    ${res.live ? (err => `<div class="live-bar${err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל הבולדרים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} בולדרים הוזנו · ${res.started} התחילו</span>${intl ? appealsOf(res.rows).map(a => `<span class="ap-line">⚖️ ערעור פתוח: ${esc(lastName(a.name))} · B${a.b}</span>`).join('') : ''}${err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · ${intl ? 'World Climbing' : 'לא רשמי'}</span></div>`)(intl ? IFSC[r.id]?.err : live.err) : ''}
+    ${res.saved ? savedBar(res, 'בולדרים') : res.live ? (err => `<div class="live-bar${err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל הבולדרים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} בולדרים הוזנו · ${res.started} התחילו</span>${intl ? appealsOf(res.rows).map(a => `<span class="ap-line">⚖️ ערעור פתוח: ${esc(lastName(a.name))} · B${a.b}</span>`).join('') : ''}${err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · ${intl ? 'World Climbing' : 'לא רשמי'}</span></div>`)(intl ? IFSC[r.id]?.err : live.err) : ''}
     ${lockBar(r, res)}
     <div class="res-head"><span class="muted small">מקור: ${esc(srcOf(res))}</span>
       <span class="legend"><span><i class="cell t lg">T</i> טופ</span><span><i class="cell z lg">Z</i> זון בלי טופ</span><span><i class="cell n lg">—</i> בלי זון</span><span class="muted">T2 = טופ בניסיון השני</span></span></div>
@@ -925,7 +954,7 @@ function renderNatLead(r, part) {
   const cards = part || !mine.length ? '' : `<div class="focus">${mine.map(x => leadCard(r, x, mineBy[x.bib], cx)).join('')}</div>`;
   const routesCard = part ? '' : leadRoutesCard(r, fileIn, mineBy);
   return `<div class="res lead-res${res.live ? ' is-live' : ''}">
-    ${res.live ? `<div class="live-bar${live.err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל המסלולים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} מסלולים הוזנו · ${res.started} התחילו</span>${live.err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · לא רשמי</span></div>` : ''}
+    ${res.saved ? savedBar(res, 'מסלולים') : res.live ? `<div class="live-bar${live.err ? ' err' : ''}">${LTAG}<b>${res.complete ? 'כל המסלולים הוזנו' : 'תוצאות חיות'}</b><span>${res.done}/${res.total} מסלולים הוזנו · ${res.started} התחילו</span>${live.err ? '<span>אין חיבור כרגע — מוצג המצב האחרון</span>' : ''}<span class="muted">מתעדכן כל 15 שניות · לא רשמי</span></div>` : ''}
     ${part ? '' : lockBar(r, res)}
     ${chips}
     <div class="res-head"><span class="muted small">מקור: ${esc(srcOf(res))}</span></div>
@@ -1620,7 +1649,7 @@ const stampId = o => (o && typeof o === 'object' ? STAMP_IDS.get(o) || (STAMP_ID
 function dataStamp() {
   let o = '';
   for (const r of DATA.rounds) o += off(r.id) + ':' + r.slotSec + ',';
-  return [stampId(DATA), stampId(DATA.rounds), DATA.builtAt, stampId(LOCKED), live.at, IFSC_V, STORE_V, VIEWER, o].join('|');
+  return [stampId(DATA), stampId(DATA.rounds), DATA.builtAt, stampId(LOCKED), live.at, SNAPS_V, IFSC_V, STORE_V, VIEWER, o].join('|');
 }
 let barLiveMemo = null;
 function barLiveCached() {
@@ -1985,7 +2014,7 @@ function render() {
   else { renderBoard(r, s); renderTimer(r, s); renderNext(r, s); }
   if (gone) $('#par').hidden = true; // §5 board gone: no parallel-round box on an ended round either (final review)
   else renderPar(r);
-  const rb = $('[data-view="results"]'), lv = !!rs?.live;
+  const rb = $('[data-view="results"]'), lv = !!rs?.live && !rs.saved; // 3.39.0: a saved copy is not "live now"
   rb.hidden = !rs;
   if (rb.classList.contains('lv') !== lv) { rb.classList.toggle('lv', lv); rb.innerHTML = 'תוצאות' + (lv ? LTAG : ''); rb.setAttribute('aria-label', lv ? 'תוצאות — חי, לא רשמי' : 'תוצאות'); }
   document.body.classList.toggle('combo-round', !!r.combo);

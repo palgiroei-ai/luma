@@ -133,3 +133,48 @@ export function liveEvents(prevRows, rows) {
   }
   return out;
 }
+
+// ---- 3.39.0 saved live results (Roei 2026-11-13). The federation's database holds one round at a time and is sometimes
+// wiped right after a round, before anyone tapped "קבע כתוצאות רשמיות" (bl2 women R2, 12/11). The coach device saves
+// the merged live state on our server (Worker /livesnap); everyone merges it with the live data:
+// - before the scheduled end AND under 90% of the climbs with a result → an exact mirror of live (a judge's deletion
+//   = deleted here too: a wrong entry must disappear);
+// - from the scheduled end, or once 90% are filled (stays so: `prot`) → a result missing from live is kept from the
+//   saved copy; a changed score still comes from live;
+// - live no longer holds the round → the saved copy, only when it reached that protected state (`saved: true`).
+export const PROT_SHARE = 0.9;
+const copyRow = r => ({ ...r, bs: Array.isArray(r.bs) ? r.bs.map(c => c && [...c]) : [] });
+// lr = liveRows / liveLeadRows output (or null); snap = { rows, prot, done?, total? } (or null); routes = lead routes
+export function mergeLiveSnap(lr, snap, { routes = null, ended = false } = {}) {
+  const prot = !!(ended || snap?.prot || (lr && lr.total && lr.done >= PROT_SHARE * lr.total));
+  if (!lr) {
+    if (!prot || !snap?.rows?.length) return null;
+    const rows = snap.rows.map(copyRow), n = routes ? rows.reduce((s, r) => s + routes.filter(x => r[x] != null).length, 0) : rows.reduce((s, r) => s + r.bs.filter(Boolean).length, 0);
+    const total = snap.total || rows.length * (routes ? routes.length : Math.max(0, ...rows.map(r => r.bs.length)));
+    const done = Math.max(snap.done || 0, n);
+    return { rows, done, total, started: rows.filter(r => (routes ? routes.some(x => r[x] != null) : r.bs.some(Boolean))).length, complete: done >= total, updated: snap.at || 0, prot, saved: true, ...(routes ? { routes } : {}) };
+  }
+  if (!prot || !snap?.rows?.length) return { ...lr, prot };
+  const by = new Map(snap.rows.map(x => [x.bib, x]));
+  let added = 0;
+  for (const row of lr.rows) { // lr rows are fresh objects per call → filled in place (keeps lead's non-enumerable at/on)
+    const s = by.get(row.bib); if (!s) continue;
+    if (routes) { for (const x of routes) if (row[x] == null && s[x] != null) { row[x] = s[x]; added++; } }
+    else row.bs.forEach((c, j) => { if (c == null && s.bs?.[j]) { row.bs[j] = [...s.bs[j]]; added++; } });
+  }
+  const out = { ...lr, prot };
+  if (added) {
+    out.done = Math.min(lr.total, lr.done + added); out.complete = out.done >= lr.total;
+    out.started = lr.rows.filter(r => (routes ? routes.some(x => r[x] != null) : r.bs.some(Boolean))).length;
+    delete out.climbingOnly;
+  }
+  return out;
+}
+// what the coach device saves: plain rows (Worker cleanLocked shape), boulder cells or lead route scores
+export function snapRows(rows, routes = null) {
+  return rows.map(({ bib, name, club, cat, bs }) => {
+    const o = { bib, name, club: club || '', cat: cat ?? null, bs: routes ? [] : (bs || []).map(c => c && [...c]) };
+    if (routes) for (const x of routes) { const src = rows.find(r => r.bib === bib); if (src[x] != null) o[x] = src[x]; }
+    return o;
+  });
+}

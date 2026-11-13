@@ -39,7 +39,7 @@ export function resultsGroups(items, h) {
     if (!kept.length) return;
     out.push({
       eventId: event.id, ei, title: h.titleOf(item), lastDate: kept.reduce((m, r) => (r.date > m ? r.date : m), ''),
-      rounds: kept.map(r => ({ id: r.id, live: !!h.resultsOf(r.id).live })), finals: !event.intl && !!h.finalsReady(item),
+      rounds: kept.map(r => { const res = h.resultsOf(r.id); return { id: r.id, live: !!res.live && !res.saved }; }), finals: !event.intl && !!h.finalsReady(item),
     });
   });
   return out.sort((a, b) => cmp(b.lastDate, a.lastDate) || a.ei - b.ei);
